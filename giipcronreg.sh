@@ -12,40 +12,7 @@ crontab -l
 crontab -l
 
 # check and install dos2unix
-CHECK_Converter=`which dos2unix`
-RESULT=`echo $?`
-ostype=`head -n 1 /etc/issue | awk '{print $1}'`
-if [ $ostype = "Ubuntu" ];then
-	os=`lsb_release -d`
-	os=`echo "$os"| sed -e "s/Description\://g"`
-
-	if [ ${RESULT} != 0 ];then
-		apt-get install -y dos2unix
-	fi
-else
-	os=`cat /etc/redhat-release`
-
-	if [ ${RESULT} != 0 ];then
-		yum install -y dos2unix
-	fi
-fi
-
+ret=`sh giipinstmodule.sh dos2unix`
 
 # check and install wget
-CHECK_Converter=`which wget`
-RESULT=`echo $?`
-ostype=`head -n 1 /etc/issue | awk '{print $1}'`
-if [ $ostype = "Ubuntu" ];then
-	os=`lsb_release -d`
-	os=`echo "$os"| sed -e "s/Description\://g"`
-
-	if [ ${RESULT} != 0 ];then
-		apt-get install -y dos2unix
-	fi
-else
-	os=`cat /etc/redhat-release`
-
-	if [ ${RESULT} != 0 ];then
-		yum install -y dos2unix
-	fi
-fi
+ret=`sh giipinstmodule.sh wget`
