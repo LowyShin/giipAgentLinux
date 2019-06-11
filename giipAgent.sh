@@ -60,7 +60,7 @@ else
 	echo "[$logdt] No queue" >> $LogFileName
 fi
 
-while [ -s $tmpFileName ];
+while [ "1" -eq "0" ];
 do
 
 	cmpFile=`cat $tmpFileName`
@@ -87,6 +87,12 @@ do
 
 	if [[ $cmpFile = $orgFile ]];then
 		rm -f $tmpFileName
+	fi
+
+	if [ -s $tmpFileName ]; then
+	    echo "next process..."
+	else
+        sleep $giipagentdelay
 	fi
 
 done
