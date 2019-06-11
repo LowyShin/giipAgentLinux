@@ -101,6 +101,11 @@ do
 	fi
 
 done
+if [ $cntgiip -ne 2 ]; then
+	echo "terminate by process count $cntgiip" >> $LogFileName
+	ret=`ps aux | grep giipAgent.sh`
+	echo "$ret" >> $LogFileName
+fi
 
 rm -f $tmpFileName
 
