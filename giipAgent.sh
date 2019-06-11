@@ -72,9 +72,11 @@ do
 	if [[ n -eq 1 ]]; then
 		expect ./giipTmpScript.sh >> $LogFileName
 		echo "Executed expect script..." >> $LogFileName
+		rm -f $tmpFileName
 	else
 		sh ./giipTmpScript.sh >> $LogFileName
 		echo "Executed script..." >> $LogFileName
+		rm -f $tmpFileName
 	fi
 
 	orgFile=`cat $tmpFileName`
