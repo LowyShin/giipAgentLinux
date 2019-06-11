@@ -50,7 +50,7 @@ tmpFileName="giipTmpScript.sh"
 logdt=`date '+%Y/%m/%d %H:%M:%S'`
 Today=`date '+%Y%m%d'`
 LogFileName="/var/log/giipAgent_$Today.log"
-lwDownloadURL=`cat "http://giipapi.littleworld.net/api/cqe/queue/get03?sk=$sk&lssn=$lssn&os=$os&df=os" | sed -e "s/ /\%20/g"`
+lwDownloadURL=`echo "http://giipapi.littleworld.net/api/cqe/queue/get03?sk=$sk&lssn=$lssn&os=$os&df=os" | sed -e "s/ /\%20/g"`
 #echo $lwDownloadURL
 
 curl -o $tmpFileName "$lwDownloadURL"
