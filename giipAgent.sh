@@ -49,11 +49,11 @@ fi
 tmpFileName="giipTmpScript.sh"
 logdt=`date '+%Y/%m/%d %H:%M:%S'`
 Today=`date '+%Y%m%d'`
-LogFileName="giipAgent_$Today.log"
-lwDownloadURL="http://giipapi.littleworld.net/api/cqe/queue/get03?sk=$sk&lssn=$lssn&os=$os&df=os"
+LogFileName="/var/log/giipAgent_$Today.log"
+lwDownloadURL=`cat "http://giipapi.littleworld.net/api/cqe/queue/get03?sk=$sk&lssn=$lssn&os=$os&df=os" | sed -e "s/ /\%20/g"`
 #echo $lwDownloadURL
 
-curl -o $tmpFileName $lwDownloadURL
+curl -o $tmpFileName "$lwDownloadURL"
 
 if [[ -s $tmpFileName ]];then
 	ls -l $tmpFileName
@@ -63,7 +63,8 @@ else
 	echo "[$logdt] No queue" >> $LogFileName
 fi
 
-while [ $cntgiip -eq 0 ];
+# self process count = 2
+while [ $cntgiip -eq 2 ];
 do
 
 	cmpFile=`cat $tmpFileName`
@@ -78,7 +79,7 @@ do
 
 	orgFile=`cat $tmpFileName`
 
-	curl -o $tmpFileName $lwDownloadURL
+	curl -o $tmpFileName "$lwDownloadURL"
 
 	if [[ -s $tmpFileName ]];then
 		ls -l $tmpFileName
@@ -95,6 +96,7 @@ do
 	if [ -s $tmpFileName ]; then
 	    echo "next process..."
 	else
+		echo "sleep $giipagentdelay"
         sleep $giipagentdelay
 	fi
 
