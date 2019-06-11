@@ -8,7 +8,10 @@
 # {{today}} : Replace today to "YYYYMMDD"
 
 # User Variables ===============================================
-. giipAgent.cnf
+. ./giipAgent.cnf
+
+# Self Check
+cntgiip=`ps aux | grep giipAgent.sh | grep -v grep | wc -l`
 
 # Check dos2unix
 CHECK_Converter=`which dos2unix`
@@ -60,7 +63,7 @@ else
 	echo "[$logdt] No queue" >> $LogFileName
 fi
 
-while [ "1" -eq "0" ];
+while [ $cntgiip -eq 0 ];
 do
 
 	cmpFile=`cat $tmpFileName`
