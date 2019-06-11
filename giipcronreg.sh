@@ -13,6 +13,8 @@ if [ $cntgiip -eq 0 ]; then
     (crontab -l ; echo "59 2 * * * bash --login -c 'sh ${giippath}/giiprecycle.sh'")| crontab -
 
     crontab -l
+else
+    echo "already giip agent installed... abort install process. "
 fi
 
 # check and install dos2unix
