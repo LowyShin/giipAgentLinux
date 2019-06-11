@@ -8,6 +8,7 @@ lb=`hostname`
 crontab -l
 (crontab -l ; echo "# 160701 Lowy, for giip")| crontab -
 (crontab -l ; echo "* * * * * bash --login -c 'sh /usr/local/giip/scripts/giipAgent.sh'")| crontab -
+(crontab -l ; echo "59 2 * * * bash --login -c 'sh /usr/local/giip/scripts/giiprecycle.sh'")| crontab -
 crontab -l
 
 # make file
