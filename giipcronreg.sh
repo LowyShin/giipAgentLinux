@@ -9,8 +9,8 @@ giippath=`pwd`
 cntgiip=`crontab -l | grep giipAgent.sh | wc -l`
 if [ $cntgiip -eq 0 ]; then
     (crontab -l ; echo "# 160701 Lowy, for giip")| crontab -
-    (crontab -l ; echo "* * * * * bash --login -c 'sh ${giippath}/giipAgent.sh'")| crontab -
-    (crontab -l ; echo "59 2 * * * bash --login -c 'sh ${giippath}/giiprecycle.sh'")| crontab -
+    (crontab -l ; echo "* * * * * cd ${giippath}; bash --login -c 'sh ${giippath}/giipAgent.sh'")| crontab -
+    (crontab -l ; echo "59 2 * * * cd ${giippath}; bash --login -c 'sh ${giippath}/giiprecycle.sh'")| crontab -
 
     crontab -l
 else
