@@ -22,7 +22,7 @@ Then save it.
 ### Register cron
 
 ```shell
-sh giipcronreg.sh
+* * * * * cd /home/giip/giipAgentLinux/;bash --logic -c 'sh giipAgentLinux.sh'
 ```
 
 ## Fully automate servers, robots, IoT by giip.
