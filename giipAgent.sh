@@ -11,6 +11,10 @@ sv="1.72"
 # User Variables ===============================================
 . ./giipAgent.cnf
 
+if [[ $giipagentdelay -eq "" ]];then
+	giipagentdelay="60"
+fi
+
 # Self Check
 cntgiip=`ps aux | grep giipAgent.sh | grep -v grep | wc -l`
 
@@ -56,11 +60,11 @@ lwDownloadURL=`echo "https://giipaspstg02.azurewebsites.net/api/cqe/cqequeueget0
 #echo $lwDownloadURL
 
 # Add Server
-if [[ $lssn -eq "0" ]];then
+if [ $lssn -eq "0" ];then
 	curl -o $tmpFileName "$lwDownloadURL"
 	lssn=`cat ${tmpFileName}`
-	cnfdmp=`cat ./giipAgent.cnf`
-	sed -e "s/lssn=\"0\"/lssn=\"${lssn}\"/g" $cnfdmp>giipAgent.cnf
+	cnfdmp=`cat ./giipAgent.cnf | sed -e "s|lssn=\"0\"|lssn=\"${lssn}\"|g"`
+	echo "${cnfdmp}" >giipAgent.cnf
 	lwDownloadURL=`echo "https://giipaspstg02.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=$sk&lssn=$lssn&hn=${hn}&os=$os&df=os&sv=${sv}" | sed -e "s/ /\%20/g"`
 fi
 
