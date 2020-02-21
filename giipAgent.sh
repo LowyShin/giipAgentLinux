@@ -53,6 +53,15 @@ LogFileName="/var/log/giipAgent_$Today.log"
 lwDownloadURL=`echo "http://giipapi.littleworld.net/api/cqe/queue/get03?sk=$sk&lssn=$lssn&os=$os&df=os" | sed -e "s/ /\%20/g"`
 #echo $lwDownloadURL
 
+# Add Server
+if [[ $lssn -eq "0" ]];then
+	curl -o $tmpFileName "$lwDownloadURL"
+	$lssn = `cat $tmpFileName`
+	$cnfdmp = `cat ./giipAgent.cnf`
+	sed -e "s/lssn=\"0\"/lssn=\"${lssn}\"/g" $cnfdmp>giipAgent.cnf
+	lwDownloadURL=`echo "http://giipapi.littleworld.net/api/cqe/queue/get03?sk=$sk&lssn=$lssn&os=$os&df=os" | sed -e "s/ /\%20/g"`
+fi
+
 curl -o $tmpFileName "$lwDownloadURL"
 
 if [[ -s $tmpFileName ]];then
