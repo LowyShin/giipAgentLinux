@@ -65,6 +65,7 @@ if [ $lssn -eq "0" ];then
 	lssn=`cat ${tmpFileName}`
 	cnfdmp=`cat ./giipAgent.cnf | sed -e "s|lssn=\"0\"|lssn=\"${lssn}\"|g"`
 	echo "${cnfdmp}" >giipAgent.cnf
+	rm -f $tmpFileName
 	lwDownloadURL=`echo "https://giipaspstg02.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=$sk&lssn=$lssn&hn=${hn}&os=$os&df=os&sv=${sv}" | sed -e "s/ /\%20/g"`
 fi
 
