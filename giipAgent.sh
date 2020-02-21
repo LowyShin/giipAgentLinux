@@ -106,7 +106,7 @@ do
 done
 if [ $cntgiip -ge 4 ]; then
 	echo "[$logdt]terminate by process count $cntgiip" >> $LogFileName
-	ret=`ps aux | grep giipAgent.sh`
+	ret=`ps aux | grep giipAgent.sh | grep -v grep`
 	echo "$ret" >> $LogFileName
 fi
 
