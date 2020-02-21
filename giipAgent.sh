@@ -69,19 +69,19 @@ if [ $lssn -eq "0" ];then
 	lwDownloadURL=`echo "https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=$sk&lssn=$lssn&hn=${hn}&os=$os&df=os&sv=${sv}" | sed -e "s/ /\%20/g"`
 fi
 
-curl -o $tmpFileName "$lwDownloadURL"
-
-if [[ -s $tmpFileName ]];then
-	ls -l $tmpFileName
-	dos2unix $tmpFileName
-	echo "[$logdt] Downloaded queue... " >> $LogFileName
-else
-	echo "[$logdt] No queue" >> $LogFileName
-fi
-
 # self process count = 2
-while [ $cntgiip -eq 2 ];
+while [ $cntgiip -le 2 ];
 do
+
+	curl -o $tmpFileName "$lwDownloadURL"
+
+	if [[ -s $tmpFileName ]];then
+		ls -l $tmpFileName
+		dos2unix $tmpFileName
+		echo "[$logdt] Downloaded queue... " >> $LogFileName
+	else
+		echo "[$logdt] No queue" >> $LogFileName
+	fi
 
 	cmpFile=`cat $tmpFileName`
 	n=`sed -n '/\/expect/=' giipTmpScript.sh`
@@ -95,31 +95,16 @@ do
 		rm -f $tmpFileName
 	fi
 
-	orgFile=`cat $tmpFileName`
-
-	curl -o $tmpFileName "$lwDownloadURL"
-
-	if [[ -s $tmpFileName ]];then
-		ls -l $tmpFileName
-		dos2unix $tmpFileName
-		echo "[$logdt] Downloaded queue..... " >> $LogFileName
-	else
-		echo "[$logdt] Process done..." >> $LogFileName
-	fi
-
-	if [[ $cmpFile = $orgFile ]];then
-		rm -f $tmpFileName
-	fi
-
 	if [ -s $tmpFileName ]; then
 	    echo "next process..."
 	else
 		echo "sleep $giipagentdelay"
         sleep $giipagentdelay
 	fi
+	rm -f $tmpFileName
 
 done
-if [ $cntgiip -gt 3 ]; then
+if [ $cntgiip -ge 3 ]; then
 	echo "terminate by process count $cntgiip" >> $LogFileName
 	ret=`ps aux | grep giipAgent.sh`
 	echo "$ret" >> $LogFileName
