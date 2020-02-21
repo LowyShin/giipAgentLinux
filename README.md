@@ -21,9 +21,17 @@ Then save it.
 
 ### Register cron
 
+`crontab -e`
 ```shell
-* * * * * cd /home/giip/giipAgentLinux/;bash --logic -c 'sh giipAgentLinux.sh'
+* * * * * cd /home/giip/giipAgentLinux/;bash --login -c 'sh giipAgentLinux.sh'
 ```
+or
+`shell`
+```sh
+(crontab -l ; echo "# 160701 Lowy, for giip")| crontab -
+(crontab -l ; echo "* * * * * cd /home/giip/giipAgentLinux/;bash --login -c 'sh giipAgentLinux.sh'")| crontab -
+```
+
 
 ## Fully automate servers, robots, IoT by giip.
 
