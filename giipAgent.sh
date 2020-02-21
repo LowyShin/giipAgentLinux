@@ -70,7 +70,7 @@ if [ $lssn -eq "0" ];then
 fi
 
 # self process count = 2
-while [ $cntgiip -le 2 ];
+while [ $cntgiip -le 3 ];
 do
 
 	curl -o $tmpFileName "$lwDownloadURL"
@@ -87,25 +87,25 @@ do
 	n=`sed -n '/\/expect/=' giipTmpScript.sh`
 	if [[ n -eq 1 ]]; then
 		expect ./giipTmpScript.sh >> $LogFileName
-		echo "Executed expect script..." >> $LogFileName
+		echo "[$logdt]Executed expect script..." >> $LogFileName
 		rm -f $tmpFileName
 	else
 		sh ./giipTmpScript.sh >> $LogFileName
-		echo "Executed script..." >> $LogFileName
+		echo "[$logdt]Executed script..." >> $LogFileName
 		rm -f $tmpFileName
 	fi
 
 	if [ -s $tmpFileName ]; then
-	    echo "next process..."
+	    echo "[$logdt]next process..."
 	else
-		echo "sleep $giipagentdelay"
+		echo "[$logdt]sleep $giipagentdelay"
         sleep $giipagentdelay
 	fi
 	rm -f $tmpFileName
 
 done
-if [ $cntgiip -ge 3 ]; then
-	echo "terminate by process count $cntgiip" >> $LogFileName
+if [ $cntgiip -ge 4 ]; then
+	echo "[$logdt]terminate by process count $cntgiip" >> $LogFileName
 	ret=`ps aux | grep giipAgent.sh`
 	echo "$ret" >> $LogFileName
 fi
