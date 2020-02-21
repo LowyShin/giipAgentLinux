@@ -56,7 +56,7 @@ tmpFileName="giipTmpScript.sh"
 logdt=`date '+%Y/%m/%d %H:%M:%S'`
 Today=`date '+%Y%m%d'`
 LogFileName="/var/log/giipAgent_$Today.log"
-lwDownloadURL=`echo "https://giipaspstg02.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=$sk&lssn=$lssn&hn=${hn}&os=$os&df=os&sv=${sv}" | sed -e "s/ /\%20/g"`
+lwDownloadURL=`echo "https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=$sk&lssn=$lssn&hn=${hn}&os=$os&df=os&sv=${sv}" | sed -e "s/ /\%20/g"`
 #echo $lwDownloadURL
 
 # Add Server
@@ -66,7 +66,7 @@ if [ $lssn -eq "0" ];then
 	cnfdmp=`cat ./giipAgent.cnf | sed -e "s|lssn=\"0\"|lssn=\"${lssn}\"|g"`
 	echo "${cnfdmp}" >giipAgent.cnf
 	rm -f $tmpFileName
-	lwDownloadURL=`echo "https://giipaspstg02.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=$sk&lssn=$lssn&hn=${hn}&os=$os&df=os&sv=${sv}" | sed -e "s/ /\%20/g"`
+	lwDownloadURL=`echo "https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=$sk&lssn=$lssn&hn=${hn}&os=$os&df=os&sv=${sv}" | sed -e "s/ /\%20/g"`
 fi
 
 curl -o $tmpFileName "$lwDownloadURL"
