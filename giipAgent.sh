@@ -53,7 +53,7 @@ fi
 
 hn=`hostname`
 tmpFileName="giipTmpScript.sh"
-logdt=`date '+%Y/%m/%d %H:%M:%S'`
+logdt=`date '+%Y%m%d%H%M%S'`
 Today=`date '+%Y%m%d'`
 LogFileName="/var/log/giipAgent_$Today.log"
 lwDownloadURL=`echo "https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=$sk&lssn=$lssn&hn=${hn}&os=$os&df=os&sv=${sv}" | sed -e "s/ /\%20/g"`
