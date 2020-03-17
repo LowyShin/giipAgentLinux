@@ -86,23 +86,27 @@ do
 	fi
 
 	cmpFile=`cat $tmpFileName`
-	n=`sed -n '/\/expect/=' giipTmpScript.sh`
-	if [ ${n} -gt 0 ]; then
-		expect ./giipTmpScript.sh >> $LogFileName
-		echo "[$logdt]Executed expect script..." >> $LogFileName
-		rm -f $tmpFileName
-	else
-		sh ./giipTmpScript.sh >> $LogFileName
-		echo "[$logdt]Executed script..." >> $LogFileName
-		rm -f $tmpFileName
-	fi
-
 	ErrChk=`cat ${tmpFileName} | grep "HTTP Error"`
-	if [ ${ErrChk} = "" ]; then
-	    echo "[$logdt]next process..."
+	if [ "${ErrChk}" = "" ]; then
+		rm -f $tmpFileName
+	    echo "[$logdt]Stop by error. ${ErrChk}"
+		exit 0
 	else
-		echo "[$logdt]sleep $giipagentdelay"
-        sleep $giipagentdelay
+		if [ -s ${tmpFileName} ];then
+			n=`cat giipTmpScript.sh | grep 'expect=' | wc -l`
+			if [ ${n} -ge 1 ]; then
+				expect ./giipTmpScript.sh >> $LogFileName
+				echo "[$logdt]Executed expect script..." >> $LogFileName
+				rm -f $tmpFileName
+			else
+				sh ./giipTmpScript.sh >> $LogFileName
+				echo "[$logdt]Executed script..." >> $LogFileName
+				rm -f $tmpFileName
+			fi
+		else
+			echo "[$logdt]Work Done $giipagentdelay"
+	        sleep $giipagentdelay
+		fi
 	fi
 	rm -f $tmpFileName
 
