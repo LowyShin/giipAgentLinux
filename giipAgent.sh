@@ -87,7 +87,7 @@ do
 
 	cmpFile=`cat $tmpFileName`
 	n=`sed -n '/\/expect/=' giipTmpScript.sh`
-	if [ $n -eq 1 ]; then
+	if [ ${n} -gt 0 ]; then
 		expect ./giipTmpScript.sh >> $LogFileName
 		echo "[$logdt]Executed expect script..." >> $LogFileName
 		rm -f $tmpFileName
@@ -97,7 +97,8 @@ do
 		rm -f $tmpFileName
 	fi
 
-	if [ -s ${tmpFileName} ]; then
+	ErrChk=`cat ${tmpFileName} | grep "HTTP Error"`
+	if [ ${ErrChk} = "" ]; then
 	    echo "[$logdt]next process..."
 	else
 		echo "[$logdt]sleep $giipagentdelay"
