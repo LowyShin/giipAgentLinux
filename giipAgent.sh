@@ -75,7 +75,8 @@ fi
 while [ ${cntgiip} -le 3 ];
 do
 
-	curl -o $tmpFileName "$lwDownloadURL"
+	#curl -o $tmpFileName "$lwDownloadURL"
+	wget -O $tmpFileName "$lwDownloadURL"
 
 	if [ -s ${tmpFileName} ];then
 		ls -l $tmpFileName
