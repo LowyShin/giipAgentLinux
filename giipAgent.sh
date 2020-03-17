@@ -87,9 +87,9 @@ do
 
 	cmpFile=`cat $tmpFileName`
 	ErrChk=`cat ${tmpFileName} | grep "HTTP Error"`
-	if [ "${ErrChk}" = "" ]; then
+	if [ "${ErrChk}" != "" ]; then
 		rm -f $tmpFileName
-	    echo "[$logdt]Stop by error. ${ErrChk}"
+	    echo "[$logdt]Stop by error. ${ErrChk}" >> $LogFileName
 		exit 0
 	else
 		if [ -s ${tmpFileName} ];then
@@ -104,7 +104,7 @@ do
 				rm -f $tmpFileName
 			fi
 		else
-			echo "[$logdt]Work Done $giipagentdelay"
+			echo "[$logdt]Work Done $giipagentdelay" >> $LogFileName
 	        sleep $giipagentdelay
 		fi
 	fi
