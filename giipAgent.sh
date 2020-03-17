@@ -11,7 +11,7 @@ sv="1.72"
 # User Variables ===============================================
 . ./giipAgent.cnf
 
-if [ "${giipagentdelay}" -eq "" ];then
+if [[ "${giipagentdelay}" -eq "" ]];then
 	giipagentdelay="60"
 fi
 
@@ -25,7 +25,7 @@ RESULT=`echo $?`
 #OS Check
 # Check MacOS
 uname=`uname -a | awk '{print $1}'`
-if [ "${uname}" -eq "Darwin" ];then
+if [[ "${uname}" -eq "Darwin" ]];then
 	osname=`sw_vers -productName`
 	osver=`sw_vers -productVersion`
 	os="${osname} ${osver}"
@@ -35,7 +35,7 @@ if [ "${uname}" -eq "Darwin" ];then
 	fi
 else
 	ostype=`head -n 1 /etc/issue | awk '{print $1}'`
-	if [ "${ostype}" -eq "Ubuntu" ];then
+	if [[ "${ostype}" -eq "Ubuntu" ]];then
 		os=`lsb_release -d`
 		os=`echo "$os"| sed -e "s/Description\://g"`
 
@@ -60,7 +60,7 @@ lwDownloadURL=`echo "https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp
 #echo $lwDownloadURL
 
 # Add Server
-if [ "${lssn}" -eq "0" ];then
+if [[ "${lssn}" -eq "0" ]];then
 	curl -o $tmpFileName "$lwDownloadURL"
 	lssn=`cat ${tmpFileName}`
 	cnfdmp=`cat ./giipAgent.cnf | sed -e "s|lssn=\"0\"|lssn=\"${lssn}\"|g"`
