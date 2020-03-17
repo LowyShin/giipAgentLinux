@@ -25,27 +25,27 @@ RESULT=`echo $?`
 #OS Check
 # Check MacOS
 uname=`uname -a | awk '{print $1}'`
-if [ $uname = "Darwin" ];then
+if [ $uname -eq "Darwin" ];then
 	osname=`sw_vers -productName`
 	osver=`sw_vers -productVersion`
 	os="${osname} ${osver}"
 	os=`echo "$os" | sed -e "s/ /%20/g"`
-	if [ ${RESULT} != 0 ];then
+	if [ ${RESULT} -ne 0 ];then
 		brew install dos2unix
 	fi
 else
 	ostype=`head -n 1 /etc/issue | awk '{print $1}'`
-	if [ $ostype = "Ubuntu" ];then
+	if [ $ostype -eq "Ubuntu" ];then
 		os=`lsb_release -d`
 		os=`echo "$os"| sed -e "s/Description\://g"`
 
-		if [ ${RESULT} != 0 ];then
+		if [ ${RESULT} -ne 0 ];then
 			apt-get install -y dos2unix
 		fi
 	else
 		os=`cat /etc/redhat-release`
 
-		if [ ${RESULT} != 0 ];then
+		if [ ${RESULT} -ne 0 ];then
 			yum install -y dos2unix
 		fi
 	fi
@@ -60,7 +60,7 @@ lwDownloadURL=`echo "https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp
 #echo $lwDownloadURL
 
 # Add Server
-if [ $lssn -eq "0" ];then
+if [ ${lssn} -eq "0" ];then
 	curl -o $tmpFileName "$lwDownloadURL"
 	lssn=`cat ${tmpFileName}`
 	cnfdmp=`cat ./giipAgent.cnf | sed -e "s|lssn=\"0\"|lssn=\"${lssn}\"|g"`
@@ -70,12 +70,12 @@ if [ $lssn -eq "0" ];then
 fi
 
 # self process count = 2
-while [ $cntgiip -le 3 ];
+while [ ${cntgiip} -le 3 ];
 do
 
 	curl -o $tmpFileName "$lwDownloadURL"
 
-	if [[ -s $tmpFileName ]];then
+	if [ -s ${tmpFileName} ];then
 		ls -l $tmpFileName
 		dos2unix $tmpFileName
 		echo "[$logdt] Downloaded queue... " >> $LogFileName
@@ -85,7 +85,7 @@ do
 
 	cmpFile=`cat $tmpFileName`
 	n=`sed -n '/\/expect/=' giipTmpScript.sh`
-	if [[ n -eq 1 ]]; then
+	if [ n -eq 1 ]; then
 		expect ./giipTmpScript.sh >> $LogFileName
 		echo "[$logdt]Executed expect script..." >> $LogFileName
 		rm -f $tmpFileName
@@ -95,7 +95,7 @@ do
 		rm -f $tmpFileName
 	fi
 
-	if [ -s $tmpFileName ]; then
+	if [ -s ${tmpFileName} ]; then
 	    echo "[$logdt]next process..."
 	else
 		echo "[$logdt]sleep $giipagentdelay"
@@ -111,5 +111,3 @@ if [ $cntgiip -ge 4 ]; then
 fi
 
 rm -f $tmpFileName
-
-

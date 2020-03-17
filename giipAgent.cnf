@@ -1,6 +1,7 @@
 # You can find secret key and lssn from giip user portal (web UI)
 sk="<your secret key>"
-lssn="<lssn of server>"
+# If you have lssn, put below.
+lssn="0"
 
 # giip agent loop delay (seconds)
 giipagentdelay="60"
