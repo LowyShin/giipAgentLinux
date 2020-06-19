@@ -1,3 +1,4 @@
+#!/bin/bash
 # You can see secret key in service page of giip
 . ./giipAgent.cnf
 
