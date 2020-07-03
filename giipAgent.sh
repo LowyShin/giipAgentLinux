@@ -9,7 +9,7 @@ sv="1.72"
 # {{today}} : Replace today to "YYYYMMDD"
 
 # User Variables ===============================================
-. ./giipAgent.cnf
+. ../giipAgent.cnf
 
 if [ "${giipagentdelay}" = "" ];then
 	giipagentdelay="60"
@@ -58,8 +58,8 @@ tmpFileName="giipTmpScript.sh"
 logdt=`date '+%Y%m%d%H%M%S'`
 Today=`date '+%Y%m%d'`
 LogFileName="/var/log/giipAgent_$Today.log"
-lwDownloadURL=`echo "https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=$sk&lssn=$lssn&hn=${hn}&os=$os&df=os&sv=${sv}" | sed -e "s/ /\%20/g"`
-#echo $lwDownloadURL
+lwDownloadURL=`echo "https://giipaspi04.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=$sk&lssn=$lssn&hn=${hn}&os=$os&df=os&sv=${sv}" | sed -e "s/ /\%20/g"`
+echo $lwDownloadURL
 
 # Add Server
 if [ "${lssn}" = "0" ];then
@@ -106,11 +106,11 @@ do
 			fi
 		else
 			echo "[$logdt]Work Done $giipagentdelay" >> $LogFileName
-	        sleep $giipagentdelay
+	        	#sleep $giipagentdelay
+			cntgiip=999
 		fi
 	fi
 	rm -f $tmpFileName
-
 done
 if [ ${cntgiip} -ge 4 ]; then
 	echo "[$logdt]terminate by process count $cntgiip" >> $LogFileName
