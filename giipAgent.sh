@@ -76,7 +76,7 @@ while [ ${cntgiip} -le 3 ];
 do
 
 	#curl -o $tmpFileName "$lwDownloadURL"
-	wget -O $tmpFileName "$lwDownloadURL"
+	wget -O $tmpFileName "$lwDownloadURL" --no-check-certificate
 
 	if [ -s ${tmpFileName} ];then
 		ls -l $tmpFileName
