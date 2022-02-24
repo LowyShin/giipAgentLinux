@@ -32,7 +32,18 @@ Then save it.
 
 ### Register cron
 
+Requirement module
+
+* dos2unix
 ```sh
+yum install -y dos2unix
+```
+
+Add crontab
+
+```sh
+cd giipAgentLinux
+
 sh giipcronreg.sh
 ```
 
