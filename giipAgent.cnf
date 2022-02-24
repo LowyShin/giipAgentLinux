@@ -5,3 +5,4 @@ lssn=""
 
 # giip agent loop delay (seconds)
 giipagentdelay="60"
+apiaddr="https://giipapi.azurewebsites.net"
