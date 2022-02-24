@@ -12,7 +12,7 @@ git clone https://github.com/LowyShin/giipAgentLinux.git
 
 copy giipAgent.cnf to upper directory
 ```shell
-cp giipAgent.cnf ../
+cp giipAgentLinux/giipAgent.cnf ./
 ```
 
 ```shell
