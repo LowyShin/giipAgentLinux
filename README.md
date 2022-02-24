@@ -10,6 +10,11 @@ git clone https://github.com/LowyShin/giipAgentLinux.git
 
 ### Configure client environment
 
+copy giipAgent.cnf to upper directory
+```shell
+cp giipAgent.cnf ../
+```
+
 ```shell
 vi giipAgent.cnf
 ```
