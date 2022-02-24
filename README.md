@@ -21,6 +21,12 @@ vi giipAgent.cnf
 
 Put your Secret Key and LSSN from giip web UI
 
+If you are first time in giip service, you need to registration by giip web(https://giipasp.azurewebsites.net) service. it is all free(except third party services)!
+
+You may add project and service by giip web sites, then you can get Secret key on service management page.
+
+You may get LSSN from logical machine management page when you select your project you made. 
+
 Then save it.
 
 
