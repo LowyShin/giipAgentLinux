@@ -1,8 +1,8 @@
 # You can find secret key and lssn from giip user portal (web UI)
 sk="<your secret key>"
 # If you have lssn, put below.
-lssn=""
+lssn="0"
 
 # giip agent loop delay (seconds)
 giipagentdelay="60"
-apiaddr="https://giipapi.littleworld.net"
+apiaddr="https://giipasp.azurewebsites.net"
