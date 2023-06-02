@@ -113,7 +113,11 @@ do
 	rm -f $tmpFileName
 done
 if [ ${cntgiip} -ge 4 ]; then
-	echo "[$logdt]terminate by process count $cntgiip" >> $LogFileName
+        if [ ${cntgiip} -eq 999 ]; then
+                echo "[$logdt]All process was done" >> $LogFileName
+        else
+                echo "[$logdt]terminate by process count $cntgiip" >> $LogFileName
+        fi
 	ret=`ps aux | grep giipAgent.sh | grep -v grep`
 	echo "$ret" >> $LogFileName
 fi
