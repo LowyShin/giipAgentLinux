@@ -2,6 +2,8 @@
 
 This repository is Agent files for client connect to giip Service.
 
+for Windows : https://github.com/LowyShin/giipAgentWin
+
 ### Download giipAgent
 
 ```shell
