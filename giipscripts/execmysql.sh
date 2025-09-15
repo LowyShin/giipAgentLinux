@@ -2,6 +2,8 @@
 # for mysql version. 
 # sqlserver(on Windows) : https://github.com/LowyShin/giipAgentWin/blob/master/giipscripts/sqlnet_put.bat
 
+# call me when you want use DPA, we can help to use. contact@littleworld.net
+
 # for logging
 date
 
