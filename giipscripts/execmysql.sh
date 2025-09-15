@@ -1,3 +1,7 @@
+# DPA - database performance analysis
+# for mysql version. 
+# sqlserver(on Windows) : https://github.com/LowyShin/giipAgentWin/blob/master/giipscripts/sqlnet_put.bat
+
 # for logging
 date
 
