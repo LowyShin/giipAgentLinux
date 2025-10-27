@@ -5,7 +5,11 @@
 
 # Load configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "${SCRIPT_DIR}/giipAgent.cnf"
+CONFIG_FILE="$(dirname "$SCRIPT_DIR")/giipAgent.cnf"
+if [ ! -f "$CONFIG_FILE" ]; then
+    CONFIG_FILE="${SCRIPT_DIR}/giipAgent.cnf"
+fi
+. "$CONFIG_FILE"
 
 # Variables
 LOG_FILE="/var/log/giip-auto-discover.log"
@@ -63,7 +67,7 @@ if [ $HTTP_CODE -eq 0 ]; then
         if [ -n "$NEW_LSSN" ]; then
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] Received LSSN: $NEW_LSSN" >> "$LOG_FILE"
             # Update config file
-            sed -i "s/lssn=\"0\"/lssn=\"$NEW_LSSN\"/" "${SCRIPT_DIR}/giipAgent.cnf"
+            sed -i "s/lssn=\"0\"/lssn=\"$NEW_LSSN\"/" "$CONFIG_FILE"
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] Updated giipAgent.cnf with LSSN: $NEW_LSSN" >> "$LOG_FILE"
         fi
     fi
