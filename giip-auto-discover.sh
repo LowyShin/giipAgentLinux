@@ -44,17 +44,16 @@ echo "$DISCOVERY_JSON" > "$TEMP_JSON"
 
 # Call API (Azure Function)
 # Note: API endpoint configured in giipAgent.cnf
-API_URL="${apiaddr}/api/giipApi?cmd=AgentAutoRegister"
+API_URL="${apiaddr}/api/giipApi"
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sending data to API..." >> "$LOG_FILE"
 
+# Use form-urlencoded format as per Azure Function API
 RESPONSE=$(curl -s -X POST "$API_URL" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $sk" \
-    -d "{
-        \"at\": \"$sk\",
-        \"jsondata\": $DISCOVERY_JSON
-    }" 2>&1)
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    --data-urlencode "text=AgentAutoRegister hostname" \
+    --data-urlencode "jsondata=$DISCOVERY_JSON" \
+    --data-urlencode "usertoken=$sk" 2>&1)
 
 HTTP_CODE=$?
 
