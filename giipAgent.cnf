@@ -1,8 +1,17 @@
 # You can find secret key and lssn from giip user portal (web UI)
 sk="<your secret key>"
+
 # If you have lssn, put below.
 lssn="0"
 
-# giip agent loop delay (seconds)
+# Agent execution interval (seconds)
+# 60 = Check queue every 60 seconds
 giipagentdelay="60"
+
+# API v2 (Recommended) - PowerShell-based, faster and more stable
+apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
+apiaddrcode="YOUR_AZURE_FUNCTION_KEY_HERE"
+
+# API v1 (Legacy) - ASP Classic-based
 apiaddr="https://giipasp.azurewebsites.net"
+

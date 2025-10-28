@@ -5,10 +5,12 @@
 ## 🌟 Overview
 
 GIIP Agent is an intelligent monitoring and management agent that:
-- **Executes remote commands** via CQE (Command Queue Execution) system
+- **Executes remote commands** via CQE (Command Queue Execution) system 🚀 **NEW v2.0**
 - **Auto-discovers infrastructure** (OS, hardware, software, services, network)
 - **Provides operational advice** based on collected data
 - **Reports heartbeat** every 5 minutes to central management
+
+**NEW in v2.0**: Enhanced CQE system with automatic result collection, timeout control, and security validation!
 
 For Windows version: https://github.com/LowyShin/giipAgentWin
 
@@ -113,11 +115,28 @@ sk="your-secret-key-here"
 lssn="0"
 
 # Agent execution interval (seconds)
+# This controls how often the agent checks for new commands
 giipagentdelay="60"
 
-# API server address
+# API v2 (Recommended) - PowerShell-based, faster and stable
+apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
+apiaddrcode="YOUR_AZURE_FUNCTION_KEY_HERE"
+
+# API v1 (Legacy) - ASP Classic-based
+# Only used if apiaddrv2 is not set
 apiaddr="https://giipasp.azurewebsites.net"
 ```
+
+**API Version Comparison:**
+| Feature | v1 (Legacy) | v2 (Recommended) |
+|---------|-------------|------------------|
+| Engine | ASP Classic | PowerShell |
+| Speed | Slower | Faster |
+| Stability | Moderate | High |
+| Auth | SK only | SK + Function Code |
+| Endpoint | giipasp.azurewebsites.net | giipfaw.azurewebsites.net |
+
+> **💡 TIP**: Always use `apiaddrv2` for better performance and reliability!
 
 ### Step 3: Install Agent
 
@@ -133,12 +152,135 @@ sudo ./giipcronreg.sh
 **What happens during installation:**
 1. Checks for existing GIIP installations
 2. Prompts for removal if found (Y/N)
-3. Installs required packages (dos2unix, wget, curl)
-4. Registers 3 cron jobs:
-   - GIIP Agent: Every 1 minute
+3. Installs required packages (dos2unix, wget, curl, jq)
+4. Registers cron jobs:
+   - **CQE Agent** (giipCQE.sh): Every 5 minutes - Command Queue Execution 🚀 **NEW**
    - Auto-Discovery: Every 5 minutes
    - Daily Recycle: 23:59 daily
 5. Sets executable permissions for scripts
+
+---
+
+## 🚀 CQE (Command Queue Execution) System v2.0 **NEW**
+
+### Overview
+
+CQE는 중앙 서버에서 원격 서버로 스크립트를 배포하고 실행 결과를 자동 수집하는 시스템입니다.
+
+**주요 기능**:
+- ✅ 원격 스크립트 실행
+- ✅ 실행 결과 자동 수집 (tKVS 저장)
+- ✅ 타임아웃 제어 (기본 300초)
+- ✅ 보안 검증 (위험한 명령어 차단)
+- ✅ 에러 처리 및 재시도
+- ✅ 상세 로깅
+
+### Quick Start
+
+**1. CQE Agent 실행**
+```bash
+# 자동 실행 (cron)
+*/5 * * * * cd /home/giip/giipAgentLinux && bash giipCQE.sh
+
+# 수동 실행
+bash giipCQE.sh
+
+# 테스트 모드
+bash giipCQE.sh --test
+
+# 한 번만 실행
+bash giipCQE.sh --once
+```
+
+**2. 스크립트 등록 및 실행**
+
+```sql
+-- Step 1: 스크립트 마스터 등록 (tMgmtScript)
+INSERT INTO tMgmtScript (usn, msName, msDetail, msBody, msRegdt, msType, category, enabled)
+VALUES (
+    1,
+    'disk_check.sh',
+    '디스크 사용량 체크',
+    '#!/bin/bash
+df -h
+du -sh /var/log/*',
+    GETDATE(),
+    'bash',
+    'monitoring',
+    1
+)
+-- 반환된 msSn 기억 (예: 100)
+
+-- Step 2: 서버에 스케줄 등록 (tMgmtScriptList)
+INSERT INTO tMgmtScriptList (
+    msSn, usn, csn, lssn, interval, active, repeat, regdate, script_type
+)
+VALUES (
+    100,        -- msSn (위에서 생성한 스크립트)
+    1,          -- usn (사용자)
+    70324,      -- csn (회사)
+    71028,      -- lssn (대상 서버)
+    60,         -- interval (60분마다 실행)
+    1,          -- active (활성화)
+    2,          -- repeat (2=반복, 1=한번만)
+    GETDATE(),
+    'bash'
+)
+
+-- Step 3: 즉시 실행 (선택사항)
+UPDATE tMgmtScriptList
+SET q_flag = 1
+WHERE mslSn = 12345  -- 위에서 생성된 mslSn
+```
+
+**3. 실행 결과 조회**
+
+```bash
+# CLI로 조회
+./giipCQECtrl.sh result 71028
+
+# 또는 SQL로 조회
+SELECT TOP 10
+    kRegdt,
+    JSON_VALUE(kValue, '$.script_name') AS script_name,
+    JSON_VALUE(kValue, '$.status') AS status,
+    JSON_VALUE(kValue, '$.exit_code') AS exit_code,
+    JSON_VALUE(kValue, '$.duration_seconds') AS duration,
+    JSON_VALUE(kValue, '$.stdout') AS output
+FROM tKVS
+WHERE kType = 'lssn'
+  AND kKey = '71028'
+  AND kFactor = 'cqeresult'
+ORDER BY kRegdt DESC
+```
+
+### CQE Control Utility
+
+```bash
+# 스케줄 목록 조회
+./giipCQECtrl.sh list
+
+# 서버 상태 확인
+./giipCQECtrl.sh status 71028
+
+# 즉시 실행
+./giipCQECtrl.sh execute 12345
+
+# 최근 결과 조회
+./giipCQECtrl.sh result 71028
+
+# 로그 조회
+./giipCQECtrl.sh logs 71028
+```
+
+### Architecture
+
+```
+관리자 → tMgmtScript → tMgmtScriptList → tMgmtQue → giipCQE.sh → 실행 → tKVS
+   (등록)     (마스터)      (스케줄)        (큐)      (Agent)    (결과저장)
+```
+
+**자세한 내용**: [CQE_ARCHITECTURE.md](../giipAgentAdmLinux/docs/CQE_ARCHITECTURE.md)
 
 ---
 
