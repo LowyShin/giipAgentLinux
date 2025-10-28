@@ -3,6 +3,17 @@
 # Call this script periodically (every 5 minutes) from cron
 # Example crontab: */5 * * * * /path/to/giip-auto-discover.sh
 
+# Sync system time (once per hour to avoid excessive NTP queries)
+LAST_SYNC_FILE="/tmp/giip-last-time-sync"
+CURRENT_HOUR=$(date +%Y%m%d%H)
+if [ ! -f "$LAST_SYNC_FILE" ] || [ "$(cat $LAST_SYNC_FILE 2>/dev/null)" != "$CURRENT_HOUR" ]; then
+    if command -v chronyc &> /dev/null; then
+        chronyc makestep &> /dev/null && echo "$CURRENT_HOUR" > "$LAST_SYNC_FILE"
+    elif command -v timedatectl &> /dev/null; then
+        timedatectl set-ntp true &> /dev/null && echo "$CURRENT_HOUR" > "$LAST_SYNC_FILE"
+    fi
+fi
+
 # Load configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="$(dirname "$SCRIPT_DIR")/giipAgent.cnf"
@@ -51,17 +62,19 @@ echo "$DISCOVERY_JSON" > "$TEMP_JSON"
 # Reason: giipApi=session-based(AK), giipApiSk2=SK-based with better JSON parsing
 API_URL="${apiaddrv2}"
 
-# Extract hostname from JSON for API call
+# Extract hostname from JSON for logging
 HOSTNAME=$(echo "$DISCOVERY_JSON" | grep -o '"hostname":\s*"[^"]*"' | sed 's/"hostname":\s*"//' | sed 's/"$//')
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sending data to API v2 (giipApiSk2) for host: $HOSTNAME..." >> "$LOG_FILE"
 
-# Use form-urlencoded format with SK authentication
-# Note: text parameter includes actual hostname from discovery data
+# giipApiSk2 pattern (same as kvsput.sh):
+# - text: command name + parameter names (NO sk, NO values)
+# - token: SK authentication (separate parameter, auto-merged by giipfaw)
+# - jsondata: actual parameter values in JSON format
 RESPONSE=$(curl -s -X POST "$API_URL" \
     -H "Content-Type: application/x-www-form-urlencoded" \
-    --data-urlencode "text=AgentAutoRegister $HOSTNAME jsondata" \
-    --data-urlencode "jsondata=$DISCOVERY_JSON" \
-    --data-urlencode "sk=$sk" 2>&1)
+    --data-urlencode "text=AgentAutoRegister hostname jsondata" \
+    --data-urlencode "token=$sk" \
+    --data-urlencode "jsondata=$DISCOVERY_JSON" 2>&1)
 
 HTTP_CODE=$?
 
