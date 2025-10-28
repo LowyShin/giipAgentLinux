@@ -78,34 +78,34 @@ else
 fi
 
 # ========================================
-# 6. Software Inventory
+# 6. Software Inventory (Service-related only)
 # ========================================
+# Filter: 주요 서비스 관련 패키지만 수집 (백업/감시/웹/DB/미들웨어)
+SERVICE_FILTER='nginx|httpd|apache|mysql|mariadb|postgresql|postgres|redis|memcache|mongodb|elastic|kafka|rabbitmq|haproxy|varnish|tomcat|jboss|wildfly|weblogic|glassfish|nodejs|node-|php|python3|java-|openjdk|bacula|amanda|rsync|rclone|borg|duplicity|restic|nagios|zabbix|prometheus|grafana|sensu|icinga|monit|collectd|telegraf|datadog|newrelic|splunk|logstash|filebeat|fluentd|syslog|docker|kubernetes|openshift|ansible|puppet|chef|salt|terraform|jenkins|gitlab|nexus|artifactory|sonarqube|vault|consul|etcd'
+
 software_json=""
 count=0
-max_packages=100  # Limit to prevent huge JSON
 
 if command -v rpm &> /dev/null; then
     # RPM-based (CentOS, RHEL, Fedora)
     while IFS='|' read -r name version vendor; do
-        [ $count -ge $max_packages ] && break
         [ -n "$software_json" ] && software_json+=","
         name_escaped=$(json_escape "$name")
         version_escaped=$(json_escape "$version")
         vendor_escaped=$(json_escape "$vendor")
         software_json+="{\"name\":\"$name_escaped\",\"version\":\"$version_escaped\",\"vendor\":\"$vendor_escaped\",\"type\":\"RPM\"}"
         ((count++))
-    done < <(rpm -qa --queryformat '%{NAME}|%{VERSION}-%{RELEASE}|%{VENDOR}\n' 2>/dev/null | head -n $max_packages)
+    done < <(rpm -qa --queryformat '%{NAME}|%{VERSION}-%{RELEASE}|%{VENDOR}\n' 2>/dev/null | grep -iE "$SERVICE_FILTER")
     
 elif command -v dpkg &> /dev/null; then
     # DEB-based (Ubuntu, Debian)
     while IFS='|' read -r name version; do
-        [ $count -ge $max_packages ] && break
         [ -n "$software_json" ] && software_json+=","
         name_escaped=$(json_escape "$name")
         version_escaped=$(json_escape "$version")
         software_json+="{\"name\":\"$name_escaped\",\"version\":\"$version_escaped\",\"type\":\"DEB\"}"
         ((count++))
-    done < <(dpkg-query -W -f='${Package}|${Version}\n' 2>/dev/null | head -n $max_packages)
+    done < <(dpkg-query -W -f='${Package}|${Version}\n' 2>/dev/null | grep -iE "$SERVICE_FILTER")
 fi
 
 # ========================================

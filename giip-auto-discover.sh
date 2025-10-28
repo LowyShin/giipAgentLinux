@@ -35,6 +35,10 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Log statistics
+SOFTWARE_COUNT=$(echo "$DISCOVERY_JSON" | grep -o '"name":' | wc -l | awk '{print $1}')
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Collected service-related packages: $SOFTWARE_COUNT" >> "$LOG_FILE"
+
 # Add agent version to JSON (before last })
 DISCOVERY_JSON=$(echo "$DISCOVERY_JSON" | sed "s/}$/, \"agent_version\": \"$AGENT_VERSION\" }/")
 
@@ -42,11 +46,11 @@ DISCOVERY_JSON=$(echo "$DISCOVERY_JSON" | sed "s/}$/, \"agent_version\": \"$AGEN
 TEMP_JSON="/tmp/giip-discovery-$$.json"
 echo "$DISCOVERY_JSON" > "$TEMP_JSON"
 
-# Call API (Azure Function v2 with SK authentication)
+# Call API (Azure Function with SK authentication - Production)
 # Note: API endpoint configured in giipAgent.cnf
-API_URL="${apiaddrv2}"
+API_URL="${Endpoint}"
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sending data to API v2..." >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sending data to API..." >> "$LOG_FILE"
 
 # Use form-urlencoded format with SK authentication
 RESPONSE=$(curl -s -X POST "$API_URL" \
