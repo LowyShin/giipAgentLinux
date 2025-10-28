@@ -51,12 +51,15 @@ echo "$DISCOVERY_JSON" > "$TEMP_JSON"
 # Reason: giipApi=session-based(AK), giipApiSk2=SK-based with better JSON parsing
 API_URL="${apiaddrv2}"
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sending data to API v2 (giipApiSk2)..." >> "$LOG_FILE"
+# Extract hostname from JSON for API call
+HOSTNAME=$(echo "$DISCOVERY_JSON" | grep -o '"hostname":\s*"[^"]*"' | sed 's/"hostname":\s*"//' | sed 's/"$//')
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sending data to API v2 (giipApiSk2) for host: $HOSTNAME..." >> "$LOG_FILE"
 
 # Use form-urlencoded format with SK authentication
+# Note: text parameter includes actual hostname from discovery data
 RESPONSE=$(curl -s -X POST "$API_URL" \
     -H "Content-Type: application/x-www-form-urlencoded" \
-    --data-urlencode "text=AgentAutoRegister hostname" \
+    --data-urlencode "text=AgentAutoRegister $HOSTNAME jsondata" \
     --data-urlencode "jsondata=$DISCOVERY_JSON" \
     --data-urlencode "sk=$sk" 2>&1)
 

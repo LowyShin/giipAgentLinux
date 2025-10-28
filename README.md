@@ -49,7 +49,25 @@ For Windows version: https://github.com/LowyShin/giipAgentWin
 
 ---
 
-## 📋 Prerequisites
+## � Documentation
+
+### Architecture & Design
+- [Auto-Discovery Architecture](docs/AUTO_DISCOVERY_ARCHITECTURE.md) - 파일 구조와 실행 흐름 상세 설명
+- [Service Package Filter](docs/SERVICE_PACKAGE_FILTER.md) - 소프트웨어 필터링 규칙
+
+### API & Integration
+- [API Endpoints Comparison](../giipfaw/docs/API_ENDPOINTS_COMPARISON.md) - giipApi vs giipApiSk vs giipApiSk2 차이점
+
+### Installation & Operation
+- [Agent Installation Guide](../docs/AGENT_INSTALLATION_GUIDE.md) - Linux/Windows 에이전트 설치
+- [Test Server Installation](../docs/TEST_SERVER_INSTALLATION.md) - 테스트 환경 구축
+
+### Security
+- [Security Checklist](../docs/SECURITY_CHECKLIST.md) - 보안 점검 항목
+
+---
+
+## �📋 Prerequisites
 
 ### Required Packages
 - Git
