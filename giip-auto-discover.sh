@@ -60,7 +60,12 @@ echo "$DISCOVERY_JSON" > "$TEMP_JSON"
 # Call API v2 (giipApiSk2 - SK authentication with advanced JSON handling)
 # IMPORTANT: Use apiaddrv2 (giipApiSk2) NOT Endpoint (giipApi)
 # Reason: giipApi=session-based(AK), giipApiSk2=SK-based with better JSON parsing
+
+# Build API URL with Function Code if available
 API_URL="${apiaddrv2}"
+if [ -n "$apiaddrcode" ]; then
+    API_URL="${API_URL}?code=${apiaddrcode}"
+fi
 
 # Extract hostname from JSON for logging
 HOSTNAME=$(echo "$DISCOVERY_JSON" | grep -o '"hostname":\s*"[^"]*"' | sed 's/"hostname":\s*"//' | sed 's/"$//')
