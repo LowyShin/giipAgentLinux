@@ -12,7 +12,25 @@ GIIP Agent is an intelligent monitoring and management agent that:
 
 For Windows version: https://github.com/LowyShin/giipAgentWin
 
-> **🔒 SECURITY WARNING**
+> **� CRITICAL: API Endpoint Configuration**
+> 
+> **giip-auto-discover.sh MUST use apiaddrv2 (giipApiSk2)**
+> 
+> ```bash
+> # ✅ CORRECT
+> API_URL="${apiaddrv2}"  # giipApiSk2 - SK authentication
+> 
+> # ❌ WRONG
+> API_URL="${Endpoint}"   # giipApi - Session authentication (Web UI only)
+> ```
+> 
+> **Why?**
+> - `Endpoint` (giipApi) = Session-based, 2hr TTL, requires web login
+> - `apiaddrv2` (giipApiSk2) = SK-based, permanent, for server agents
+> 
+> See [API_ENDPOINTS_COMPARISON.md](../giipfaw/docs/API_ENDPOINTS_COMPARISON.md) for details.
+
+> **�🔒 SECURITY WARNING**
 > 
 > **NEVER commit `giipAgent.cnf` with real credentials!**
 > 

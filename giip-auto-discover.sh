@@ -46,11 +46,12 @@ DISCOVERY_JSON=$(echo "$DISCOVERY_JSON" | sed "s/}$/, \"agent_version\": \"$AGEN
 TEMP_JSON="/tmp/giip-discovery-$$.json"
 echo "$DISCOVERY_JSON" > "$TEMP_JSON"
 
-# Call API (Azure Function with SK authentication - Production)
-# Note: API endpoint configured in giipAgent.cnf
-API_URL="${Endpoint}"
+# Call API v2 (giipApiSk2 - SK authentication with advanced JSON handling)
+# IMPORTANT: Use apiaddrv2 (giipApiSk2) NOT Endpoint (giipApi)
+# Reason: giipApi=session-based(AK), giipApiSk2=SK-based with better JSON parsing
+API_URL="${apiaddrv2}"
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sending data to API..." >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sending data to API v2 (giipApiSk2)..." >> "$LOG_FILE"
 
 # Use form-urlencoded format with SK authentication
 RESPONSE=$(curl -s -X POST "$API_URL" \
