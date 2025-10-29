@@ -6,9 +6,9 @@
 #   GitHub에서 변경사항을 자동으로 Pull하는 읽기 전용 스크립트
 #   공개 저장소용 - 로컬 변경사항은 Push하지 않음 (보안)
 #
-# Version: 1.0.0 (Pull-Only)
+# Version: 1.1.0 (Pull-Only + Auto-Discovery Integration)
 # Author: GIIP Team
-# Last Updated: 2025-10-29
+# Last Updated: 2025-10-30
 #
 # Usage:
 #   bash git-auto-sync.sh
