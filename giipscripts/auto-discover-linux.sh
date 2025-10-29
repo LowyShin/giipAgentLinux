@@ -161,14 +161,47 @@ elif command -v service &> /dev/null; then
 fi
 
 # ========================================
+# Disk Information
+# ========================================
+disk_total_gb=$(df -BG / | tail -1 | awk '{print $2}' | sed 's/G//')
+
+# ========================================
+# IP Addresses (Global/Local)
+# ========================================
+ipv4_global=""
+ipv4_local=""
+
+# Try to get first non-loopback IPv4
+while IFS= read -r ip; do
+    if [[ $ip =~ ^10\. ]] || [[ $ip =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. ]] || [[ $ip =~ ^192\.168\. ]]; then
+        [ -z "$ipv4_local" ] && ipv4_local="$ip"
+    else
+        [ -z "$ipv4_global" ] && ipv4_global="$ip"
+    fi
+done < <(ip -4 addr show | grep inet | grep -v "127.0.0.1" | awk '{print $2}' | cut -d/ -f1)
+
+# Fallback: if no global IP, use local as global
+[ -z "$ipv4_global" ] && ipv4_global="$ipv4_local"
+
+# ========================================
+# Agent Version
+# ========================================
+agent_version="1.80"
+
+# ========================================
 # Generate Final JSON
 # ========================================
 cat <<EOF
 {
   "hostname": "$hostname",
   "os": "$os_name $os_version",
-  "cpu": "$cpu_cores cores - $cpu_model",
+  "cpu": "$cpu_model",
+  "cpu_cores": $cpu_cores,
   "memory_gb": $memory_gb,
+  "disk_gb": $disk_total_gb,
+  "agent_version": "$agent_version",
+  "ipv4_global": "$ipv4_global",
+  "ipv4_local": "$ipv4_local",
   "network": [$network_json],
   "software": [$software_json],
   "services": [$services_json]
