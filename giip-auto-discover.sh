@@ -33,15 +33,20 @@ if [ ! -f "$DISCOVERY_SCRIPT" ]; then
     exit 1
 fi
 
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] ========================================" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting auto-discovery..." >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Config: $CONFIG_FILE" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Discovery script: $DISCOVERY_SCRIPT" >> "$LOG_FILE"
+
 # Make discovery script executable
 chmod +x "$DISCOVERY_SCRIPT"
 
 # Run discovery and capture JSON
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting auto-discovery..." >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Collecting system information..." >> "$LOG_FILE"
 DISCOVERY_JSON=$("$DISCOVERY_SCRIPT" 2>&1)
 
 if [ $? -ne 0 ]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Discovery script failed" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✗ ERROR: Discovery script failed" >> "$LOG_FILE"
     echo "$DISCOVERY_JSON" >> "$LOG_FILE"
     exit 1
 fi
@@ -69,7 +74,29 @@ fi
 
 # Extract hostname from JSON for logging
 HOSTNAME=$(echo "$DISCOVERY_JSON" | grep -o '"hostname":\s*"[^"]*"' | sed 's/"hostname":\s*"//' | sed 's/"$//')
+
+# Extract network count for logging
+NETWORK_COUNT=$(echo "$DISCOVERY_JSON" | grep -o '"network":\s*\[' | wc -l)
+if [ "$NETWORK_COUNT" -gt 0 ]; then
+    NETWORK_ITEMS=$(echo "$DISCOVERY_JSON" | grep -oP '"name"\s*:\s*"\K[^"]+' | wc -l)
+else
+    NETWORK_ITEMS=0
+fi
+
+# Extract software and service counts
+SOFTWARE_COUNT=$(echo "$DISCOVERY_JSON" | grep -oP '"software"\s*:\s*\[\s*\{' | wc -l)
+if [ "$SOFTWARE_COUNT" -eq 0 ]; then
+    SOFTWARE_COUNT=$(echo "$DISCOVERY_JSON" | grep -c '"software"' | grep -v '^\s*\[\s*\]')
+fi
+
+SERVICE_COUNT=$(echo "$DISCOVERY_JSON" | grep -oP '"services"\s*:\s*\[\s*\{' | wc -l)
+if [ "$SERVICE_COUNT" -eq 0 ]; then
+    SERVICE_COUNT=$(echo "$DISCOVERY_JSON" | grep -c '"services"' | grep -v '^\s*\[\s*\]')
+fi
+
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sending data to API v2 (giipApiSk2) for host: $HOSTNAME..." >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Data summary: Network interfaces=$NETWORK_ITEMS, Software=$SOFTWARE_COUNT, Services=$SERVICE_COUNT" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Full JSON saved to: $TEMP_JSON" >> "$LOG_FILE"
 
 # giipApiSk2 pattern (same as kvsput.sh):
 # - text: command name + parameter names (NO sk, NO values)
@@ -84,7 +111,19 @@ RESPONSE=$(curl -s -X POST "$API_URL" \
 HTTP_CODE=$?
 
 if [ $HTTP_CODE -eq 0 ]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] SUCCESS: $RESPONSE" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] API Response: $RESPONSE" >> "$LOG_FILE"
+    
+    # Check if response indicates success
+    RSTVAL=$(echo "$RESPONSE" | grep -oP '"RstVal"\s*:\s*\K\d+')
+    ACTION=$(echo "$RESPONSE" | grep -oP '"action"\s*:\s*"\K[^"]+')
+    
+    if [ "$RSTVAL" = "200" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✓ SUCCESS: Action=$ACTION, Network data sent to DB" >> "$LOG_FILE"
+    elif [ "$RSTVAL" = "401" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✗ ERROR: Authentication failed - Invalid SK" >> "$LOG_FILE"
+    else
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ WARNING: Unexpected response code: $RSTVAL" >> "$LOG_FILE"
+    fi
     
     # Extract lssn from response if this is first registration
     if [ "$lssn" = "0" ]; then
@@ -97,11 +136,19 @@ if [ $HTTP_CODE -eq 0 ]; then
         fi
     fi
 else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: API call failed with code $HTTP_CODE" >> "$LOG_FILE"
-    echo "$RESPONSE" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✗ ERROR: API call failed with HTTP code $HTTP_CODE" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Response: $RESPONSE" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Check network connectivity and API endpoint" >> "$LOG_FILE"
 fi
 
-# Cleanup
-rm -f "$TEMP_JSON"
+# Cleanup temp file (keep for debugging if error occurred)
+if [ "$RSTVAL" = "200" ]; then
+    rm -f "$TEMP_JSON"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Temp JSON file cleaned up" >> "$LOG_FILE"
+else
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ Temp JSON file kept for debugging: $TEMP_JSON" >> "$LOG_FILE"
+fi
 
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] ========================================" >> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-discovery completed" >> "$LOG_FILE"
+echo "" >> "$LOG_FILE"
