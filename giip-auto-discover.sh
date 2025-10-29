@@ -58,9 +58,18 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Collected service-related packages: $SOFTWA
 # Add agent version to JSON (before last })
 DISCOVERY_JSON=$(echo "$DISCOVERY_JSON" | sed "s/}$/, \"agent_version\": \"$AGENT_VERSION\" }/")
 
-# Save to temp file for debugging
+# Save to temp file for debugging (with PID)
 TEMP_JSON="/tmp/giip-discovery-$$.json"
 echo "$DISCOVERY_JSON" > "$TEMP_JSON"
+
+# Also save to fixed location for easy access
+LATEST_JSON="/var/log/giip-discovery-latest.json"
+echo "$DISCOVERY_JSON" > "$LATEST_JSON"
+chmod 644 "$LATEST_JSON"
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] JSON saved to:" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Latest: $LATEST_JSON" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Temp: $TEMP_JSON" >> "$LOG_FILE"
 
 # Call API v2 (giipApiSk2 - SK authentication with advanced JSON handling)
 # IMPORTANT: Use apiaddrv2 (giipApiSk2) NOT Endpoint (giipApi)
@@ -96,7 +105,19 @@ fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sending data to API v2 (giipApiSk2) for host: $HOSTNAME..." >> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Data summary: Network interfaces=$NETWORK_ITEMS, Software=$SOFTWARE_COUNT, Services=$SERVICE_COUNT" >> "$LOG_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Full JSON saved to: $TEMP_JSON" >> "$LOG_FILE"
+
+# Log network details for debugging
+if [ "$NETWORK_ITEMS" -gt 0 ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Network interfaces found:" >> "$LOG_FILE"
+    echo "$DISCOVERY_JSON" | grep -oP '"network"\s*:\s*\[\K[^\]]+' | grep -oP '\{[^}]+\}' | while read -r iface; do
+        iface_name=$(echo "$iface" | grep -oP '"name"\s*:\s*"\K[^"]+')
+        iface_ipv4=$(echo "$iface" | grep -oP '"ipv4"\s*:\s*"\K[^"]+')
+        iface_mac=$(echo "$iface" | grep -oP '"mac"\s*:\s*"\K[^"]+')
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')]   - $iface_name: IPv4=$iface_ipv4, MAC=$iface_mac" >> "$LOG_FILE"
+    done
+else
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ WARNING: No network interfaces collected!" >> "$LOG_FILE"
+fi
 
 # giipApiSk2 pattern (same as kvsput.sh):
 # - text: command name + parameter names (NO sk, NO values)
