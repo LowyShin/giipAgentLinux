@@ -297,7 +297,33 @@ crontab -l | grep giip
 * * * * * cd /opt/giipAgentLinux; bash --login -c 'sh /opt/giipAgentLinux/giipAgent.sh'
 59 23 * * * cd /opt/giipAgentLinux; bash --login -c 'sh /opt/giipAgentLinux/giiprecycle.sh'
 */5 * * * * cd /opt/giipAgentLinux; bash --login -c 'sh /opt/giipAgentLinux/giip-auto-discover.sh'
+*/5 * * * * cd /opt/giipAgentLinux; bash --login -c 'sh /opt/giipAgentLinux/git-auto-sync.sh' >> /var/log/giip/git_auto_sync_cron.log 2>&1
 ```
+
+### Check Git Auto-Sync
+```bash
+# Check git-auto-sync is registered
+crontab -l | grep git-auto-sync
+
+# Test manual execution
+cd /opt/giipAgentLinux
+bash git-auto-sync.sh
+
+# Check log
+tail -f /var/log/giip/git_auto_sync_$(date +%Y%m%d).log
+```
+
+**What git-auto-sync.sh does:**
+1. Pulls latest agent code from GitHub (Pull-Only, no push)
+2. If changes pulled → automatically runs `giip-auto-discover.sh`
+3. Auto-discovery collects server info and sends to Azure Function
+4. Network data saved to `tLSvrNIC` via `pApiAgentAutoRegisterbyAK`
+
+**Benefits:**
+- ✅ Agents automatically update to latest version
+- ✅ Server inventory automatically updated after code changes
+- ✅ No manual intervention required
+- ✅ Pull-Only mode prevents accidental credential exposure
 
 ### Check Logs
 ```bash
