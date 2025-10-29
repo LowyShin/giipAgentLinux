@@ -152,6 +152,8 @@ REMOTE_HASH=$(git rev-parse "origin/$CURRENT_BRANCH")
 log "Local commit:  $LOCAL_HASH"
 log "Remote commit: $REMOTE_HASH"
 
+PULLED=false  # Initialize PULLED flag
+
 if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
     log "⚠ Remote changes detected, pulling..."
     
@@ -165,6 +167,8 @@ if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
         # Show what changed
         log "Changes pulled:"
         git log --oneline "$LOCAL_HASH..$NEW_HASH" 2>&1 | tee -a "$LOG_FILE"
+        
+        PULLED=true  # Set flag for auto-discovery trigger
     else
         log_error "Pull failed"
         
@@ -177,6 +181,7 @@ if [ "$LOCAL_HASH" != "$REMOTE_HASH" ]; then
     fi
 else
     log "✓ Already up to date with remote"
+    PULLED=false  # No changes to pull
 fi
 
 # ============================================================
