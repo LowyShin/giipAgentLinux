@@ -200,6 +200,35 @@ if [ "$STASHED" = true ]; then
 fi
 
 # ============================================================
+# Auto-Discovery 실행 (Pull 완료 후)
+# ============================================================
+if [ "$PULLED" = true ]; then
+    log ""
+    log "=========================================="
+    log "Running Auto-Discovery after Git pull"
+    log "=========================================="
+    
+    DISCOVER_SCRIPT="$SCRIPT_DIR/giip-auto-discover.sh"
+    
+    if [ -f "$DISCOVER_SCRIPT" ]; then
+        log "Executing: $DISCOVER_SCRIPT"
+        
+        if bash "$DISCOVER_SCRIPT" >> "$LOG_FILE" 2>&1; then
+            log "✓ Auto-Discovery completed successfully"
+        else
+            log_error "Auto-Discovery failed with exit code $?"
+            log "  Check log: $LOG_FILE"
+        fi
+    else
+        log_error "Auto-Discovery script not found: $DISCOVER_SCRIPT"
+        log "  Skipping Auto-Discovery execution"
+    fi
+else
+    log ""
+    log "No changes pulled - Skipping Auto-Discovery"
+fi
+
+# ============================================================
 # 완료
 # ============================================================
 log "=========================================="
