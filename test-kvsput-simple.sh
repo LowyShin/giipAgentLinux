@@ -1,88 +1,96 @@
 #!/bin/bash
 #
-# Simple KVSPut Test Script
-# Tests KVSPut API with minimal test data
-#
-# Usage:
-#   bash test-kvsput-simple.sh
-#
-# Requirements:
-#   - giipAgent.cnf with apiaddrv2, apiaddrcode, sk, lssn configured
-#   - jq command installed
-#   - curl command installed
+# Simple KVSPut test script (based on kvsput.sh)
 #
 
 set -e
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "=========================================="
 echo "KVSPut Simple Test"
 echo "=========================================="
 echo ""
 
-# Config file location (MUST use parent directory!)
-# giipAgentLinux/giipAgent.cnf is DUMMY template only
-# Real config: /home/giip/giipAgent.cnf (one level up from repo)
-CONFIG_FILE="$SCRIPT_DIR/../giipAgent.cnf"
+# Detect config file location
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "❌ ERROR: giipAgent.cnf not found at: $CONFIG_FILE"
-    echo ""
-    echo "Expected location: $SCRIPT_DIR/../giipAgent.cnf"
-    echo "This should resolve to: /home/giip/giipAgent.cnf"
-    echo ""
-    echo "⚠️ IMPORTANT: Do NOT use giipAgentLinux/giipAgent.cnf (it's a dummy template)"
-    echo ""
-    echo "Please create giipAgent.cnf with:"
-    echo "  apiaddrv2=\"https://giipfaw.azurewebsites.net/api/giipApiSk2\""
-    echo "  apiaddrcode=\"<your_function_code>\""
-    echo "  sk=\"<your_secret_key>\""
-    echo "  lssn=\"<your_server_id>\""
-    exit 1
+# Only use the real config file (not the dummy template)
+if [ -f "$SCRIPT_DIR/../giipAgent.cnf" ]; then
+  CONFIG_FILE="$SCRIPT_DIR/../giipAgent.cnf"
+elif [ -f "/home/giip/giipAgent.cnf" ]; then
+  CONFIG_FILE="/home/giip/giipAgent.cnf"
+else
+  echo "❌ ERROR: giipAgent.cnf not found"
+  echo "  Checked:"
+  echo "    - $SCRIPT_DIR/../giipAgent.cnf"
+  echo "    - /home/giip/giipAgent.cnf"
+  exit 1
 fi
 
 echo "✓ Config: $CONFIG_FILE"
 echo ""
 
-# Read config (⚠️ NEVER hardcode these values in public repo!)
-# Use development endpoint for testing
-ENDPOINT=$(grep "^apiaddrv2dev=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'")
-CODE=$(grep "^apiaddrcodedev=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'")
-TOKEN=$(grep "^sk=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'")
-KKEY=$(grep "^lssn=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'")
+# Read config (same method as kvsput.sh)
+declare -A KVS_CONFIG
+while IFS= read -r line; do
+  [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+  if [[ "$line" =~ ^([A-Za-z0-9_]+)[[:space:]]*=[[:space:]]*(.*)$ ]]; then
+    key="${BASH_REMATCH[1]}"
+    val="${BASH_REMATCH[2]}"
+    # trim quotes
+    case "$val" in
+      '"'*) val="${val#\"}" ; val="${val%\"}" ;;
+      "'"*) val="${val#\'}" ; val="${val%\'}" ;;
+    esac
+    if [[ ${#val} -ge 2 ]]; then
+      first=${val:0:1}
+      last=${val: -1}
+      if [[ ( "$first" == '"' && "$last" == '"' ) || ( "$first" == "'" && "$last" == "'" ) ]]; then
+        val=${val:1:-1}
+      fi
+    fi
+    KVS_CONFIG[$key]="$val"
+  fi
+done < "$CONFIG_FILE"
 
-# Validate config
-if [ -z "$ENDPOINT" ]; then
-    echo "❌ ERROR: apiaddrv2dev not found in $CONFIG_FILE"
-    exit 1
+# Use development endpoint (apiaddrv2dev)
+if [[ -n "${KVS_CONFIG[apiaddrv2dev]}" ]]; then
+  ENDPOINT="${KVS_CONFIG[apiaddrv2dev]}"
+else
+  echo "❌ ERROR: apiaddrv2dev not found in config"
+  exit 1
 fi
 
-if [ -z "$TOKEN" ]; then
-    echo "❌ ERROR: sk not found in $CONFIG_FILE"
-    exit 1
+# Add function code (apiaddrcodedev)
+if [[ -n "${KVS_CONFIG[apiaddrcodedev]}" ]]; then
+  ENDPOINT+="?code=${KVS_CONFIG[apiaddrcodedev]}"
+else
+  echo "❌ ERROR: apiaddrcodedev not found in config"
+  exit 1
 fi
 
-if [ -z "$KKEY" ]; then
-    echo "❌ ERROR: lssn not found in $CONFIG_FILE"
-    exit 1
+# Get token (sk)
+if [[ -n "${KVS_CONFIG[sk]}" ]]; then
+  USER_TOKEN="${KVS_CONFIG[sk]}"
+else
+  echo "❌ ERROR: sk not found in config"
+  exit 1
+fi
+
+# Get kKey (lssn)
+if [[ -n "${KVS_CONFIG[lssn]}" ]]; then
+  KKEY="${KVS_CONFIG[lssn]}"
+else
+  echo "❌ ERROR: lssn not found in config"
+  exit 1
 fi
 
 # Check required commands
-if ! command -v jq >/dev/null 2>&1; then
-    echo "❌ ERROR: jq command not found. Please install jq."
-    exit 1
-fi
-
-if ! command -v curl >/dev/null 2>&1; then
-    echo "❌ ERROR: curl command not found. Please install curl."
-    exit 1
-fi
+command -v jq >/dev/null 2>&1 || { echo "❌ ERROR: jq not found" >&2; exit 4; }
+command -v curl >/dev/null 2>&1 || { echo "❌ ERROR: curl not found" >&2; exit 4; }
 
 echo "Configuration loaded:"
-echo "  Endpoint: $ENDPOINT"
-echo "  Code: ${CODE:0:20}..."
-echo "  Token: ${TOKEN:0:10}... (from sk in config)"
+echo "  Endpoint: $ENDPOINT" | sed "s/?code=.*/?code=${KVS_CONFIG[apiaddrcodedev]:0:20}.../"
+echo "  Token: ${USER_TOKEN:0:10}... (from sk in config)"
 echo "  KKey: $KKEY (from lssn in config)"
 echo ""
 
@@ -107,126 +115,74 @@ EOF
 echo "✓ Test JSON: $TEST_JSON"
 echo ""
 
-# Compact JSON
-JSON_COMPACT=$(jq -c . "$TEST_JSON")
+# === EXACTLY THE SAME AS kvsput.sh from here ===
 
-# Build jsondata (use -c for compact output, no newlines/spaces)
-JSON_PAYLOAD=$(jq -nc \
+# Compact the JSON file (this will be kValue in jsondata)
+JSON_FILE_COMPACT=$(jq -c . "$TEST_JSON")
+
+# Build jsondata with proper structure: {kType, kKey, kFactor, kValue}
+JSON_PAYLOAD=$(jq -n \
   --arg kType "lssn" \
   --arg kKey "$KKEY" \
   --arg kFactor "simpletest" \
-  --argjson kValue "$JSON_COMPACT" \
+  --argjson kValue "$JSON_FILE_COMPACT" \
   '{kType: $kType, kKey: $kKey, kFactor: $kFactor, kValue: $kValue}')
 
-# Build POST data
+# KVSP text: procedure name + parameter NAMES only (as required by giipapi)
 KVSP_TEXT="KVSPut kType kKey kFactor kValue"
+
+# Build form parameters: text, token, jsondata
 POST_DATA="text=$(printf "%s" "$KVSP_TEXT" | jq -sRr @uri)"
-POST_DATA+="&token=$(printf "%s" "$TOKEN" | jq -sRr @uri)"
+POST_DATA+="&token=$(printf "%s" "$USER_TOKEN" | jq -sRr @uri)"
 POST_DATA+="&jsondata=$(printf "%s" "$JSON_PAYLOAD" | jq -sRr @uri)"
 
-# Save to temp file (use printf to avoid adding newline)
-TMP_POST="/tmp/kvsput-post-$$.txt"
-printf '%s' "$POST_DATA" > "$TMP_POST"
-
+# Diagnostic output
 echo "Sending request..."
-echo "  text: $KVSP_TEXT"
-echo "  token: ${TOKEN:0:10}..."
-echo "  URL: ${ENDPOINT}?code=${CODE:0:20}..."
+echo "  KVSP text: $KVSP_TEXT"
+echo "  Token: ${USER_TOKEN:0:10}..." 
 echo ""
 
-# Send request with verbose output saved
-CURL_DEBUG="/tmp/kvsput-curl-debug-$$.txt"
-RESPONSE=$(curl -v -X POST "${ENDPOINT}?code=${CODE}" \
-  -H 'Content-Type: application/x-www-form-urlencoded' \
-  -H 'Expect:' \
-  --data-binary "@$TMP_POST" 2>"$CURL_DEBUG")
+# Upload: avoid passing very large data on the command line (can hit ARG_MAX).
+# Write the urlencoded form body to a temp file and let curl read it via @file.
+TMP_POST=$(mktemp)
+printf '%s' "$POST_DATA" > "$TMP_POST"
+resp=$(curl -s -X POST "$ENDPOINT" -H 'Content-Type: application/x-www-form-urlencoded' -H 'Expect:' --data-binary "@$TMP_POST")
+rc=$?
 
 echo "=========================================="
 echo "Response:"
 echo "=========================================="
 
-# Show curl debug info first
-if [ -f "$CURL_DEBUG" ]; then
-    echo "[DEBUG] Curl output:"
-    cat "$CURL_DEBUG"
-    echo ""
+if [ $rc -ne 0 ]; then
+  echo "❌ curl failed with exit code $rc"
+  echo "$resp"
+  rm -f "$TMP_POST" "$TEST_JSON"
+  exit $rc
 fi
 
-# Save raw response for debugging
-echo "$RESPONSE" > /tmp/kvsput-response-$$.txt
-echo "[DEBUG] Raw response saved to: /tmp/kvsput-response-$$.txt"
-echo "[DEBUG] Response length: ${#RESPONSE} bytes"
+# Show response
+echo "$resp" | jq . 2>/dev/null || echo "$resp"
 echo ""
 
-# Show raw response first
-echo "--- Raw Response ---"
-echo "$RESPONSE"
-echo "--- End Raw Response ---"
-echo ""
-
-# Try to parse as JSON
-if [ -n "$RESPONSE" ] && echo "$RESPONSE" | jq . >/dev/null 2>&1; then
-    echo "--- Parsed JSON ---"
-    echo "$RESPONSE" | jq .
-    
-    # Check debug info
-    if echo "$RESPONSE" | jq -e '.debug' >/dev/null 2>&1; then
-        echo ""
-        echo "Debug Info:"
-        echo "$RESPONSE" | jq '.debug'
-    fi
+# Check response
+if echo "$resp" | jq -e '.RstVal == 200' >/dev/null 2>&1; then
+  echo "✅ Success! (RstVal=200)"
+  RESULT=0
+elif echo "$resp" | jq -e '.RstVal == 411' >/dev/null 2>&1; then
+  echo "❌ 411 Error: Server not found or wrong CGSn"
+  RESULT=1
+elif echo "$resp" | jq -e '.RstVal == 401' >/dev/null 2>&1; then
+  echo "❌ 401 Error: Authentication failed"
+  RESULT=1
+elif echo "$resp" | jq -e '.error' >/dev/null 2>&1; then
+  echo "❌ Error detected in response"
+  RESULT=1
 else
-    echo "⚠ Response is empty or not valid JSON"
+  echo "⚠ Unknown response format"
+  RESULT=1
 fi
 
-echo ""
-
-# Check for errors
-if [ -z "$RESPONSE" ]; then
-    echo "❌ Empty response from server"
-    echo ""
-    echo "Possible causes:"
-    echo "  1. Network issue"
-    echo "  2. Azure Function not responding"
-    echo "  3. Wrong endpoint URL"
-    RESULT=1
-elif echo "$RESPONSE" | grep -qi '"error"'; then
-    echo "❌ ERROR detected in response"
-    RESULT=1
-elif echo "$RESPONSE" | grep -qi 'RstVal.*411\|"RstVal":411'; then
-    echo "❌ 411 Error: Server not found in tLSvr or wrong CGSn"
-    echo ""
-    echo "Possible causes:"
-    echo "  1. SK token invalid or not in tSecretKey"
-    echo "  2. Server (lssn=$KKEY) not in tLSvr table"
-    echo "  3. Server CGSn doesn't match SK's CGSn"
-    RESULT=1
-elif echo "$RESPONSE" | grep -qi 'RstVal.*401\|"RstVal":401'; then
-    echo "❌ 401 Error: Authentication failed"
-    RESULT=1
-elif echo "$RESPONSE" | grep -qi 'RstVal.*200\|"RstVal":200'; then
-    echo "✅ Success! (RstVal=200)"
-    RESULT=0
-else
-    echo "⚠ Unknown response format (check raw response above)"
-    RESULT=1
-fi
-
-# Cleanup (but keep POST data for debugging if error)
-if [ $RESULT -eq 0 ]; then
-    rm -f "$TEST_JSON" "$TMP_POST" "$CURL_DEBUG"
-    echo ""
-    echo "Cleaned up: $TEST_JSON, $TMP_POST, $CURL_DEBUG"
-    echo "Response saved: /tmp/kvsput-response-$$.txt"
-else
-    rm -f "$TEST_JSON"
-    echo ""
-    echo "Debug files kept for troubleshooting:"
-    echo "  - Response: /tmp/kvsput-response-$$.txt"
-    echo "  - Curl debug: $CURL_DEBUG"
-    echo "  - POST data: $TMP_POST"
-    echo ""
-    echo "View POST data with: cat $TMP_POST"
-fi
+# Cleanup
+rm -f "$TMP_POST" "$TEST_JSON"
 
 exit $RESULT
