@@ -146,11 +146,8 @@ POST_DATA="text=$(printf "%s" "$KVSP_TEXT" | jq -sRr @uri)"
 POST_DATA+="&token=$(printf "%s" "$USER_TOKEN" | jq -sRr @uri)"
 POST_DATA+="&jsondata=$(printf "%s" "$JSON_PAYLOAD" | jq -sRr @uri)"
 
-# Diagnostic output
-echo "[DIAG] Endpoint: $ENDPOINT"
-echo "[DIAG] KVSP text: $KVSP_TEXT"
-echo "[DIAG] Token: ${USER_TOKEN:0:10}..." 
-echo "[DIAG] jsondata (file) preview: ${JSON_FILE_COMPACT:0:400}"
+# Simplified diagnostic output (no raw JSON data)
+echo "[INFO] Uploading to KVS: kFactor=$KFACTOR, kKey=$(echo "$JSON_PAYLOAD" | jq -r '.kKey')" >&2
 
 # Upload: avoid passing very large data on the command line (can hit ARG_MAX).
 # Write the urlencoded form body to a temp file and let curl read it via @file.
@@ -161,7 +158,19 @@ rc=$?
 rm -f "$TMP_POST"
 if [ $rc -ne 0 ]; then
   echo "[ERROR] curl failed with exit code $rc" >&2
-  echo "[INFO] KVS upload result (partial): $resp" >&2
   exit $rc
 fi
-echo "[INFO] KVS upload result: $resp"
+
+# Check response status (simplified)
+if echo "$resp" | jq -e '.data[0].RstVal == 200' >/dev/null 2>&1; then
+  echo "[SUCCESS] KVS uploaded successfully" >&2
+elif echo "$resp" | jq -e '.data[0].RstVal' >/dev/null 2>&1; then
+  RSTVAL=$(echo "$resp" | jq -r '.data[0].RstVal')
+  RSTMSG=$(echo "$resp" | jq -r '.data[0].RstMsg')
+  echo "[ERROR] KVS upload failed: RstVal=$RSTVAL, Msg=$RSTMSG" >&2
+  exit 1
+else
+  echo "[ERROR] Unexpected response format" >&2
+  echo "$resp" >&2
+  exit 1
+fi

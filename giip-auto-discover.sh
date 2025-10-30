@@ -47,7 +47,9 @@ DISCOVERY_JSON=$("$DISCOVERY_SCRIPT" 2>&1)
 
 if [ $? -ne 0 ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✗ ERROR: Discovery script failed" >> "$LOG_FILE"
-    echo "$DISCOVERY_JSON" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Error details saved to: $TEMP_JSON" >> "$LOG_FILE"
+    # Save error output to file instead of logging
+    echo "$DISCOVERY_JSON" > "/tmp/giip-discovery-error-$$.txt"
     exit 1
 fi
 
@@ -159,29 +161,24 @@ fi
 KVSPUT_SCRIPT="${SCRIPT_DIR}/giipscripts/kvsput.sh"
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Checking KVS upload conditions:" >> "$LOG_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] - KVSPUT_SCRIPT: $KVSPUT_SCRIPT (exists: $([ -f "$KVSPUT_SCRIPT" ] && echo 'YES' || echo 'NO'))" >> "$LOG_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] - DISCOVERY_FILE: $DISCOVERY_FILE (exists: $([ -f "$DISCOVERY_FILE" ] && echo 'YES' || echo 'NO'))" >> "$LOG_FILE"
+if [ ! -f "$KVSPUT_SCRIPT" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] - KVSPUT_SCRIPT not found: $KVSPUT_SCRIPT" >> "$LOG_FILE"
+fi
+if [ ! -f "$DISCOVERY_FILE" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] - DISCOVERY_FILE not found: $DISCOVERY_FILE" >> "$LOG_FILE"
+fi
 
 if [ -f "$KVSPUT_SCRIPT" ] && [ -f "$DISCOVERY_FILE" ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading discovery data to KVS (kfactor: autodiscover)..." >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Config file: $CONFIG_FILE" >> "$LOG_FILE"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Discovery file: $DISCOVERY_FILE" >> "$LOG_FILE"
     
-    # Pass CONFIG_FILE to kvsput.sh
-    if CONFIG_FILE="$CONFIG_FILE" bash "$KVSPUT_SCRIPT" "$DISCOVERY_FILE" autodiscover >> "$LOG_FILE" 2>&1; then
+    # Pass CONFIG_FILE to kvsput.sh (redirect stderr to log, not full response)
+    if CONFIG_FILE="$CONFIG_FILE" bash "$KVSPUT_SCRIPT" "$DISCOVERY_FILE" autodiscover 2>> "$LOG_FILE"; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✓ KVS upload successful" >> "$LOG_FILE"
     else
         KVS_EXIT_CODE=$?
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ KVS upload failed (exit code: $KVS_EXIT_CODE, non-critical)" >> "$LOG_FILE"
     fi
 else
-    if [ ! -f "$KVSPUT_SCRIPT" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ kvsput.sh not found: $KVSPUT_SCRIPT" >> "$LOG_FILE"
-    fi
-    if [ ! -f "$DISCOVERY_FILE" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ Discovery file not found: $DISCOVERY_FILE" >> "$LOG_FILE"
-    fi
-fi
 
 # giipApiSk2 pattern (same as kvsput.sh):
 # - text: command name + parameter names (NO sk, NO values)
