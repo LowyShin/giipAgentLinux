@@ -21,18 +21,18 @@ echo "KVSPut Simple Test"
 echo "=========================================="
 echo ""
 
-# Detect config file (DO NOT commit giipAgent.cnf to public repo!)
-CONFIG_FILE="$SCRIPT_DIR/giipAgent.cnf"
-if [ ! -f "$CONFIG_FILE" ]; then
-    CONFIG_FILE="$SCRIPT_DIR/../giipAgent.cnf"
-fi
+# Config file location (MUST use parent directory!)
+# giipAgentLinux/giipAgent.cnf is DUMMY template only
+# Real config: /home/giip/giipAgent.cnf (one level up from repo)
+CONFIG_FILE="$SCRIPT_DIR/../giipAgent.cnf"
 
 if [ ! -f "$CONFIG_FILE" ]; then
-    echo "❌ ERROR: giipAgent.cnf not found"
+    echo "❌ ERROR: giipAgent.cnf not found at: $CONFIG_FILE"
     echo ""
-    echo "Searched locations:"
-    echo "  - $SCRIPT_DIR/giipAgent.cnf"
-    echo "  - $SCRIPT_DIR/../giipAgent.cnf"
+    echo "Expected location: $SCRIPT_DIR/../giipAgent.cnf"
+    echo "This should resolve to: /home/giip/giipAgent.cnf"
+    echo ""
+    echo "⚠️ IMPORTANT: Do NOT use giipAgentLinux/giipAgent.cnf (it's a dummy template)"
     echo ""
     echo "Please create giipAgent.cnf with:"
     echo "  apiaddrv2=\"https://giipfaw.azurewebsites.net/api/giipApiSk2\""
