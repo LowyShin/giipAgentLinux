@@ -14,7 +14,22 @@
 
 set -e
 
-CFG_PATH="../../giipAgent.cnf"
+# Detect config file location (support multiple locations)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/../giipAgent.cnf" ]; then
+  CFG_PATH="$SCRIPT_DIR/../giipAgent.cnf"
+elif [ -f "$SCRIPT_DIR/../../giipAgent.cnf" ]; then
+  CFG_PATH="$SCRIPT_DIR/../../giipAgent.cnf"
+elif [ -f "/opt/giipAgentLinux/giipAgent.cnf" ]; then
+  CFG_PATH="/opt/giipAgentLinux/giipAgent.cnf"
+else
+  echo "[ERROR] giipAgent.cnf not found in expected locations:" >&2
+  echo "  - $SCRIPT_DIR/../giipAgent.cnf" >&2
+  echo "  - $SCRIPT_DIR/../../giipAgent.cnf" >&2
+  echo "  - /opt/giipAgentLinux/giipAgent.cnf" >&2
+  exit 2
+fi
+
 JSON_FILE="$1"
 KFACTOR="$2"
 
