@@ -79,21 +79,21 @@ while IFS= read -r line; do
 done < "$CFG_PATH"
 
 # Required config (use apiaddrv2 for giipApiSk2 endpoint)
-# Priority: Endpoint > apiaddrv2
-if [[ -n "${KVS_CONFIG[Endpoint]}" ]]; then
-  ENDPOINT="${KVS_CONFIG[Endpoint]}"
-elif [[ -n "${KVS_CONFIG[apiaddrv2]}" ]]; then
+# Priority: apiaddrv2 > Endpoint (prefer v2 API for KVS)
+if [[ -n "${KVS_CONFIG[apiaddrv2]}" ]]; then
   ENDPOINT="${KVS_CONFIG[apiaddrv2]}"
+elif [[ -n "${KVS_CONFIG[Endpoint]}" ]]; then
+  ENDPOINT="${KVS_CONFIG[Endpoint]}"
 else
-  echo "[ERROR] Missing config: Endpoint or apiaddrv2" >&2
+  echo "[ERROR] Missing config: apiaddrv2 or Endpoint" >&2
   exit 3
 fi
 
-# Add function code if available (FunctionCode > apiaddrcode)
-if [[ -n "${KVS_CONFIG[FunctionCode]}" ]]; then
-  ENDPOINT+="?code=${KVS_CONFIG[FunctionCode]}"
-elif [[ -n "${KVS_CONFIG[apiaddrcode]}" ]]; then
+# Add function code if available (apiaddrcode > FunctionCode, prefer v2)
+if [[ -n "${KVS_CONFIG[apiaddrcode]}" ]]; then
   ENDPOINT+="?code=${KVS_CONFIG[apiaddrcode]}"
+elif [[ -n "${KVS_CONFIG[FunctionCode]}" ]]; then
+  ENDPOINT+="?code=${KVS_CONFIG[FunctionCode]}"
 fi
 
 # UserToken (sk for SK-based auth)
