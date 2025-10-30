@@ -138,6 +138,7 @@ echo ""
 CURL_DEBUG="/tmp/kvsput-curl-debug-$$.txt"
 RESPONSE=$(curl -v -X POST "${ENDPOINT}?code=${CODE}" \
   -H 'Content-Type: application/x-www-form-urlencoded' \
+  -H 'Expect:' \
   --data-binary "@$TMP_POST" 2>"$CURL_DEBUG")
 
 echo "=========================================="

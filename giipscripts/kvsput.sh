@@ -156,7 +156,7 @@ echo "[DIAG] jsondata (file) preview: ${JSON_FILE_COMPACT:0:400}"
 # Write the urlencoded form body to a temp file and let curl read it via @file.
 TMP_POST=$(mktemp)
 printf '%s' "$POST_DATA" > "$TMP_POST"
-resp=$(curl -s -X POST "$ENDPOINT" -H 'Content-Type: application/x-www-form-urlencoded' --data-binary "@$TMP_POST")
+resp=$(curl -s -X POST "$ENDPOINT" -H 'Content-Type: application/x-www-form-urlencoded' -H 'Expect:' --data-binary "@$TMP_POST")
 rc=$?
 rm -f "$TMP_POST"
 if [ $rc -ne 0 ]; then
