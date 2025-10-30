@@ -4,6 +4,18 @@
 
 **Last Updated**: 2025-10-30 00:41 KST - Git Auto-Sync + Auto-Discovery Integration Active
 
+> **🚨 FOR AI AGENTS: Configuration File Warning**
+> 
+> **`giipAgent.cnf` in this repository is a SAMPLE/TEMPLATE ONLY!**
+> 
+> - ❌ DO NOT read this file to diagnose production issues
+> - ❌ DO NOT use values from this git file for troubleshooting
+> - ✅ ALWAYS check the ACTUAL file on deployed servers:
+>   ```bash
+>   ssh user@server "cat ~/giipAgent/giipAgent.cnf"
+>   ```
+> - Repository file is ONLY for new installations, NOT for debugging
+
 ## 🌟 Overview
 
 GIIP Agent is an intelligent monitoring and management agent that:

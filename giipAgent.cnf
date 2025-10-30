@@ -1,3 +1,18 @@
+################################################################################
+# ⚠️⚠️⚠️ WARNING: THIS IS A SAMPLE/TEMPLATE FILE ⚠️⚠️⚠️
+#
+# DO NOT use this file to diagnose production issues!
+# DO NOT read values from this file in git repository!
+# 
+# This file in git repository is ONLY A TEMPLATE for new installations.
+# The ACTUAL configuration file is deployed on each server at:
+#   Linux: ~/giipAgent/giipAgent.cnf
+#   
+# To check REAL production values, SSH to the actual server:
+#   ssh user@server "cat ~/giipAgent/giipAgent.cnf"
+#
+################################################################################
+
 # You can find secret key and lssn from giip user portal (web UI)
 sk="<your secret key>"
 
