@@ -212,19 +212,21 @@ else
     RESULT=1
 fi
 
-# Cleanup
-rm -f "$TEST_JSON" "$TMP_POST"
-
-echo ""
+# Cleanup (but keep POST data for debugging if error)
 if [ $RESULT -eq 0 ]; then
-    echo "Cleaned up: $TEST_JSON, $TMP_POST"
+    rm -f "$TEST_JSON" "$TMP_POST" "$CURL_DEBUG"
+    echo ""
+    echo "Cleaned up: $TEST_JSON, $TMP_POST, $CURL_DEBUG"
     echo "Response saved: /tmp/kvsput-response-$$.txt"
 else
+    rm -f "$TEST_JSON"
+    echo ""
     echo "Debug files kept for troubleshooting:"
     echo "  - Response: /tmp/kvsput-response-$$.txt"
     echo "  - Curl debug: $CURL_DEBUG"
-    echo "  - POST data: $TMP_POST (deleted)"
-    echo "  - Test JSON: $TEST_JSON (deleted)"
+    echo "  - POST data: $TMP_POST"
+    echo ""
+    echo "View POST data with: cat $TMP_POST"
 fi
 
 exit $RESULT
