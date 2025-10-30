@@ -43,38 +43,115 @@ memory_gb=$((memory_total_kb / 1024 / 1024))
 hostname=$(hostname)
 
 # ========================================
-# 5. Network Interfaces
+# 5. Network Interfaces (OS-aware collection)
 # ========================================
 network_json=""
+
+# Detect OS distribution for network collection strategy
+if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    OS_ID="$ID"
+else
+    OS_ID="unknown"
+fi
+
+# Modern Linux (Ubuntu 16.04+, CentOS 7+, Debian 8+)
 if command -v ip &> /dev/null; then
-    while IFS= read -r line; do
-        iface=$(echo "$line" | awk '{print $2}' | tr -d ':')
-        ipv4=$(ip -4 addr show "$iface" 2>/dev/null | grep inet | awk '{print $2}' | cut -d/ -f1 | head -1)
-        ipv6=$(ip -6 addr show "$iface" 2>/dev/null | grep inet6 | grep -v "scope link" | awk '{print $2}' | cut -d/ -f1 | head -1)
-        mac=$(ip link show "$iface" 2>/dev/null | grep link/ether | awk '{print $2}')
+    # Use 'ip' command (iproute2 package)
+    while IFS= read -r iface_name; do
+        # Get IPv4 (space after 'inet' is important!)
+        ipv4=$(ip -4 addr show "$iface_name" 2>/dev/null | grep "inet " | awk '{print $2}' | cut -d/ -f1 | head -1)
         
+        # Get IPv6 (global scope only)
+        ipv6=$(ip -6 addr show "$iface_name" 2>/dev/null | grep "inet6" | grep -v "scope link" | awk '{print $2}' | cut -d/ -f1 | head -1)
+        
+        # Get MAC address
+        mac=$(ip link show "$iface_name" 2>/dev/null | grep "link/ether" | awk '{print $2}')
+        
+        # Only add if has IP address
         if [ -n "$ipv4" ] || [ -n "$ipv6" ]; then
             [ -n "$network_json" ] && network_json+=","
-            network_json+="{\"name\":\"$iface\""
+            network_json+="{\"name\":\"$iface_name\""
             [ -n "$ipv4" ] && network_json+=",\"ipv4\":\"$ipv4\""
             [ -n "$ipv6" ] && network_json+=",\"ipv6\":\"$ipv6\""
             [ -n "$mac" ] && network_json+=",\"mac\":\"$mac\""
             network_json+="}"
         fi
-    done < <(ip -o link show | grep -v "lo:" | awk '{print $2}' | tr -d ':')
+    done < <(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | grep -v "^lo$")
+    
+# Legacy Linux (CentOS 6, RHEL 6, older distributions)
+elif command -v ifconfig &> /dev/null; then
+    # Use ifconfig (net-tools package)
+    case "$OS_ID" in
+        centos|rhel|fedora)
+            # RHEL/CentOS ifconfig format: "inet addr:192.168.1.1"
+            while IFS= read -r iface_name; do
+                [ -z "$iface_name" ] && continue
+                
+                iface_info=$(ifconfig "$iface_name" 2>/dev/null)
+                ipv4=$(echo "$iface_info" | grep "inet " | awk '{print $2}' | sed 's/addr://')
+                ipv6=$(echo "$iface_info" | grep "inet6 " | awk '{print $3}' | cut -d/ -f1)
+                mac=$(echo "$iface_info" | grep "ether" | awk '{print $2}')
+                
+                if [ -n "$ipv4" ] || [ -n "$ipv6" ]; then
+                    [ -n "$network_json" ] && network_json+=","
+                    network_json+="{\"name\":\"$iface_name\""
+                    [ -n "$ipv4" ] && network_json+=",\"ipv4\":\"$ipv4\""
+                    [ -n "$ipv6" ] && network_json+=",\"ipv6\":\"$ipv6\""
+                    [ -n "$mac" ] && network_json+=",\"mac\":\"$mac\""
+                    network_json+="}"
+                fi
+            done < <(ifconfig -s 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -v "^lo$")
+            ;;
+        *)
+            # Debian/Ubuntu ifconfig format: "inet 192.168.1.1"
+            while IFS= read -r iface_name; do
+                [ -z "$iface_name" ] && continue
+                
+                iface_info=$(ifconfig "$iface_name" 2>/dev/null)
+                ipv4=$(echo "$iface_info" | grep "inet " | awk '{print $2}')
+                ipv6=$(echo "$iface_info" | grep "inet6 " | awk '{print $2}' | cut -d/ -f1)
+                mac=$(echo "$iface_info" | grep "ether" | awk '{print $2}')
+                
+                if [ -n "$ipv4" ] || [ -n "$ipv6" ]; then
+                    [ -n "$network_json" ] && network_json+=","
+                    network_json+="{\"name\":\"$iface_name\""
+                    [ -n "$ipv4" ] && network_json+=",\"ipv4\":\"$ipv4\""
+                    [ -n "$ipv6" ] && network_json+=",\"ipv6\":\"$ipv6\""
+                    [ -n "$mac" ] && network_json+=",\"mac\":\"$mac\""
+                    network_json+="}"
+                fi
+            done < <(ifconfig -s 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -v "^lo$")
+            ;;
+    esac
+    
+# Ultimate fallback: /sys/class/net (works on all Linux)
 else
-    # Fallback to ifconfig
-    while IFS= read -r iface; do
-        ipv4=$(ifconfig "$iface" 2>/dev/null | grep "inet " | awk '{print $2}' | sed 's/addr://')
-        mac=$(ifconfig "$iface" 2>/dev/null | grep "ether" | awk '{print $2}')
+    for iface_path in /sys/class/net/*; do
+        [ ! -d "$iface_path" ] && continue
         
-        if [ -n "$ipv4" ]; then
+        iface_name=$(basename "$iface_path")
+        [ "$iface_name" = "lo" ] && continue
+        
+        # Get MAC from sysfs
+        if [ -f "$iface_path/address" ]; then
+            mac=$(cat "$iface_path/address" 2>/dev/null)
+        else
+            mac=""
+        fi
+        
+        # Try to get IP from /proc/net/fib_trie (kernel routing table)
+        # This is a last resort and may not always work
+        ipv4=$(grep -A 2 "$iface_name" /proc/net/fib_trie 2>/dev/null | grep "host LOCAL" | awk '{print $2}' | head -1)
+        
+        if [ -n "$ipv4" ] || [ -n "$mac" ]; then
             [ -n "$network_json" ] && network_json+=","
-            network_json+="{\"name\":\"$iface\",\"ipv4\":\"$ipv4\""
+            network_json+="{\"name\":\"$iface_name\""
+            [ -n "$ipv4" ] && network_json+=",\"ipv4\":\"$ipv4\""
             [ -n "$mac" ] && network_json+=",\"mac\":\"$mac\""
             network_json+="}"
         fi
-    done < <(ifconfig -s 2>/dev/null | tail -n +2 | awk '{print $1}' | grep -v "^lo$")
+    done
 fi
 
 # ========================================
