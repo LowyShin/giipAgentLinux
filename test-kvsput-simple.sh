@@ -110,8 +110,8 @@ echo ""
 # Compact JSON
 JSON_COMPACT=$(jq -c . "$TEST_JSON")
 
-# Build jsondata
-JSON_PAYLOAD=$(jq -n \
+# Build jsondata (use -c for compact output, no newlines/spaces)
+JSON_PAYLOAD=$(jq -nc \
   --arg kType "lssn" \
   --arg kKey "$KKEY" \
   --arg kFactor "simpletest" \
