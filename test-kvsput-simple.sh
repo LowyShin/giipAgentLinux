@@ -165,13 +165,13 @@ echo "$resp" | jq . 2>/dev/null || echo "$resp"
 echo ""
 
 # Check response
-if echo "$resp" | jq -e '.RstVal == 200' >/dev/null 2>&1; then
+if echo "$resp" | jq -e '.data[0].RstVal == 200' >/dev/null 2>&1; then
   echo "✅ Success! (RstVal=200)"
   RESULT=0
-elif echo "$resp" | jq -e '.RstVal == 411' >/dev/null 2>&1; then
+elif echo "$resp" | jq -e '.data[0].RstVal == 411' >/dev/null 2>&1; then
   echo "❌ 411 Error: Server not found or wrong CGSn"
   RESULT=1
-elif echo "$resp" | jq -e '.RstVal == 401' >/dev/null 2>&1; then
+elif echo "$resp" | jq -e '.data[0].RstVal == 401' >/dev/null 2>&1; then
   echo "❌ 401 Error: Authentication failed"
   RESULT=1
 elif echo "$resp" | jq -e '.error' >/dev/null 2>&1; then
