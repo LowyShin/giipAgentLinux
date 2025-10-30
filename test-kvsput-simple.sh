@@ -46,14 +46,15 @@ echo "✓ Config: $CONFIG_FILE"
 echo ""
 
 # Read config (⚠️ NEVER hardcode these values in public repo!)
-ENDPOINT=$(grep "^apiaddrv2=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'")
-CODE=$(grep "^apiaddrcode=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'")
+# Use development endpoint for testing
+ENDPOINT=$(grep "^apiaddrv2dev=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'")
+CODE=$(grep "^apiaddrcodedev=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'")
 TOKEN=$(grep "^sk=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'")
 KKEY=$(grep "^lssn=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'")
 
 # Validate config
 if [ -z "$ENDPOINT" ]; then
-    echo "❌ ERROR: apiaddrv2 not found in $CONFIG_FILE"
+    echo "❌ ERROR: apiaddrv2dev not found in $CONFIG_FILE"
     exit 1
 fi
 
