@@ -16,19 +16,33 @@ set -e
 
 # Detect config file location (support multiple locations)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -f "$SCRIPT_DIR/../giipAgent.cnf" ]; then
+
+# Priority 1: Environment variable CONFIG_FILE
+if [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
+  CFG_PATH="$CONFIG_FILE"
+# Priority 2: Auto-detect from script location
+elif [ -f "$SCRIPT_DIR/../giipAgent.cnf" ]; then
   CFG_PATH="$SCRIPT_DIR/../giipAgent.cnf"
 elif [ -f "$SCRIPT_DIR/../../giipAgent.cnf" ]; then
   CFG_PATH="$SCRIPT_DIR/../../giipAgent.cnf"
 elif [ -f "/opt/giipAgentLinux/giipAgent.cnf" ]; then
   CFG_PATH="/opt/giipAgentLinux/giipAgent.cnf"
+elif [ -f "/home/giip/giipAgent.cnf" ]; then
+  CFG_PATH="/home/giip/giipAgent.cnf"
+elif [ -f "/root/giipAgent.cnf" ]; then
+  CFG_PATH="/root/giipAgent.cnf"
 else
   echo "[ERROR] giipAgent.cnf not found in expected locations:" >&2
+  echo "  - \$CONFIG_FILE (env var)" >&2
   echo "  - $SCRIPT_DIR/../giipAgent.cnf" >&2
   echo "  - $SCRIPT_DIR/../../giipAgent.cnf" >&2
   echo "  - /opt/giipAgentLinux/giipAgent.cnf" >&2
+  echo "  - /home/giip/giipAgent.cnf" >&2
+  echo "  - /root/giipAgent.cnf" >&2
   exit 2
 fi
+
+echo "[INFO] Using config: $CFG_PATH" >&2
 
 JSON_FILE="$1"
 KFACTOR="$2"

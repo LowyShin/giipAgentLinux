@@ -64,6 +64,7 @@ echo "$DISCOVERY_JSON" > "$TEMP_JSON"
 
 # Also save to fixed location for easy access
 LATEST_JSON="/var/log/giip-discovery-latest.json"
+DISCOVERY_FILE="$LATEST_JSON"  # Set DISCOVERY_FILE for kvsput.sh
 echo "$DISCOVERY_JSON" > "$LATEST_JSON"
 chmod 644 "$LATEST_JSON"
 
@@ -154,15 +155,22 @@ fi
 KVSPUT_SCRIPT="${SCRIPT_DIR}/giipscripts/kvsput.sh"
 if [ -f "$KVSPUT_SCRIPT" ] && [ -f "$DISCOVERY_FILE" ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading discovery data to KVS (kfactor: autodiscover)..." >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Config file: $CONFIG_FILE" >> "$LOG_FILE"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Discovery file: $DISCOVERY_FILE" >> "$LOG_FILE"
     
-    if bash "$KVSPUT_SCRIPT" "$DISCOVERY_FILE" autodiscover >> "$LOG_FILE" 2>&1; then
+    # Pass CONFIG_FILE to kvsput.sh
+    if CONFIG_FILE="$CONFIG_FILE" bash "$KVSPUT_SCRIPT" "$DISCOVERY_FILE" autodiscover >> "$LOG_FILE" 2>&1; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✓ KVS upload successful" >> "$LOG_FILE"
     else
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ KVS upload failed (non-critical)" >> "$LOG_FILE"
+        KVS_EXIT_CODE=$?
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ KVS upload failed (exit code: $KVS_EXIT_CODE, non-critical)" >> "$LOG_FILE"
     fi
 else
     if [ ! -f "$KVSPUT_SCRIPT" ]; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ kvsput.sh not found: $KVSPUT_SCRIPT" >> "$LOG_FILE"
+    fi
+    if [ ! -f "$DISCOVERY_FILE" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ Discovery file not found: $DISCOVERY_FILE" >> "$LOG_FILE"
     fi
 fi
 
