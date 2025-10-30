@@ -150,6 +150,22 @@ else
     echo "No network interfaces found!" >> "$NETWORK_LOG"
 fi
 
+# Upload network diagnostic data to KVS for debugging
+KVSPUT_SCRIPT="${SCRIPT_DIR}/giipscripts/kvsput.sh"
+if [ -f "$KVSPUT_SCRIPT" ] && [ -f "$DISCOVERY_FILE" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading discovery data to KVS (kfactor: autodiscover)..." >> "$LOG_FILE"
+    
+    if bash "$KVSPUT_SCRIPT" "$DISCOVERY_FILE" autodiscover >> "$LOG_FILE" 2>&1; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✓ KVS upload successful" >> "$LOG_FILE"
+    else
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ KVS upload failed (non-critical)" >> "$LOG_FILE"
+    fi
+else
+    if [ ! -f "$KVSPUT_SCRIPT" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ kvsput.sh not found: $KVSPUT_SCRIPT" >> "$LOG_FILE"
+    fi
+fi
+
 # giipApiSk2 pattern (same as kvsput.sh):
 # - text: command name + parameter names (NO sk, NO values)
 # - token: SK authentication (separate parameter, auto-merged by giipfaw)
@@ -191,6 +207,25 @@ else
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✗ ERROR: API call failed with HTTP code $HTTP_CODE" >> "$LOG_FILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Response: $RESPONSE" >> "$LOG_FILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Check network connectivity and API endpoint" >> "$LOG_FILE"
+    
+    # Upload error diagnostic to KVS
+    if [ -f "$KVSPUT_SCRIPT" ]; then
+        ERROR_JSON="${TEMP_JSON%.json}-error.json"
+        cat > "$ERROR_JSON" <<EOF
+{
+  "timestamp": "$(date -Iseconds)",
+  "hostname": "$(hostname)",
+  "error_type": "api_call_failed",
+  "http_code": $HTTP_CODE,
+  "api_url": "$API_URL",
+  "response": $(echo "$RESPONSE" | jq -Rs . 2>/dev/null || echo "\"$RESPONSE\""),
+  "discovery_data": $DISCOVERY_JSON
+}
+EOF
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading error diagnostic to KVS..." >> "$LOG_FILE"
+        bash "$KVSPUT_SCRIPT" "$ERROR_JSON" autoerror >> "$LOG_FILE" 2>&1 || true
+        rm -f "$ERROR_JSON"
+    fi
 fi
 
 # Cleanup temp file (keep for debugging if error occurred)
@@ -199,6 +234,25 @@ if [ "$RSTVAL" = "200" ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Temp JSON file cleaned up" >> "$LOG_FILE"
 else
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ Temp JSON file kept for debugging: $TEMP_JSON" >> "$LOG_FILE"
+    
+    # Also upload failure diagnostic
+    if [ -f "$KVSPUT_SCRIPT" ] && [ -f "$TEMP_JSON" ]; then
+        FAIL_JSON="${TEMP_JSON%.json}-fail.json"
+        cat > "$FAIL_JSON" <<EOF
+{
+  "timestamp": "$(date -Iseconds)",
+  "hostname": "$(hostname)",
+  "error_type": "unexpected_response",
+  "rstval": "$RSTVAL",
+  "action": "$ACTION",
+  "full_response": $(echo "$RESPONSE" | jq -Rs . 2>/dev/null || echo "\"$RESPONSE\""),
+  "discovery_data": $DISCOVERY_JSON
+}
+EOF
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading failure diagnostic to KVS..." >> "$LOG_FILE"
+        bash "$KVSPUT_SCRIPT" "$FAIL_JSON" autofail >> "$LOG_FILE" 2>&1 || true
+        rm -f "$FAIL_JSON"
+    fi
 fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] ========================================" >> "$LOG_FILE"
