@@ -68,6 +68,10 @@ DISCOVERY_FILE="$LATEST_JSON"  # Set DISCOVERY_FILE for kvsput.sh
 echo "$DISCOVERY_JSON" > "$LATEST_JSON"
 chmod 644 "$LATEST_JSON"
 
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Discovery files created:" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Temp: $TEMP_JSON ($(wc -c < "$TEMP_JSON") bytes)" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Latest: $LATEST_JSON ($(wc -c < "$LATEST_JSON") bytes)" >> "$LOG_FILE"
+
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] JSON saved to:" >> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Latest: $LATEST_JSON" >> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Temp: $TEMP_JSON" >> "$LOG_FILE"
@@ -153,6 +157,11 @@ fi
 
 # Upload network diagnostic data to KVS for debugging
 KVSPUT_SCRIPT="${SCRIPT_DIR}/giipscripts/kvsput.sh"
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Checking KVS upload conditions:" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] - KVSPUT_SCRIPT: $KVSPUT_SCRIPT (exists: $([ -f "$KVSPUT_SCRIPT" ] && echo 'YES' || echo 'NO'))" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] - DISCOVERY_FILE: $DISCOVERY_FILE (exists: $([ -f "$DISCOVERY_FILE" ] && echo 'YES' || echo 'NO'))" >> "$LOG_FILE"
+
 if [ -f "$KVSPUT_SCRIPT" ] && [ -f "$DISCOVERY_FILE" ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading discovery data to KVS (kfactor: autodiscover)..." >> "$LOG_FILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Config file: $CONFIG_FILE" >> "$LOG_FILE"
