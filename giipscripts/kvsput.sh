@@ -49,23 +49,45 @@ while IFS= read -r line; do
   fi
 done < "$CFG_PATH"
 
-# Required config
-for k in Endpoint UserToken KType KKey Enabled; do
-  if [[ -z "${KVS_CONFIG[$k]}" ]]; then
-    echo "[ERROR] Missing config: $k" >&2
-    exit 3
-  fi
-done
+# Required config (use apiaddrv2 for giipApiSk2 endpoint)
+# Priority: Endpoint > apiaddrv2
+if [[ -n "${KVS_CONFIG[Endpoint]}" ]]; then
+  ENDPOINT="${KVS_CONFIG[Endpoint]}"
+elif [[ -n "${KVS_CONFIG[apiaddrv2]}" ]]; then
+  ENDPOINT="${KVS_CONFIG[apiaddrv2]}"
+else
+  echo "[ERROR] Missing config: Endpoint or apiaddrv2" >&2
+  exit 3
+fi
 
-if [[ "${KVS_CONFIG[Enabled]}" != "true" ]]; then
+# Add function code if available (FunctionCode > apiaddrcode)
+if [[ -n "${KVS_CONFIG[FunctionCode]}" ]]; then
+  ENDPOINT+="?code=${KVS_CONFIG[FunctionCode]}"
+elif [[ -n "${KVS_CONFIG[apiaddrcode]}" ]]; then
+  ENDPOINT+="?code=${KVS_CONFIG[apiaddrcode]}"
+fi
+
+# UserToken (sk for SK-based auth)
+if [[ -z "${KVS_CONFIG[UserToken]}" && -z "${KVS_CONFIG[sk]}" ]]; then
+  echo "[ERROR] Missing config: UserToken or sk" >&2
+  exit 3
+fi
+USER_TOKEN="${KVS_CONFIG[UserToken]:-${KVS_CONFIG[sk]}}"
+
+# KKey (hostname, fallback to lssn if needed)
+if [[ -z "${KVS_CONFIG[KKey]}" ]]; then
+  if [[ -n "${KVS_CONFIG[lssn]}" ]]; then
+    KVS_CONFIG[KKey]="${KVS_CONFIG[lssn]}"
+  else
+    KVS_CONFIG[KKey]="$(hostname)"
+  fi
+fi
+
+# Optional: Check if upload is disabled
+if [[ "${KVS_CONFIG[Enabled]}" == "false" ]]; then
   echo "[INFO] KVS upload disabled. Showing JSON:"
   cat "$JSON_FILE"
   exit 0
-fi
-
-ENDPOINT="${KVS_CONFIG[Endpoint]}"
-if [[ -n "${KVS_CONFIG[FunctionCode]}" ]]; then
-  ENDPOINT+="?code=${KVS_CONFIG[FunctionCode]}"
 fi
 
 # Ensure required tools
@@ -82,12 +104,13 @@ JSON_FILE_COMPACT=$(jq -c . "$JSON_FILE")
 
 # Build form parameters to match PowerShell example: text, token, jsondata
 POST_DATA="text=$(printf "%s" "$KVSP_TEXT" | jq -sRr @uri)"
-POST_DATA+="&token=$(printf "%s" "${KVS_CONFIG[UserToken]}" | jq -sRr @uri)"
+POST_DATA+="&token=$(printf "%s" "$USER_TOKEN" | jq -sRr @uri)"
 POST_DATA+="&jsondata=$(printf "%s" "$JSON_FILE_COMPACT" | jq -sRr @uri)"
 
 # Diagnostic output
 echo "[DIAG] Endpoint: $ENDPOINT"
 echo "[DIAG] KVSP text: $KVSP_TEXT"
+echo "[DIAG] Token: ${USER_TOKEN:0:10}..." 
 echo "[DIAG] jsondata (file) preview: ${JSON_FILE_COMPACT:0:400}"
 
 # Upload: avoid passing very large data on the command line (can hit ARG_MAX).

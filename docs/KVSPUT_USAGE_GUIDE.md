@@ -36,24 +36,34 @@ giipAgentLinux/giipscripts/kvsput.sh
 The script reads configuration from `../../giipAgent.cnf` (relative to script location):
 
 ```ini
-# Required fields:
-Endpoint=https://your-function-app.azurewebsites.net/api/giipApiSk2
-FunctionCode=your-azure-function-code-here
-UserToken=your-user-token
-KType=YourKType
-KKey=YourKKey
-Enabled=true
+# Option 1: Use standard giipAgent.cnf fields (Recommended)
+apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
+apiaddrcode="YOUR_AZURE_FUNCTION_KEY_HERE"
+sk="your-secret-key-here"
+lssn="71174"
+
+# Option 2: Use explicit KVS fields (Alternative)
+Endpoint="https://giipfaw.azurewebsites.net/api/giipApiSk2"
+FunctionCode="YOUR_AZURE_FUNCTION_KEY_HERE"
+UserToken="your-secret-key-here"
+KKey="cctrank03"
+Enabled="true"
 ```
 
-**Configuration Fields**:
-| Field | Required | Description |
+**Configuration Fields** (Priority Order):
+| Field | Priority | Description |
 |-------|----------|-------------|
-| `Endpoint` | ✅ Yes | Azure Function API endpoint URL |
-| `UserToken` | ✅ Yes | Authentication token (SK or AK) |
-| `KType` | ✅ Yes | Key type identifier |
-| `KKey` | ✅ Yes | Key value (usually hostname or lssn) |
-| `Enabled` | ✅ Yes | `true` to upload, `false` to only display JSON |
-| `FunctionCode` | ⚠️ Optional | Azure Function access code (appended as `?code=`) |
+| `Endpoint` | 1st | Azure Function API endpoint URL (giipApiSk2) |
+| `apiaddrv2` | 2nd | Fallback endpoint if Endpoint not set |
+| `FunctionCode` | 1st | Azure Function access code (appended as `?code=`) |
+| `apiaddrcode` | 2nd | Fallback function code |
+| `UserToken` | 1st | Authentication token (SK or AK) |
+| `sk` | 2nd | Fallback token (session key) |
+| `KKey` | 1st | Key value (usually hostname or lssn) |
+| `lssn` | 2nd | Fallback to lssn if KKey not set |
+| `Enabled` | Optional | `false` to only display JSON (default: enabled) |
+
+**Note**: The script automatically uses **giipApiSk2** endpoint when `apiaddrv2` is configured.
 
 ## API Request Format
 
@@ -242,10 +252,20 @@ sudo apt-get install jq
 sudo yum install jq
 ```
 
-### Issue: "Missing config: Endpoint"
+### Issue: "Missing config: Endpoint or apiaddrv2"
 - Check `giipAgent.cnf` exists at `../../giipAgent.cnf` relative to script
-- Verify all required fields are present
-- Ensure values are not empty
+- Ensure either `Endpoint` or `apiaddrv2` field is present
+- Verify the value is a valid URL starting with `https://`
+
+**Fix**:
+```bash
+# Edit giipAgent.cnf
+cd /opt/giipAgentLinux
+vi giipAgent.cnf
+
+# Add this line:
+apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
+```
 
 ### Issue: "curl failed with exit code 6"
 - Network connectivity issue
