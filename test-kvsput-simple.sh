@@ -141,8 +141,21 @@ echo "=========================================="
 echo "Response:"
 echo "=========================================="
 
+# Save raw response for debugging
+echo "$RESPONSE" > /tmp/kvsput-response-$$.txt
+echo "[DEBUG] Raw response saved to: /tmp/kvsput-response-$$.txt"
+echo "[DEBUG] Response length: ${#RESPONSE} bytes"
+echo ""
+
+# Show raw response first
+echo "--- Raw Response ---"
+echo "$RESPONSE"
+echo "--- End Raw Response ---"
+echo ""
+
 # Try to parse as JSON
-if echo "$RESPONSE" | jq . >/dev/null 2>&1; then
+if [ -n "$RESPONSE" ] && echo "$RESPONSE" | jq . >/dev/null 2>&1; then
+    echo "--- Parsed JSON ---"
     echo "$RESPONSE" | jq .
     
     # Check debug info
@@ -152,13 +165,21 @@ if echo "$RESPONSE" | jq . >/dev/null 2>&1; then
         echo "$RESPONSE" | jq '.debug'
     fi
 else
-    echo "$RESPONSE"
+    echo "⚠ Response is empty or not valid JSON"
 fi
 
 echo ""
 
 # Check for errors
-if echo "$RESPONSE" | grep -qi '"error"'; then
+if [ -z "$RESPONSE" ]; then
+    echo "❌ Empty response from server"
+    echo ""
+    echo "Possible causes:"
+    echo "  1. Network issue"
+    echo "  2. Azure Function not responding"
+    echo "  3. Wrong endpoint URL"
+    RESULT=1
+elif echo "$RESPONSE" | grep -qi '"error"'; then
     echo "❌ ERROR detected in response"
     RESULT=1
 elif echo "$RESPONSE" | grep -qi 'RstVal.*411\|"RstVal":411'; then
@@ -176,7 +197,7 @@ elif echo "$RESPONSE" | grep -qi 'RstVal.*200\|"RstVal":200'; then
     echo "✅ Success! (RstVal=200)"
     RESULT=0
 else
-    echo "⚠ Unknown response format"
+    echo "⚠ Unknown response format (check raw response above)"
     RESULT=1
 fi
 
@@ -184,6 +205,14 @@ fi
 rm -f "$TEST_JSON" "$TMP_POST"
 
 echo ""
-echo "Cleaned up: $TEST_JSON, $TMP_POST"
+if [ $RESULT -eq 0 ]; then
+    echo "Cleaned up: $TEST_JSON, $TMP_POST"
+    echo "Response saved: /tmp/kvsput-response-$$.txt"
+else
+    echo "Debug files kept for troubleshooting:"
+    echo "  - Response: /tmp/kvsput-response-$$.txt"
+    echo "  - POST data: $TMP_POST (deleted)"
+    echo "  - Test JSON: $TEST_JSON (deleted)"
+fi
 
 exit $RESULT
