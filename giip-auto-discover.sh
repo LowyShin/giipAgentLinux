@@ -106,17 +106,48 @@ fi
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sending data to API v2 (giipApiSk2) for host: $HOSTNAME..." >> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Data summary: Network interfaces=$NETWORK_ITEMS, Software=$SOFTWARE_COUNT, Services=$SERVICE_COUNT" >> "$LOG_FILE"
 
+# Save network data to tmp/network.log (relative to script directory)
+NETWORK_LOG="${SCRIPT_DIR}/tmp/network.log"
+mkdir -p "${SCRIPT_DIR}/tmp"
+echo "========================================" > "$NETWORK_LOG"
+echo "Network Discovery Log" >> "$NETWORK_LOG"
+echo "Timestamp: $(date '+%Y-%m-%d %H:%M:%S')" >> "$NETWORK_LOG"
+echo "Hostname: $HOSTNAME" >> "$NETWORK_LOG"
+echo "========================================" >> "$NETWORK_LOG"
+echo "" >> "$NETWORK_LOG"
+
 # Log network details for debugging
 if [ "$NETWORK_ITEMS" -gt 0 ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Network interfaces found:" >> "$LOG_FILE"
+    echo "Network Interfaces Found: $NETWORK_ITEMS" >> "$NETWORK_LOG"
+    echo "" >> "$NETWORK_LOG"
+    
     echo "$DISCOVERY_JSON" | grep -oP '"network"\s*:\s*\[\K[^\]]+' | grep -oP '\{[^}]+\}' | while read -r iface; do
         iface_name=$(echo "$iface" | grep -oP '"name"\s*:\s*"\K[^"]+')
         iface_ipv4=$(echo "$iface" | grep -oP '"ipv4"\s*:\s*"\K[^"]+')
+        iface_ipv6=$(echo "$iface" | grep -oP '"ipv6"\s*:\s*"\K[^"]+')
         iface_mac=$(echo "$iface" | grep -oP '"mac"\s*:\s*"\K[^"]+')
+        
         echo "[$(date '+%Y-%m-%d %H:%M:%S')]   - $iface_name: IPv4=$iface_ipv4, MAC=$iface_mac" >> "$LOG_FILE"
+        
+        # Write to network.log
+        echo "Interface: $iface_name" >> "$NETWORK_LOG"
+        echo "  IPv4: ${iface_ipv4:-<empty>}" >> "$NETWORK_LOG"
+        echo "  IPv6: ${iface_ipv6:-<empty>}" >> "$NETWORK_LOG"
+        echo "  MAC:  ${iface_mac:-<empty>}" >> "$NETWORK_LOG"
+        echo "" >> "$NETWORK_LOG"
     done
+    
+    # Also save raw network JSON
+    echo "========================================" >> "$NETWORK_LOG"
+    echo "Raw JSON Network Data:" >> "$NETWORK_LOG"
+    echo "========================================" >> "$NETWORK_LOG"
+    echo "$DISCOVERY_JSON" | grep -oP '"network"\s*:\s*\[[^\]]+\]' >> "$NETWORK_LOG"
+    
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Network data saved to: $NETWORK_LOG" >> "$LOG_FILE"
 else
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ WARNING: No network interfaces collected!" >> "$LOG_FILE"
+    echo "No network interfaces found!" >> "$NETWORK_LOG"
 fi
 
 # giipApiSk2 pattern (same as kvsput.sh):
