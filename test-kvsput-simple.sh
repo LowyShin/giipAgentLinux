@@ -131,16 +131,25 @@ echo "$POST_DATA" > "$TMP_POST"
 echo "Sending request..."
 echo "  text: $KVSP_TEXT"
 echo "  token: ${TOKEN:0:10}..."
+echo "  URL: ${ENDPOINT}?code=${CODE:0:20}..."
 echo ""
 
-# Send request
-RESPONSE=$(curl -s -X POST "${ENDPOINT}?code=${CODE}" \
+# Send request with verbose output saved
+CURL_DEBUG="/tmp/kvsput-curl-debug-$$.txt"
+RESPONSE=$(curl -v -X POST "${ENDPOINT}?code=${CODE}" \
   -H 'Content-Type: application/x-www-form-urlencoded' \
-  --data-binary "@$TMP_POST")
+  --data-binary "@$TMP_POST" 2>"$CURL_DEBUG")
 
 echo "=========================================="
 echo "Response:"
 echo "=========================================="
+
+# Show curl debug info first
+if [ -f "$CURL_DEBUG" ]; then
+    echo "[DEBUG] Curl output:"
+    cat "$CURL_DEBUG"
+    echo ""
+fi
 
 # Save raw response for debugging
 echo "$RESPONSE" > /tmp/kvsput-response-$$.txt
@@ -212,6 +221,7 @@ if [ $RESULT -eq 0 ]; then
 else
     echo "Debug files kept for troubleshooting:"
     echo "  - Response: /tmp/kvsput-response-$$.txt"
+    echo "  - Curl debug: $CURL_DEBUG"
     echo "  - POST data: $TMP_POST (deleted)"
     echo "  - Test JSON: $TEST_JSON (deleted)"
 fi
