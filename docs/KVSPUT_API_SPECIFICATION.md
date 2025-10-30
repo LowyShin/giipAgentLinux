@@ -1,5 +1,9 @@
 # kvsput.sh API Specification
 
+⚠️ **개발 룰 필독!**: `giipfaw/docs/giipapi_rules.md`
+
+**[필수] 모든 변수값(파라미터)은 반드시 jsondata 필드에 JSON 문자열로 만들어 전달해야 하며, text 필드에는 프로시저명과 파라미터 이름만 포함해야 합니다.**
+
 ## Overview
 `kvsput.sh`는 JSON 데이터를 GIIP KVS (Key-Value Store) 시스템에 업로드하는 유틸리티입니다.
 
@@ -59,7 +63,23 @@ lssn="71174"
 
 ---
 
-## API Call Structure
+## API Call Structure (giipapi_rules.md 기준)
+
+⚠️ **절대 규칙**: `text`에는 파라미터 **이름만**, `jsondata`에 **실제 값**!
+
+### SP Definition (pApiKVSPutbySk)
+
+```sql
+-- SP: pApiKVSPutbySk
+-- Reference: giipdb/SP/pApiKVSPutbySk.sql
+
+CREATE procedure [dbo].[pApiKVSPutbySk]
+    @sk varchar(200)          -- Authentication (from token parameter)
+    , @kType varchar(32)      -- From jsondata.kType
+    , @kKey varchar(100)      -- From jsondata.kKey
+    , @kFactor varchar(32)    -- From jsondata.kFactor
+    , @kValue nvarchar(max)   -- From jsondata.kValue (또는 jsondata.value)
+```
 
 ### giipApiSk2 Request Format
 
@@ -67,30 +87,33 @@ lssn="71174"
 POST https://giipfaw.azurewebsites.net/api/giipApiSk2?code=YOUR_CODE
 Content-Type: application/x-www-form-urlencoded
 
-text=KVSPut lssn kfactor
+text=KVSPut kType kKey kFactor kValue
 token=YOUR_SECRET_KEY
-jsondata={"your":"json","data":"here"}
+jsondata={"kType":"lssn","kKey":"71174","kFactor":"netdiag","kValue":{...}}
 ```
 
 ### Parameter Breakdown
 
-#### 1. `text` - Command String
-**Format**: `KVSPut lssn kfactor`
+#### 1. `text` - Command String with Parameter NAMES ONLY
+**Format**: `KVSPut kType kKey kFactor kValue`
 
-- ✅ **파라미터 이름만** 포함
-- ❌ **실제 값은 포함하지 않음**
+⚠️ **절대 금지**: 실제 값을 `text`에 넣지 마세요!
 
 ```bash
-# ✅ CORRECT
-text="KVSPut lssn kfactor"
+# ✅ CORRECT (giipapi_rules.md 기준)
+text="KVSPut kType kKey kFactor kValue"  # 파라미터 이름만!
 
-# ❌ WRONG
-text="KVSPut lssn 71174 network_discovery"  # 값이 들어가면 안됨!
+# ❌ WRONG (절대 금지!)
+text="KVSPut lssn 71174 netdiag {...}"  # 실제 값 (X)
 ```
 
 **Why?**
-- giipApiSk2는 `text`를 파싱하여 SP (Stored Procedure) 호출 패턴을 결정
-- 실제 값은 `jsondata`에서 추출
+- `giipfaw/docs/giipapi_rules.md` 필수 규칙:
+  > **[필수] 모든 변수값(파라미터)은 반드시 jsondata 필드에 JSON 문자열로 만들어 전달해야 하며, 
+  > text 필드에는 프로시저명과 파라미터 이름만 포함해야 합니다.**
+
+- giipApiSk2는 `text`를 파싱하여 SP 파라미터 구조를 파악
+- 실제 값은 `jsondata`에서 파라미터 이름으로 매핑하여 추출
 
 #### 2. `token` - Authentication
 **Format**: Secret Key 문자열
@@ -101,178 +124,385 @@ token="ffd96879858fe73fc31d923a74ae23b5"
 
 - SK 기반 인증
 - `giipAgent.cnf`의 `sk` 필드 사용
-- `text`에 포함하지 않음 (별도 파라미터)
+- SP의 `@sk` 파라미터로 전달
 
-#### 3. `jsondata` - Actual Data
+#### 3. `jsondata` - Actual Parameter Values
 **Format**: JSON 객체 (compacted)
 
 ```json
 {
-  "lssn": 71174,
-  "kfactor": "network_discovery",
-  "data": {
+  "kType": "lssn",
+  "kKey": "71174",
+  "kFactor": "netdiag",
+  "kValue": {
     "hostname": "cctrank03",
     "network": [...]
   }
 }
 ```
 
-**Structure**:
-- `lssn`: 서버 식별자 (숫자)
-- `kfactor`: Factor name (문자열)
-- `data`: 실제 업로드할 데이터 (자유 형식)
+**Parameter Mapping**:
+
+| `text` 위치 | Parameter Name | `jsondata` 필드 | Example Value | SP Parameter |
+|------------|----------------|----------------|---------------|--------------|
+| Position 2 | `kType` | `jsondata.kType` | `"lssn"` | `@kType` |
+| Position 3 | `kKey` | `jsondata.kKey` | `"71174"` | `@kKey` |
+| Position 4 | `kFactor` | `jsondata.kFactor` | `"netdiag"` | `@kFactor` |
+| Position 5 | `kValue` | `jsondata.kValue` | `{...}` | `@kValue` |
+
+**Important**: 
+- `kValue`는 JSON 객체 또는 문자열 (자유 형식)
+- `kType`은 현재 `"lssn"`만 지원 (SP Line 22)
+- `kKey`는 문자열 (숫자처럼 보여도 VARCHAR(100))
 
 ---
 
-## Backend Processing (giipApiSk2)
+## Backend Processing
 
-### 1. Request Parsing
-```powershell
-# giipfaw/giipApiSk2/run.ps1
-$text = $formData["text"]           # "KVSPut lssn kfactor"
-$token = $formData["token"]         # SK value
-$jsondata = $formData["jsondata"]   # JSON string
+### SP Call Pattern (giipApiSk2)
 
-# Parse text
-$parts = $text -split " "
-$command = $parts[0]                # "KVSPut"
-$params = $parts[1..($parts.Length-1)]  # ["lssn", "kfactor"]
+```csharp
+// 1. Parse text parameter to get parameter names
+string[] parts = text.Split(' ');
+// parts[0] = "KVSPut"    → Command (SP name = pApiKVSPutbySk)
+// parts[1] = "kType"     → Parameter name
+// parts[2] = "kKey"      → Parameter name
+// parts[3] = "kFactor"   → Parameter name
+// parts[4] = "kValue"    → Parameter name
+
+// 2. Parse jsondata to get actual values
+var json = JsonConvert.DeserializeObject<JObject>(jsondata);
+string kType = json["kType"].ToString();      // "lssn"
+string kKey = json["kKey"].ToString();        // "71174"
+string kFactor = json["kFactor"].ToString();  // "netdiag"
+string kValue = json["kValue"].ToString();    // "{...}" or object
+
+// 3. Execute SP with mapped values
+EXEC pApiKVSPutbySk 
+  @sk = @token,        -- from token parameter
+  @kType = @kType,     -- from jsondata.kType
+  @kKey = @kKey,       -- from jsondata.kKey
+  @kFactor = @kFactor, -- from jsondata.kFactor
+  @kValue = @kValue    -- from jsondata.kValue
 ```
 
-### 2. SP Call Pattern
+### Database Insert (pApiKVSPutbySk)
+
 ```sql
--- Constructed SP name: pApiKvsPutbySk
-EXEC pApiKvsPutbySk 
-  @sk = 'ffd96879858fe73...',
-  @lssn = 71174,
-  @kfactor = 'network_discovery',
-  @jsondata = '{"hostname":"cctrank03",...}'
+-- SP: pApiKVSPutbySk (Line 17-33)
+if @kType = 'lssn'  -- kType must be "lssn"
+begin
+    -- Validate LSsn exists in tLSvr
+    if exists(select 1 from tLSvr where LSsn = @kKey and CGSn = @cgsn)
+    begin
+        insert into tKVS(kType, kKey, kFactor, kValue, kRegdt)
+        values (@kType, @kKey, @kFactor, @kValue, GETDATE())
+        
+        select @RstVal = 200, @RstMsg = 'Success'
+    end
+    else
+        select @RstVal = 411, @RstMsg = 'Invalid LSsn'
+end
+else
+    select @RstVal = 404, @RstMsg = 'Invalid kType (must be lssn)'
 ```
 
-### 3. SP Implementation (pApiKvsPutbySk)
-```sql
-CREATE PROCEDURE pApiKvsPutbySk
-  @sk NVARCHAR(100),
-  @lssn INT,
-  @kfactor NVARCHAR(50),
-  @jsondata NVARCHAR(MAX)
-AS
-BEGIN
-  -- 1. Validate SK
-  IF NOT EXISTS (SELECT 1 FROM tLSvr WHERE LSK = @sk)
-  BEGIN
-    SELECT 401 AS RstVal, 'Invalid SK' AS RstTxt
-    RETURN
-  END
-  
-  -- 2. Get LSsn from SK (if not provided)
-  IF @lssn = 0
-  BEGIN
-    SELECT @lssn = LSsn FROM tLSvr WHERE LSK = @sk
-  END
-  
-  -- 3. Insert to tKVS
-  INSERT INTO tKVS (LSsn, KFactor, KData, kRegdt)
-  VALUES (@lssn, @kfactor, @jsondata, GETDATE())
-  
-  -- 4. Return success
-  SELECT 200 AS RstVal, 'Success' AS RstTxt, SCOPE_IDENTITY() AS KVSsn
-END
-```
+**Result Table** (`tKVS`):
+- `kType` = `"lssn"` (VARCHAR(32))
+- `kKey` = `"71174"` (VARCHAR(100) - 문자열!)
+- `kFactor` = `"netdiag"` (VARCHAR(32))
+- `kValue` = `'{"hostname":"cctrank03",...}'` (NVARCHAR(MAX))
+- `kRegdt` = `GETDATE()`
 
-### 4. Database Result (tKVS Table)
-```sql
-SELECT * FROM tKVS WHERE KVSsn = 12345
-```
-
-| Column | Type | Value | Description |
-|--------|------|-------|-------------|
-| KVSsn | INT | 12345 | Primary Key (auto-increment) |
-| LSsn | INT | 71174 | 서버 식별자 (FK → tLSvr.LSsn) |
-| KFactor | NVARCHAR(50) | `network_discovery` | Factor name |
-| KData | NVARCHAR(MAX) | `{"hostname":"cctrank03",...}` | JSON 데이터 |
-| kRegdt | DATETIME | 2025-10-30 10:40:00 | 등록 시각 |
+**Important**: `kKey`는 문자열입니다. 숫자처럼 보이지만 VARCHAR(100)로 저장됩니다.
 
 ---
 
-## Current Implementation Issue
+## Current Implementation (kvsput.sh)
 
-### Problem
-현재 `kvsput.sh`의 코드:
+### Correct Code (Line 112-123)
 
 ```bash
-# Line 115 (WRONG)
-KVSP_TEXT="KVSPut lssn ${KVS_CONFIG[KKey]} $KFACTOR"
-# Result: "KVSPut lssn 71174 network_discovery"
-#                      ^^^^^ (실제 값이 들어감 - 잘못됨!)
+# Line 112-114: giipapi_rules.md 준수!
+# Per giipapi rules: 'text' must contain only the procedure name and parameter NAMES (no values)
+# Actual values must be passed inside jsondata.
+
+# Line 115: text에 파라미터 이름만
+KVSP_TEXT="KVSPut kType kKey kFactor kValue"  # ✅ CORRECT!
+
+# Line 117: JSON 파일 compact
+JSON_FILE_COMPACT=$(jq -c . "$JSON_FILE")
+
+# Line 120-123: POST data 구성
+POST_DATA="text=$(printf "%s" "$KVSP_TEXT" | jq -sRr @uri)"
+POST_DATA+="&token=$(printf "%s" "$USER_TOKEN" | jq -sRr @uri)"
+POST_DATA+="&jsondata=$(printf "%s" "$JSON_FILE_COMPACT" | jq -sRr @uri)"
 ```
 
-### Expected Behavior (API Spec)
+**⚠️ 문제점**: `jsondata` 구조가 불완전!
+
 ```bash
-# CORRECT
-text="KVSPut lssn kfactor"  # 파라미터 이름만
-jsondata='{"lssn":71174,"kfactor":"network_discovery","data":{...}}'
+# ❌ CURRENT (Line 123)
+# jsondata는 JSON 파일 내용 그대로
+jsondata='{"hostname":"cctrank03","network":[...]}'
+
+# ✅ SHOULD BE
+# jsondata에 kType, kKey, kFactor 포함!
+jsondata='{
+  "kType": "lssn",
+  "kKey": "71174",
+  "kFactor": "netdiag",
+  "kValue": {"hostname":"cctrank03","network":[...]}
+}'
 ```
 
-### Why It Fails
-1. **giipApiSk2 파싱 오류**:
-   - `text`에서 `"71174"`를 파라미터 이름으로 인식
-   - SP 호출 시 파라미터 매핑 실패
+### Required Fix
 
-2. **jsondata 구조 불일치**:
-   - API는 `jsondata`에서 `lssn`, `kfactor` 추출 예상
-   - 현재는 `text`에 하드코딩되어 있음
-
-3. **Web UI 표시 안됨**:
-   - `tKVS.LSsn`이 제대로 설정되지 않음
-   - 또는 `KFactor`가 매칭되지 않음
-
----
-
-## Correct Implementation
-
-### Fixed kvsput.sh Code
+**Line 115-119 변경 필요**:
 ```bash
-# Line 115 수정 필요
-# ❌ WRONG (현재):
-KVSP_TEXT="KVSPut lssn ${KVS_CONFIG[KKey]} $KFACTOR"
+# Compact the JSON file (this will be kValue)
+JSON_FILE_COMPACT=$(jq -c . "$JSON_FILE")
 
-# ✅ CORRECT (수정 후):
-KVSP_TEXT="KVSPut lssn kfactor"
-
-# jsondata에 실제 값 포함 (수정 필요)
+# Build jsondata with kType, kKey, kFactor, kValue
 JSON_PAYLOAD=$(jq -n \
-  --argjson lssn "${KVS_CONFIG[lssn]}" \
-  --arg kfactor "$KFACTOR" \
-  --argjson data "$JSON_FILE_COMPACT" \
-  '{lssn: $lssn, kfactor: $kfactor, data: $data}')
+  --arg kType "lssn" \
+  --arg kKey "${KVS_CONFIG[KKey]}" \
+  --arg kFactor "$KFACTOR" \
+  --argjson kValue "$JSON_FILE_COMPACT" \
+  '{kType: $kType, kKey: $kKey, kFactor: $kFactor, kValue: $kValue}')
 
+# KVSP text (procedure name + param NAMES as required by giipapi)
+KVSP_TEXT="KVSPut kType kKey kFactor kValue"  # ✅ 파라미터 이름만!
+
+# Build form parameters
+POST_DATA="text=$(printf "%s" "$KVSP_TEXT" | jq -sRr @uri)"
+POST_DATA+="&token=$(printf "%s" "$USER_TOKEN" | jq -sRr @uri)"
+POST_DATA+="&jsondata=$(printf "%s" "$JSON_PAYLOAD" | jq -sRr @uri)"  # ← JSON_PAYLOAD 사용!
+```
+
+### Example Complete Request
+
+```bash
+# Command line
+kvsput.sh /tmp/discovery.json netdiag
+
+# Generated curl command
+curl -X POST "https://giipfaw.azurewebsites.net/api/giipApiSk2?code=abc123" \
+  --data-urlencode 'text=KVSPut kType kKey kFactor kValue' \
+  --data-urlencode 'token=ffd96879858fe73fc31d923a74ae23b5' \
+  --data-urlencode 'jsondata={"kType":"lssn","kKey":"71174","kFactor":"netdiag","kValue":{"hostname":"cctrank03","network":[...]}}'
+```
+
+**Result**:
+```json
+{"RstVal": 200, "RstMsg": "Success"}
+```
+
+**Database State**:
+```sql
+SELECT * FROM tKVS WHERE kKey = '71174' AND kFactor = 'netdiag' ORDER BY kRegdt DESC
+-- kType: lssn
+-- kKey: 71174
+-- kFactor: netdiag
+-- kValue: {"hostname":"cctrank03",...}
+-- kRegdt: 2025-01-15 14:30:00
+```
+---
+
+## Configuration Parameter Details
+
+### Parameter Priority Chains
+
+| Purpose | Priority 1 (Recommended) | Priority 2 (Legacy) | Priority 3 (Fallback) | Code Line |
+|---------|-------------------------|---------------------|----------------------|-----------|
+| **Endpoint** | `Endpoint` | `apiaddrv2` | ERROR if missing | 73-79 |
+| **Function Code** | `FunctionCode` | `apiaddrcode` | (Optional) | 82-86 |
+| **Token** | `UserToken` | `sk` | ERROR if missing | 89-93 |
+| **KKey** | `KKey` | `lssn` | `hostname()` | 96-102 |
+
+**Example Config** (`giipAgent.cnf`):
+```ini
+# Recommended (Priority 1) - 권장 방식
+Endpoint=https://giipfaw.azurewebsites.net
+FunctionCode=abc123def456
+UserToken=ffd96879858fe73fc31d923a74ae23b5
+KKey=71174
+
+# Legacy (Priority 2) - 하위 호환성
+apiaddrv2=https://giipfaw.azurewebsites.net
+apiaddrcode=abc123def456
+sk=ffd96879858fe73fc31d923a74ae23b5
+lssn=71174
+```
+
+### Field Descriptions
+
+| Field Name | Type | Required | Description | Example |
+|------------|------|----------|-------------|---------|
+| `Endpoint` / `apiaddrv2` | URL | ✅ Yes | giipApiSk2 endpoint URL | `https://giipfaw.azurewebsites.net` |
+| `FunctionCode` / `apiaddrcode` | String | ⚠️ Optional | Azure Function 인증 코드 (URL query) | `abc123def456` |
+| `UserToken` / `sk` | String | ✅ Yes | Secret Key (SK) for authentication | `ffd96879858fe73fc31d923a74ae23b5` |
+| `KKey` / `lssn` | String | ⚠️ Auto | 서버 식별자 (LSsn), 없으면 hostname 사용 | `71174` 또는 `cctrank03` |
+| `Enabled` | Boolean | ⚠️ Optional | `false`면 실제 업로드 안하고 미리보기만 | `true` (default) |
+
+**Priority Resolution Example**:
+```bash
+# If config has both Endpoint and apiaddrv2:
+Endpoint=https://new.giip.net      # ← Used (Priority 1)
+apiaddrv2=https://old.giip.net     # ← Ignored (Priority 2)
+
+# If config has only apiaddrv2:
+apiaddrv2=https://old.giip.net     # ← Used (Priority 2)
+
+# If config has neither:
+# ERROR: "ERROR: Endpoint not set in config file"
+```
+
+---
+
+## Troubleshooting
+
+### Issue 1: "ERROR: Endpoint not set in config file"
+**Cause**: Config file missing both `Endpoint` and `apiaddrv2`
+
+**Solution**:
+```bash
+echo "Endpoint=https://giipfaw.azurewebsites.net" >> /home/giip/giipAgent.cnf
+```
+
+### Issue 2: "ERROR: UserToken not set in config file"
+**Cause**: Config file missing both `UserToken` and `sk`
+
+**Solution**:
+```bash
+echo "UserToken=YOUR_SECRET_KEY" >> /home/giip/giipAgent.cnf
+```
+
+### Issue 3: Web UI doesn't show data (RstVal=200 but empty)
+**Cause**: `kvsput.sh` `jsondata` 구조 불완전
+
+**Current Code** (Line 123):
+```bash
+POST_DATA+="&jsondata=$(printf "%s" "$JSON_FILE_COMPACT" | jq -sRr @uri)"
+# jsondata에 파일 내용만! (kType, kKey, kFactor 없음)
+```
+
+**Fix** (Line 117-119):
+```bash
+# Build proper jsondata structure
+JSON_PAYLOAD=$(jq -n \
+  --arg kType "lssn" \
+  --arg kKey "${KVS_CONFIG[KKey]}" \
+  --arg kFactor "$KFACTOR" \
+  --argjson kValue "$JSON_FILE_COMPACT" \
+  '{kType: $kType, kKey: $kKey, kFactor: $kFactor, kValue: $kValue}')
+
+POST_DATA+="&jsondata=$(printf "%s" "$JSON_PAYLOAD" | jq -sRr @uri)"
+```
+
+**Verification**:
+```sql
+-- Check if kValue has data
+SELECT kKey, kFactor, LEN(kValue) AS kValueLength, kRegdt 
+FROM tKVS 
+WHERE kKey = '71174' 
+ORDER BY kRegdt DESC
+
+-- If kValueLength = 0 or NULL → Fix needed!
+```
+
+---
+
+## Version History
+
+### v1.2.0 (2025-10-30) - giipapi_rules.md 기준 재작성 ⭐
+- ✅ **CRITICAL FIX**: `giipfaw/docs/giipapi_rules.md` 기준으로 전면 수정
+- ✅ **CLARIFIED**: `text`에는 파라미터 **이름만** (실제 값 금지!)
+- ✅ **FIXED**: `jsondata`에 kType, kKey, kFactor, kValue 구조 포함
+- ✅ **REMOVED**: 잘못된 "text에 실제 값" 설명 전부 삭제
+- ✅ **ADDED**: giipapi_rules.md 필수 규칙 명시
+- ⚠️ **BREAKING**: v1.1.0 기준 코드는 규칙 위반!
+
+### v1.1.0 (2025-01-15) - ❌ 잘못된 이해
+- ❌ **WRONG**: `text`에 실제 값 포함한다고 기재 (규칙 위반!)
+- ❌ **WRONG**: SP만 보고 판단 (giipapi_rules.md 미확인)
+- ⚠️ **DEPRECATED**: 이 버전은 개발 룰 위반
+
+### v1.0.0 (2025-01-14) - ❌ 초기 작성 (부분적으로 잘못됨)
+- ⚠️ jsondata 구조 불완전
+- ⚠️ 일부 내용 누락
+
+---
+
+## Related Documents
+
+⭐ **필수 참조**:
+- **giipfaw/docs/giipapi_rules.md**: API 호출 절대 규칙
+- **giipfaw/docs/GIIPAPISK2_API_PATTERN.md**: giipApiSk2 패턴
+- **KVSPUT_USAGE_GUIDE.md**: Usage examples
+- **KVSPUT_TEST_GUIDE.md**: Testing procedures
+- **SQLNETINV_DATA_FLOW.md**: Complete data flow
+- **SP Source**: `giipdb/SP/pApiKVSPutbySk.sql`
+
+---
+
+## Summary: kvsput.sh 절대 규칙
+
+### ⚠️ 개발 룰 (giipapi_rules.md)
+
+**[필수] 모든 변수값(파라미터)은 반드시 jsondata 필드에 JSON 문자열로 만들어 전달해야 하며, text 필드에는 프로시저명과 파라미터 이름만 포함해야 합니다.**
+
+### ✅ CORRECT Implementation
+
+```bash
+# 1. JSON 파일 읽기
+JSON_FILE_COMPACT=$(jq -c . "$JSON_FILE")
+
+# 2. jsondata 구조 생성 (kType, kKey, kFactor, kValue)
+JSON_PAYLOAD=$(jq -n \
+  --arg kType "lssn" \
+  --arg kKey "${KVS_CONFIG[KKey]}" \
+  --arg kFactor "$KFACTOR" \
+  --argjson kValue "$JSON_FILE_COMPACT" \
+  '{kType: $kType, kKey: $kKey, kFactor: $kFactor, kValue: $kValue}')
+
+# 3. text에 파라미터 이름만!
+KVSP_TEXT="KVSPut kType kKey kFactor kValue"  # ✅ 이름만!
+
+# 4. POST data 구성
 POST_DATA="text=$(printf "%s" "$KVSP_TEXT" | jq -sRr @uri)"
 POST_DATA+="&token=$(printf "%s" "$USER_TOKEN" | jq -sRr @uri)"
 POST_DATA+="&jsondata=$(printf "%s" "$JSON_PAYLOAD" | jq -sRr @uri)"
 ```
 
-### Expected Request
-```
-POST /api/giipApiSk2?code=abc123
-Content-Type: application/x-www-form-urlencoded
+### ❌ WRONG (절대 금지!)
 
-text=KVSPut%20lssn%20kfactor
-token=ffd96879858fe73fc31d923a74ae23b5
-jsondata=%7B%22lssn%22%3A71174%2C%22kfactor%22%3A%22network_discovery%22%2C%22data%22%3A%7B...%7D%7D
+```bash
+# ❌ text에 실제 값 넣기 (규칙 위반!)
+KVSP_TEXT="KVSPut lssn 71174 netdiag {...}"
+
+# ❌ jsondata에 구조 없이 파일만 (불완전!)
+POST_DATA+="&jsondata=$(printf "%s" "$JSON_FILE_COMPACT" | jq -sRr @uri)"
 ```
 
-Decoded `jsondata`:
-```json
-{
-  "lssn": 71174,
-  "kfactor": "network_discovery",
-  "data": {
-    "hostname": "cctrank03",
-    "network": [...]
-  }
-}
-```
+### Why This Design?
+
+**giipApiSk2의 처리 방식**:
+1. `text`를 파싱하여 SP 이름과 파라미터 구조 파악
+2. `jsondata`에서 파라미터 이름으로 실제 값 추출
+3. SP 호출 시 자동 매핑
+
+**장점**:
+- 민감 정보(토큰, 비밀번호) `text`에 노출 방지
+- 대용량 JSON 데이터 안전하게 전달
+- URL encoding 문제 최소화
+- 일관된 API 패턴 유지
+
+---
+
+**Last Updated**: October 30, 2025 (v1.2.0)  
+**Status**: ✅ giipapi_rules.md 기준 재작성 완료  
+**Author**: GIIP Development Team
 
 ---
 

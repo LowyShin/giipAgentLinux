@@ -109,18 +109,28 @@ fi
 command -v jq >/dev/null 2>&1 || { echo "[ERROR] jq is required but not found" >&2; exit 4; }
 command -v curl >/dev/null 2>&1 || { echo "[ERROR] curl is required but not found" >&2; exit 4; }
 
-# Per giipapi rules: 'text' must contain only the procedure name and parameter NAMES (no values)
-# Actual values must be passed inside jsondata.
-# KVSP text (procedure name + param NAMES as required by giipapi)
-KVSP_TEXT="KVSPut lssn ${KVS_CONFIG[KKey]} $KFACTOR"
-# Compact the JSON file (this is the data you want in jsonData)
-JSON_FILE_COMPACT=$(jq -c . "$JSON_FILE")
-# (no wrapper) we will send the compacted JSON file content directly as jsondata
+# Per giipapi rules (giipfaw/docs/giipapi_rules.md):
+# [필수] 모든 변수값(파라미터)은 반드시 jsondata 필드에 JSON 문자열로 만들어 전달해야 하며,
+# text 필드에는 프로시저명과 파라미터 이름만 포함해야 합니다.
 
-# Build form parameters to match PowerShell example: text, token, jsondata
+# Compact the JSON file (this will be kValue in jsondata)
+JSON_FILE_COMPACT=$(jq -c . "$JSON_FILE")
+
+# Build jsondata with proper structure: {kType, kKey, kFactor, kValue}
+JSON_PAYLOAD=$(jq -n \
+  --arg kType "lssn" \
+  --arg kKey "${KVS_CONFIG[KKey]}" \
+  --arg kFactor "$KFACTOR" \
+  --argjson kValue "$JSON_FILE_COMPACT" \
+  '{kType: $kType, kKey: $kKey, kFactor: $kFactor, kValue: $kValue}')
+
+# KVSP text: procedure name + parameter NAMES only (as required by giipapi)
+KVSP_TEXT="KVSPut kType kKey kFactor kValue"
+
+# Build form parameters: text, token, jsondata
 POST_DATA="text=$(printf "%s" "$KVSP_TEXT" | jq -sRr @uri)"
 POST_DATA+="&token=$(printf "%s" "$USER_TOKEN" | jq -sRr @uri)"
-POST_DATA+="&jsondata=$(printf "%s" "$JSON_FILE_COMPACT" | jq -sRr @uri)"
+POST_DATA+="&jsondata=$(printf "%s" "$JSON_PAYLOAD" | jq -sRr @uri)"
 
 # Diagnostic output
 echo "[DIAG] Endpoint: $ENDPOINT"
