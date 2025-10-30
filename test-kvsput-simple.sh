@@ -124,9 +124,9 @@ POST_DATA="text=$(printf "%s" "$KVSP_TEXT" | jq -sRr @uri)"
 POST_DATA+="&token=$(printf "%s" "$TOKEN" | jq -sRr @uri)"
 POST_DATA+="&jsondata=$(printf "%s" "$JSON_PAYLOAD" | jq -sRr @uri)"
 
-# Save to temp file
+# Save to temp file (use printf to avoid adding newline)
 TMP_POST="/tmp/kvsput-post-$$.txt"
-echo "$POST_DATA" > "$TMP_POST"
+printf '%s' "$POST_DATA" > "$TMP_POST"
 
 echo "Sending request..."
 echo "  text: $KVSP_TEXT"
