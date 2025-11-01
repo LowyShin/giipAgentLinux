@@ -26,6 +26,12 @@ GIIP Agent is an intelligent monitoring and management agent that:
 
 **NEW in v2.0**: Enhanced CQE system with automatic result collection, timeout control, and security validation!
 
+### Deployment Options
+
+- **Standard Agent**: Install directly on each server (standard installation)
+- **Gateway Agent**: Install on bastion/gateway server to manage multiple remote servers via SSH
+  - See [README_GATEWAY.md](README_GATEWAY.md) for gateway deployment
+
 For Windows version: https://github.com/LowyShin/giipAgentWin
 
 > **� CRITICAL: API Endpoint Configuration**

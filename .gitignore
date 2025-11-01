@@ -1,6 +1,8 @@
 # GIIP Agent Configuration Files (CONTAINS SECRETS!)
 # Never commit these files with actual credentials
 giipAgent.cnf
+giipAgentGateway.cnf
+giipAgentGateway_servers.csv
 *.cnf.local
 *.cnf.prod
 *.cnf.backup
@@ -9,6 +11,7 @@ giipAgent.cnf
 # Log Files (may contain sensitive data)
 *.log
 /var/log/giipAgent_*.log
+/var/log/giipAgentGateway_*.log
 /var/log/giip-auto-discover.log
 
 # Temporary Files

@@ -1,0 +1,26 @@
+################################################################################
+# GIIP Agent Gateway Configuration - TEMPLATE
+# 
+# ⚠️ This is a TEMPLATE file for git repository
+# Copy this file and configure with your actual values:
+#   cp giipAgentGateway.cnf.template giipAgentGateway.cnf
+#   vi giipAgentGateway.cnf
+################################################################################
+
+# You can find secret key from giip user portal (web UI)
+sk="<your secret key>"
+
+# Agent execution interval (seconds)
+# 60 = Check queue every 60 seconds for each server
+giipagentdelay="60"
+
+# API v2 (Recommended) - PowerShell-based, faster and more stable
+apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
+apiaddrcode="YOUR_AZURE_FUNCTION_KEY_HERE"
+
+# API v1 (Legacy) - ASP Classic-based
+apiaddr="https://giipasp.azurewebsites.net"
+
+# Server list file path
+# CSV format: hostname,lssn,ssh_host,ssh_user,ssh_port,ssh_key_path,os_info,enabled
+serverlist_file="./giipAgentGateway_servers.csv"
