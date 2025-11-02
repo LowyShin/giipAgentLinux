@@ -52,6 +52,13 @@ if [[ -z "$JSON_FILE" || ! -f "$JSON_FILE" ]]; then
   exit 2
 fi
 
+# Verify config file exists
+if [ ! -f "$CFG_PATH" ]; then
+  echo "[ERROR] Config file does not exist: $CFG_PATH" >&2
+  echo "[ERROR] Please check the file location or set CONFIG_FILE environment variable" >&2
+  exit 2
+fi
+
 # Read config
 declare -A KVS_CONFIG
 while IFS= read -r line; do
@@ -149,15 +156,47 @@ POST_DATA+="&jsondata=$(printf "%s" "$JSON_PAYLOAD" | jq -sRr @uri)"
 # Simplified diagnostic output (no raw JSON data)
 echo "[INFO] Uploading to KVS: kFactor=$KFACTOR, kKey=$(echo "$JSON_PAYLOAD" | jq -r '.kKey')" >&2
 
+# Get JSON size for diagnostics
+JSON_SIZE=$(echo "$JSON_PAYLOAD" | wc -c)
+echo "[INFO] Payload size: $JSON_SIZE bytes" >&2
+
+# Warning for large payloads
+if [ "$JSON_SIZE" -gt 1000000 ]; then
+  echo "[WARN] Large payload detected (>1MB). This may cause timeout issues." >&2
+  echo "[WARN] Consider splitting data into smaller batches if upload fails." >&2
+fi
+
+# Set timeout (default 60s, can be overridden via environment)
+CURL_TIMEOUT="${CURL_TIMEOUT:-60}"
+
 # Upload: avoid passing very large data on the command line (can hit ARG_MAX).
 # Write the urlencoded form body to a temp file and let curl read it via @file.
 TMP_POST=$(mktemp)
 printf '%s' "$POST_DATA" > "$TMP_POST"
-resp=$(curl -s -X POST "$ENDPOINT" -H 'Content-Type: application/x-www-form-urlencoded' -H 'Expect:' --data-binary "@$TMP_POST")
+
+echo "[INFO] Sending request to: ${ENDPOINT%%\?*}" >&2
+echo "[INFO] Timeout: ${CURL_TIMEOUT}s" >&2
+
+resp=$(curl -s -X POST "$ENDPOINT" \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -H 'Expect:' \
+  --max-time "$CURL_TIMEOUT" \
+  --connect-timeout 10 \
+  --data-binary "@$TMP_POST" 2>&1)
 rc=$?
 rm -f "$TMP_POST"
+
 if [ $rc -ne 0 ]; then
   echo "[ERROR] curl failed with exit code $rc" >&2
+  case $rc in
+    6) echo "[ERROR] Could not resolve host. Check network/DNS." >&2 ;;
+    7) echo "[ERROR] Failed to connect to host. Check endpoint URL and firewall." >&2 ;;
+    28) echo "[ERROR] Operation timeout after ${CURL_TIMEOUT}s. Data may be too large." >&2 
+        echo "[ERROR] Try reducing data size or increasing CURL_TIMEOUT." >&2 ;;
+    35) echo "[ERROR] SSL connection error. Check TLS/SSL configuration." >&2 ;;
+    52) echo "[ERROR] Empty response from server." >&2 ;;
+    *) echo "[ERROR] Curl error code: $rc (see https://curl.se/docs/manpage.html)" >&2 ;;
+  esac
   exit $rc
 fi
 

@@ -4,6 +4,12 @@
 
 **Last Updated**: 2025-10-30 00:41 KST - Git Auto-Sync + Auto-Discovery Integration Active
 
+# GIIP Agent for Linux
+
+![GIIP Logo](https://giipasp.azurewebsites.net/logo.png)
+
+**Last Updated**: 2025-11-02 - Gateway Auto-Configuration Added 🎉
+
 > **🚨 FOR AI AGENTS: Configuration File Warning**
 > 
 > **`giipAgent.cnf` in this repository is a SAMPLE/TEMPLATE ONLY!**
@@ -15,6 +21,43 @@
 >   ssh user@server "cat ~/giipAgent/giipAgent.cnf"
 >   ```
 > - Repository file is ONLY for new installations, NOT for debugging
+
+## 🌟 Overview
+
+GIIP Agent is an intelligent monitoring and management agent that:
+- **Executes remote commands** via CQE (Command Queue Execution) system 🚀 **v2.0**
+- **Gateway mode** for managing multiple remote servers via SSH 🆕 **v3.0**
+- **Auto-discovers infrastructure** (OS, hardware, software, services, network)
+- **Provides operational advice** based on collected data
+- **Reports heartbeat** every 5 minutes to central management
+
+**NEW in v3.0**: Web UI-based Gateway configuration with automatic script deployment!
+
+### Deployment Options
+
+- **Standard Agent**: Install directly on each server (standard installation)
+- **Gateway Agent**: Install on bastion/gateway server to manage multiple remote servers via SSH
+  - 🆕 **Web UI Configuration**: No more manual SSH configuration!
+  - See [docs/GATEWAY_AUTO_CONFIGURATION.md](docs/GATEWAY_AUTO_CONFIGURATION.md) for details
+  - See [docs/GATEWAY_USAGE_GUIDE.md](docs/GATEWAY_USAGE_GUIDE.md) for usage guide
+  - See [README_GATEWAY.md](README_GATEWAY.md) for traditional setup
+
+For Windows version: https://github.com/LowyShin/giipAgentWin
+
+> **🔒 CRITICAL: API Endpoint Configuration**
+> 
+> **giip-auto-discover.sh MUST use apiaddrv2 (giipApiSk2)**
+> 
+> ```bash
+> # ✅ CORRECT
+> API_URL="${apiaddrv2}"  # giipApiSk2 - SK authentication
+> 
+> # ❌ WRONG
+> API_URL="${Endpoint}"   # giipApi - Session authentication (Web UI only)
+> ```
+> 
+> **Why?**
+> - `Endpoint` (giipApi) = Session-based, 2hr TTL, requires web login
 
 ## 🌟 Overview
 
@@ -76,6 +119,12 @@ For Windows version: https://github.com/LowyShin/giipAgentWin
 ### Architecture & Design
 - [Auto-Discovery Architecture](docs/AUTO_DISCOVERY_ARCHITECTURE.md) - 파일 구조와 실행 흐름 상세 설명
 - [Service Package Filter](docs/SERVICE_PACKAGE_FILTER.md) - 소프트웨어 필터링 규칙
+
+### Gateway & Remote Control
+- **[Gateway Setup Guide](docs/GATEWAY_SETUP_GUIDE.md)** - 실제 환경 설정 가이드 (실무 중심)
+- [Gateway README](README_GATEWAY.md) - Gateway Agent 전체 매뉴얼
+- [Gateway Quick Start (KR)](GATEWAY_QUICKSTART_KR.md) - 빠른 시작 가이드
+- [Gateway Implementation Summary](docs/GATEWAY_IMPLEMENTATION_SUMMARY.md) - 기술적 구현 세부사항
 
 ### API & Integration
 - [API Endpoints Comparison](../giipfaw/docs/API_ENDPOINTS_COMPARISON.md) - giipApi vs giipApiSk vs giipApiSk2 차이점
