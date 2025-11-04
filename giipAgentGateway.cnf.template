@@ -24,3 +24,22 @@ apiaddr="https://giipasp.azurewebsites.net"
 # Server list file path
 # CSV format: hostname,lssn,ssh_host,ssh_user,ssh_port,ssh_key_path,os_info,enabled
 serverlist_file="./giipAgentGateway_servers.csv"
+
+################################################################################
+# Gateway Heartbeat Configuration (NEW)
+# Used by giipAgentGateway-heartbeat.sh to collect remote server info
+################################################################################
+
+# Gateway server's own LSSN (from tLSvr table)
+# This is used to find which servers this gateway manages
+gateway_lssn="<YOUR_GATEWAY_LSSN>"
+
+# Customer/Company number (from tCorp table)
+# Used for API authentication
+csn="<YOUR_CSN>"
+
+# Heartbeat interval (seconds)
+# How often to collect info from remote servers
+# Recommended: 300 (5 minutes) or 600 (10 minutes)
+heartbeat_interval="300"
+
