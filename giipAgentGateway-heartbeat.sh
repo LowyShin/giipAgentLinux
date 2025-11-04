@@ -240,14 +240,31 @@ process_managed_servers() {
     
     if [ $? -ne 0 ] || [ ! -f "$server_list_file" ]; then
         echo "[$logdt] Failed to get managed server list" >> $LogFileName
+        
+        # Save error to KVS
+        local kvs_url="${apiaddr}/api/giipApiSk"
+        local kvs_text="KVSPut kType kKey kFactor"
+        local error_status="{\"status\":\"error\",\"error\":\"Failed to get server list\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+        local kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${gateway_lssn}_heartbeat_error\",\"kFactor\":${error_status}}"
+        wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
+        
         return 1
     fi
     
     local server_count=$(jq 'length' "$server_list_file" 2>/dev/null)
     echo "[$logdt] Found $server_count managed servers" >> $LogFileName
     
+    # Save server count to KVS
+    local kvs_url="${apiaddr}/api/giipApiSk"
+    local kvs_text="KVSPut kType kKey kFactor"
+    local count_status="{\"status\":\"processing\",\"server_count\":${server_count},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+    local kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${gateway_lssn}_server_count\",\"kFactor\":${count_status}}"
+    wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
+    
     # Process each server
     local index=0
+    local success_count=0
+    local fail_count=0
     while [ $index -lt $server_count ]; do
         local server=$(jq ".[$index]" "$server_list_file")
         
@@ -277,8 +294,25 @@ process_managed_servers() {
             
             # Update DB
             update_server_info "$lssn" "$hostname" "$server_info"
+            
+            if [ $? -eq 0 ]; then
+                success_count=$((success_count + 1))
+                
+                # Save success to KVS
+                local success_status="{\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"status\":\"success\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+                local kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${gateway_lssn}_server_${lssn}\",\"kFactor\":${success_status}}"
+                wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
+            else
+                fail_count=$((fail_count + 1))
+            fi
         else
             echo "[$logdt]   → ❌ Failed to collect info" >> $LogFileName
+            fail_count=$((fail_count + 1))
+            
+            # Save failure to KVS
+            local fail_status="{\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"status\":\"failed\",\"error\":\"SSH connection failed\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+            local kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${gateway_lssn}_server_${lssn}\",\"kFactor\":${fail_status}}"
+            wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
         fi
         
         index=$((index + 1))
@@ -286,6 +320,11 @@ process_managed_servers() {
         # Small delay between servers
         sleep 2
     done
+    
+    # Save final summary to KVS
+    local summary_status="{\"status\":\"completed\",\"total\":${server_count},\"success\":${success_count},\"failed\":${fail_count},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+    local kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${gateway_lssn}_summary\",\"kFactor\":${summary_status}}"
+    wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
 }
 
 # Main execution

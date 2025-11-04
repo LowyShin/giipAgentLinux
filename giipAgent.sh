@@ -885,10 +885,23 @@ if [ "${gateway_mode}" = "1" ]; then
 	echo "[$logdt] Gateway LSSN: ${lssn}" >> $LogFileName
 	echo "[$logdt] ========================================" >> $LogFileName
 	
+	# Save gateway startup status to KVS
+	startup_status="{\"status\":\"started\",\"version\":\"${sv}\",\"lssn\":${lssn},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"mode\":\"gateway\"}"
+	kvs_url="${apiaddr}/api/giipApiSk"
+	kvs_text="KVSPut kType kKey kFactor"
+	kvs_data="{\"kType\":\"gateway_status\",\"kKey\":\"gateway_${lssn}_startup\",\"kFactor\":${startup_status}}"
+	wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
+	
 	# Check and install sshpass
 	check_sshpass
 	if [ $? -ne 0 ]; then
 		echo "[$logdt] Error: Failed to setup sshpass" >> $LogFileName
+		
+		# Save error to KVS
+		error_status="{\"status\":\"error\",\"error\":\"Failed to setup sshpass\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+		kvs_data="{\"kType\":\"gateway_status\",\"kKey\":\"gateway_${lssn}_error\",\"kFactor\":${error_status}}"
+		wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
+		
 		exit 1
 	fi
 	
@@ -904,11 +917,20 @@ if [ "${gateway_mode}" = "1" ]; then
 	sync_db_queries
 	
 	# Check if we got any servers
+	server_count=0
 	if [ ! -f "${gateway_serverlist}" ]; then
 		echo "[$logdt] [Gateway] Warning: No server list file created" >> $LogFileName
 		echo "[$logdt] [Gateway] Please configure remote servers via Web UI" >> $LogFileName
 		echo "[$logdt] [Gateway] Go to: lsvrdetail page > Gateway Settings" >> $LogFileName
+	else
+		server_count=$(grep -v "^#" "${gateway_serverlist}" | grep -v "^$" | wc -l)
+		echo "[$logdt] [Gateway] Found ${server_count} servers to manage" >> $LogFileName
 	fi
+	
+	# Save initial sync status to KVS
+	sync_status="{\"status\":\"synced\",\"server_count\":${server_count},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+	kvs_data="{\"kType\":\"gateway_status\",\"kKey\":\"gateway_${lssn}_sync\",\"kFactor\":${sync_status}}"
+	wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
 	
 	# Track last sync time
 	last_sync_time=$(date +%s)
@@ -944,6 +966,11 @@ if [ "${gateway_mode}" = "1" ]; then
 		if [ $heartbeat_diff -ge ${gateway_heartbeat_interval} ]; then
 			echo "[$logdt] [Gateway-Heartbeat] Running heartbeat to collect remote server info..." >> $LogFileName
 			
+			# Save heartbeat trigger to KVS
+			heartbeat_trigger="{\"status\":\"triggered\",\"interval\":${gateway_heartbeat_interval},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+			kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${lssn}_heartbeat_trigger\",\"kFactor\":${heartbeat_trigger}}"
+			wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
+			
 			# Check if heartbeat script exists
 			heartbeat_script="./giipAgentGateway-heartbeat.sh"
 			if [ -f "$heartbeat_script" ]; then
@@ -951,9 +978,19 @@ if [ "${gateway_mode}" = "1" ]; then
 				bash "$heartbeat_script" >> $LogFileName 2>&1 &
 				heartbeat_pid=$!
 				echo "[$logdt] [Gateway-Heartbeat] Started (PID: $heartbeat_pid)" >> $LogFileName
+				
+				# Save heartbeat start to KVS
+				heartbeat_start="{\"status\":\"running\",\"pid\":${heartbeat_pid},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+				kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${lssn}_heartbeat_status\",\"kFactor\":${heartbeat_start}}"
+				wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
 			else
 				echo "[$logdt] [Gateway-Heartbeat] ⚠️  Script not found: $heartbeat_script" >> $LogFileName
 				echo "[$logdt] [Gateway-Heartbeat] Remote server info collection will be skipped" >> $LogFileName
+				
+				# Save error to KVS
+				heartbeat_error="{\"status\":\"error\",\"error\":\"Script not found: ${heartbeat_script}\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+				kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${lssn}_heartbeat_error\",\"kFactor\":${heartbeat_error}}"
+				wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
 			fi
 			
 			last_heartbeat_time=$current_time
