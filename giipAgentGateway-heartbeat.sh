@@ -65,7 +65,13 @@ fi
 
 logdt=`date '+%Y%m%d%H%M%S'`
 Today=`date '+%Y%m%d'`
-LogFileName="/var/log/giipAgentGateway_heartbeat_$Today.log"
+
+# Create log directory in script location
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+LOG_DIR="${SCRIPT_DIR}/log"
+mkdir -p "$LOG_DIR"
+
+LogFileName="${LOG_DIR}/giipAgentGateway_heartbeat_$Today.log"
 tmpDir="/tmp/giipGatewayHeartbeat_$$"
 mkdir -p $tmpDir
 

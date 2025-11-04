@@ -101,16 +101,16 @@ crontab -e
 
 ```bash
 # 오늘 로그 (실시간)
-tail -f /var/log/giipAgent_$(date +%Y%m%d).log
+tail -f log/giipAgent_$(date +%Y%m%d).log
 
 # Heartbeat 로그 (실시간)
-tail -f /var/log/giipAgentGateway_heartbeat_$(date +%Y%m%d).log
+tail -f log/giipAgentGateway_heartbeat_$(date +%Y%m%d).log
 
 # 최근 Gateway 활동 검색
-grep "\[Gateway" /var/log/giipAgent_$(date +%Y%m%d).log
+grep "\[Gateway" log/giipAgent_$(date +%Y%m%d).log
 
 # Heartbeat 성공 확인
-grep "✅" /var/log/giipAgentGateway_heartbeat_$(date +%Y%m%d).log
+grep "✅" log/giipAgentGateway_heartbeat_$(date +%Y%m%d).log
 ```
 
 **예상 로그 출력**:
@@ -215,7 +215,7 @@ ssh istyle@p-cnsldb01m
 which sshpass
 
 # 5. 로그 확인
-tail -50 /var/log/giipAgentGateway_heartbeat_$(date +%Y%m%d).log
+tail -50 log/giipAgentGateway_heartbeat_$(date +%Y%m%d).log
 ```
 
 ### 문제: "jq: command not found"
@@ -297,7 +297,7 @@ giipAgentLinux/
 ├── giipAgent.cnf                       # 설정 파일 (단일 설정)
 ├── giipAgentGateway-heartbeat.sh       # Heartbeat 스크립트 (자동 호출됨)
 ├── giipAgentGateway_servers.csv        # 서버 목록 (자동 생성)
-└── /var/log/
+└── log/                                # 로그 디렉토리 (자동 생성)
     ├── giipAgent_YYYYMMDD.log          # 메인 로그
     └── giipAgentGateway_heartbeat_YYYYMMDD.log  # Heartbeat 로그
 ```

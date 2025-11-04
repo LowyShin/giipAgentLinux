@@ -76,7 +76,7 @@ chmod +x giipAgentGateway-heartbeat.sh
 ./giipAgentGateway-heartbeat.sh
 
 # 로그 확인
-tail -f /var/log/giipAgentGateway_heartbeat_$(date +%Y%m%d).log
+tail -f log/giipAgentGateway_heartbeat_$(date +%Y%m%d).log
 ```
 
 ### 5. Cron 등록 (자동 실행)
@@ -137,7 +137,7 @@ curl -X POST "https://giipfaw.azurewebsites.net/api/giipApiSk2?code=YOUR_CODE" \
 
 ```bash
 # 오늘 로그
-tail -f /var/log/giipAgentGateway_heartbeat_$(date +%Y%m%d).log
+tail -f log/giipAgentGateway_heartbeat_$(date +%Y%m%d).log
 
 # 예상 출력:
 # [20251104123456] Gateway Heartbeat Started (v1.0) - Gateway LSSN: 71240

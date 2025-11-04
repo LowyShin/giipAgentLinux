@@ -854,7 +854,13 @@ hn=`hostname`
 tmpFileName="giipTmpScript.sh"
 logdt=`date '+%Y%m%d%H%M%S'`
 Today=`date '+%Y%m%d'`
-LogFileName="/var/log/giipAgent_$Today.log"
+
+# Create log directory in script location
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+LOG_DIR="${SCRIPT_DIR}/log"
+mkdir -p "$LOG_DIR"
+
+LogFileName="${LOG_DIR}/giipAgent_$Today.log"
 lwDownloadURL=`echo "${apiaddr}/api/cqe/cqequeueget03.asp?sk=$sk&lssn=$lssn&hn=${hn}&os=$os&df=os&sv=${sv}" | sed -e "s/ /\%20/g"`
 echo $lwDownloadURL
 
