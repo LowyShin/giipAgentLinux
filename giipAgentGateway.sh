@@ -45,19 +45,58 @@ execute_remote_command() {
 	local remote_port=$3
 	local remote_lssn=$4
 	local ssh_key=$5
-	local script_file=$6
+	local ssh_password=$6
+	local script_file=$7
 	
 	local ssh_opts="-o StrictHostKeyChecking=no -o ConnectTimeout=10"
 	
-	if [ "${ssh_key}" != "" ] && [ -f "${ssh_key}" ]; then
+	# Determine authentication method
+	local use_password=0
+	local use_key=0
+	
+	if [ -n "${ssh_password}" ]; then
+		# Password authentication
+		use_password=1
+		echo "  → Using password authentication"
+	elif [ -n "${ssh_key}" ] && [ -f "${ssh_key}" ]; then
+		# Key authentication
+		use_key=1
 		ssh_opts="${ssh_opts} -i ${ssh_key}"
+		echo "  → Using key authentication: ${ssh_key}"
+	else
+		echo "  → Warning: No authentication method specified, using default"
 	fi
 	
 	# Copy script to remote server
-	scp ${ssh_opts} -P ${remote_port} ${script_file} ${remote_user}@${remote_host}:/tmp/giipTmpScript.sh
-	
-	# Execute script on remote server
-	ssh ${ssh_opts} -p ${remote_port} ${remote_user}@${remote_host} "chmod +x /tmp/giipTmpScript.sh && /tmp/giipTmpScript.sh && rm -f /tmp/giipTmpScript.sh"
+	if [ ${use_password} -eq 1 ]; then
+		# Check if sshpass is installed
+		if ! command -v sshpass &> /dev/null; then
+			echo "  → Error: sshpass not installed. Run install-sshpass.sh first"
+			return 1
+		fi
+		
+		# Use sshpass for password authentication
+		sshpass -p "${ssh_password}" scp ${ssh_opts} -P ${remote_port} ${script_file} ${remote_user}@${remote_host}:/tmp/giipTmpScript.sh 2>&1
+		
+		if [ $? -ne 0 ]; then
+			echo "  → Failed to copy script (password auth)"
+			return 1
+		fi
+		
+		# Execute script on remote server
+		sshpass -p "${ssh_password}" ssh ${ssh_opts} -p ${remote_port} ${remote_user}@${remote_host} "chmod +x /tmp/giipTmpScript.sh && /tmp/giipTmpScript.sh && rm -f /tmp/giipTmpScript.sh" 2>&1
+	else
+		# Use key authentication (or default)
+		scp ${ssh_opts} -P ${remote_port} ${script_file} ${remote_user}@${remote_host}:/tmp/giipTmpScript.sh 2>&1
+		
+		if [ $? -ne 0 ]; then
+			echo "  → Failed to copy script (key auth)"
+			return 1
+		fi
+		
+		# Execute script on remote server
+		ssh ${ssh_opts} -p ${remote_port} ${remote_user}@${remote_host} "chmod +x /tmp/giipTmpScript.sh && /tmp/giipTmpScript.sh && rm -f /tmp/giipTmpScript.sh" 2>&1
+	fi
 	
 	return $?
 }
@@ -83,7 +122,7 @@ get_server_queue() {
 
 # Main loop - Process each server in the list
 process_servers() {
-	while IFS=',' read -r hostname lssn ssh_host ssh_user ssh_port ssh_key os_info enabled; do
+	while IFS=',' read -r hostname lssn ssh_host ssh_user ssh_port ssh_key ssh_password os_info enabled; do
 		# Skip comments and empty lines
 		[[ $hostname =~ ^#.*$ ]] && continue
 		[[ -z $hostname ]] && continue
@@ -100,6 +139,7 @@ process_servers() {
 		ssh_user=`echo $ssh_user | xargs`
 		ssh_port=`echo $ssh_port | xargs`
 		ssh_key=`echo $ssh_key | xargs`
+		ssh_password=`echo $ssh_password | xargs`
 		os_info=`echo $os_info | xargs`
 		
 		# Default SSH port
@@ -130,8 +170,8 @@ process_servers() {
 			
 			echo "[$logdt] Queue received for ${hostname}, executing remotely..." >> $LogFileName
 			
-			# Execute on remote server via SSH
-			execute_remote_command "$ssh_host" "$ssh_user" "$ssh_port" "$lssn" "$ssh_key" "$tmpFileName"
+			# Execute on remote server via SSH (with password support)
+			execute_remote_command "$ssh_host" "$ssh_user" "$ssh_port" "$lssn" "$ssh_key" "$ssh_password" "$tmpFileName"
 			
 			if [ $? -eq 0 ]; then
 				echo "[$logdt] Successfully executed on ${hostname}" >> $LogFileName

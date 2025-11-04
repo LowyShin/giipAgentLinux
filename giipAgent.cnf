@@ -23,6 +23,30 @@ lssn="0"
 # 60 = Check queue every 60 seconds
 giipagentdelay="60"
 
+# Gateway Mode (NEW in v1.80)
+# Set to "1" to enable Gateway mode for managing remote servers
+# Set to "0" for normal local agent mode
+# 
+# When enabled:
+#   - Automatically fetches remote server list from GIIP Web UI
+#   - No manual CSV file editing needed
+#   - All configuration done via Web UI (lsvrdetail page)
+#   - Auto-installs sshpass if needed
+#   - Supports both SSH key and password authentication
+gateway_mode="0"
+
+# Gateway server list cache file (auto-generated from API)
+gateway_serverlist="./giipAgentGateway_servers.csv"
+
+# Gateway database query list cache file (auto-generated from API)
+# Supports: MySQL, MariaDB, MSSQL, PostgreSQL, Oracle, MongoDB, Redis
+gateway_db_querylist="./giipAgentGateway_db_queries.csv"
+
+# Auto-sync interval (seconds)
+# How often to refresh server list from Web UI
+# Default: 300 = 5 minutes
+gateway_sync_interval="300"
+
 # API v2 (Recommended) - PowerShell-based, faster and more stable
 apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
 apiaddrcode="YOUR_AZURE_FUNCTION_KEY_HERE"

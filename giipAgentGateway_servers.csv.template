@@ -5,7 +5,7 @@
 #   cp giipAgentGateway_servers.csv.template giipAgentGateway_servers.csv
 #   vi giipAgentGateway_servers.csv
 #
-# CSV Format: hostname,lssn,ssh_host,ssh_user,ssh_port,ssh_key_path,os_info,enabled
+# CSV Format: hostname,lssn,ssh_host,ssh_user,ssh_port,ssh_key_path,ssh_password,os_info,enabled
 # 
 # Fields:
 #   hostname     - Server hostname (for GIIP identification)
@@ -13,26 +13,39 @@
 #   ssh_host     - SSH connection address (IP or hostname)
 #   ssh_user     - SSH username
 #   ssh_port     - SSH port (default: 22)
-#   ssh_key_path - Path to SSH private key (optional, empty for password auth)
+#   ssh_key_path - Path to SSH private key (optional, leave empty for password auth)
+#   ssh_password - SSH password (optional, leave empty for key auth) ⚠️ PLAINTEXT!
 #   os_info      - OS information (e.g., "CentOS 7", "Ubuntu 20.04")
 #   enabled      - 1=enabled, 0=disabled
 #
+# Authentication Methods:
+#   🔑 SSH Key Auth (Recommended): Provide ssh_key_path, leave ssh_password empty
+#   🔒 Password Auth: Leave ssh_key_path empty, provide ssh_password
+#   ⚠️ Password is stored in PLAINTEXT in this file. Use key auth when possible!
+#
 # Example entries:
-# webserver01,1001,192.168.1.10,root,22,~/.ssh/id_rsa,CentOS%207,1
-# dbserver01,1002,192.168.1.20,dbadmin,2222,~/.ssh/db_key,Ubuntu%2020.04,1
-# appserver01,1003,10.0.0.30,appuser,22,,RHEL%208,1
+# webserver01,1001,192.168.1.10,root,22,~/.ssh/id_rsa,,CentOS%207,1
+# dbserver01,1002,192.168.1.20,dbadmin,2222,~/.ssh/db_key,,Ubuntu%2020.04,1
+# oldserver01,1003,10.0.0.30,admin,22,,MyPassword123,RHEL%205,1
 #
 # Notes:
 # - Use %20 for spaces in os_info field (URL encoding)
 # - Lines starting with # are ignored
-# - Empty ssh_key_path means password authentication (not recommended)
+# - For key auth: Leave ssh_password empty
+# - For password auth: Leave ssh_key_path empty (requires sshpass)
 # - Ensure SSH keys have proper permissions (chmod 600)
 # - Set enabled=0 to temporarily disable a server without removing it
+# - ⚠️ SECURITY: This file contains passwords! Set permissions: chmod 600
 
 # Production Servers
-# hostname,lssn,ssh_host,ssh_user,ssh_port,ssh_key_path,os_info,enabled
-#webserver01,1001,192.168.1.10,root,22,~/.ssh/id_rsa,CentOS%207,1
-#dbserver01,1002,192.168.1.20,dbadmin,22,~/.ssh/id_rsa,Ubuntu%2020.04,1
+# hostname,lssn,ssh_host,ssh_user,ssh_port,ssh_key_path,ssh_password,os_info,enabled
+
+# SSH Key Authentication (Recommended)
+#webserver01,1001,192.168.1.10,root,22,~/.ssh/id_rsa,,CentOS%207,1
+#dbserver01,1002,192.168.1.20,dbadmin,22,~/.ssh/id_rsa,,Ubuntu%2020.04,1
+
+# Password Authentication (For servers with PubkeyAuthentication disabled)
+#oldserver01,1003,10.0.0.30,admin,22,,SecretPass123,RHEL%205,1
 
 # Test Servers (disabled by default)
-#testserver01,2001,192.168.2.10,testuser,22,~/.ssh/test_key,Ubuntu%2022.04,0
+#testserver01,2001,192.168.2.10,testuser,22,~/.ssh/test_key,,Ubuntu%2022.04,0

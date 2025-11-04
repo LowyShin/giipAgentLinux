@@ -38,12 +38,14 @@ GIIP Agent Gateway is a special version of GIIP Agent designed for **bastion/gat
 ## Features
 
 - ✅ Manage multiple remote servers from single gateway
-- ✅ SSH key-based authentication
-- ✅ Per-server configuration (hostname, port, SSH key)
+- ✅ SSH key-based authentication (recommended)
+- ✅ SSH password-based authentication (for legacy servers)
+- ✅ Per-server configuration (hostname, port, SSH key/password)
 - ✅ Parallel or sequential execution
 - ✅ Individual LSSN (Server ID) for each remote server
 - ✅ Enable/disable servers without removing configuration
 - ✅ Centralized logging
+- ✅ Encrypted password storage in database
 
 ## Installation
 
@@ -173,12 +175,87 @@ chmod 600 ~/.ssh/authorized_keys
 ### Test SSH Connection
 
 ```bash
-# Test connection
+# Test key authentication
 ssh -i ~/.ssh/giip_gateway_key root@192.168.1.10 "hostname && uname -a"
 
 # Test without password prompt
 ssh -o BatchMode=yes -i ~/.ssh/giip_gateway_key root@192.168.1.10 "echo success"
+
+# Test password authentication (if PubkeyAuthentication is disabled)
+sshpass -p 'your_password' ssh root@192.168.1.10 "hostname"
 ```
+
+## SSH Authentication Methods
+
+### Method 1: SSH Key Authentication (Recommended)
+
+**Advantages:**
+- ✅ More secure (no password transmission)
+- ✅ No sshpass dependency
+- ✅ Faster authentication
+- ✅ Can use SSH agent
+
+**Configuration:**
+- Set `ssh_key_path` in server CSV
+- Leave `ssh_password` empty
+
+### Method 2: Password Authentication
+
+**Use Cases:**
+- ⚠️ Legacy servers with `PubkeyAuthentication no`
+- ⚠️ Corporate policy requires password auth
+- ⚠️ Cannot modify remote server SSH config
+
+**Advantages:**
+- ✅ Works with any SSH server
+- ✅ No key file management
+
+**Disadvantages:**
+- ❌ Less secure (password in CSV file)
+- ❌ Requires sshpass installation
+- ❌ Password visible in process list (briefly)
+
+**Configuration:**
+1. Install sshpass:
+```bash
+chmod +x install-sshpass.sh
+sudo ./install-sshpass.sh
+```
+
+2. Configure server with password:
+```csv
+# Leave ssh_key_path empty, provide password
+oldserver01,1003,10.0.0.30,admin,22,,MyPassword123,RHEL%205,1
+```
+
+3. **Security**: Set file permissions
+```bash
+chmod 600 giipAgentGateway_servers.csv
+```
+
+### Automatic Sync from Database
+
+If you store passwords encrypted in the GIIP database:
+
+```bash
+# Configure database connection in giipAgentGateway.cnf
+db_server="your-db-server.database.windows.net"
+db_name="giipDB"
+db_user="giip_readonly"
+db_password="your_db_password"
+
+# Sync servers from database (decrypts passwords)
+chmod +x sync-gateway-servers.sh
+./sync-gateway-servers.sh
+
+# This generates giipAgentGateway_servers.csv automatically
+```
+
+**Benefits:**
+- ✅ Passwords encrypted in database
+- ✅ Centralized management via Web UI
+- ✅ Auto-sync with database
+- ✅ No manual CSV editing
 
 ## Running the Gateway Agent
 
