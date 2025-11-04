@@ -47,6 +47,13 @@ gateway_db_querylist="./giipAgentGateway_db_queries.csv"
 # Default: 300 = 5 minutes
 gateway_sync_interval="300"
 
+# Gateway heartbeat interval (seconds)
+# How often to collect remote server info (OS, memory, disk, etc.) via SSH
+# This keeps LSChkdt updated in tLSvr table so servers show as "online"
+# Recommended: 300 (5 minutes) or 600 (10 minutes)
+# Set to 0 to disable heartbeat
+gateway_heartbeat_interval="300"
+
 # API v2 (Recommended) - PowerShell-based, faster and more stable
 apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
 apiaddrcode="YOUR_AZURE_FUNCTION_KEY_HERE"

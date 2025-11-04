@@ -7,24 +7,59 @@
 sv="1.0"
 
 # Load configuration
-if [ ! -f "./giipAgentGateway.cnf" ]; then
-    echo "Error: giipAgentGateway.cnf not found"
+config_file=""
+if [ -f "./giipAgent.cnf" ]; then
+    config_file="./giipAgent.cnf"
+elif [ -f "../giipAgent.cnf" ]; then
+    config_file="../giipAgent.cnf"
+elif [ -f "./giipAgentGateway.cnf" ]; then
+    config_file="./giipAgentGateway.cnf"
+else
+    echo "Error: Configuration file not found (giipAgent.cnf or giipAgentGateway.cnf)"
     exit 1
 fi
 
-. ./giipAgentGateway.cnf
+echo "Loading configuration from: $config_file"
+. $config_file
+
+# Get Gateway server's own LSSN from config
+if [ -z "$lssn" ]; then
+    echo "Error: lssn not configured in $config_file"
+    exit 1
+fi
+
+gateway_lssn="$lssn"
+
+# Get CSN from config (if not set, try to get from API)
+if [ -z "$csn" ]; then
+    echo "Warning: csn not configured, will try to detect from API"
+fi
+
+# API configuration
+if [ -z "$apiaddrv2" ]; then
+    apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
+fi
+
+if [ -z "$sk" ]; then
+    echo "Error: sk (secret key) not configured in $config_file"
+    exit 1
+fi
 
 # Check required tools
 for cmd in ssh sshpass curl jq; do
     if ! command -v $cmd &> /dev/null; then
         echo "Error: $cmd is not installed"
-        exit 1
+        echo "Please install: $cmd"
+        # Don't exit, just warn - giipAgent.sh will handle sshpass installation
+        if [ "$cmd" != "sshpass" ]; then
+            exit 1
+        fi
     fi
 done
 
 # Get Gateway server's own LSSN
 if [ -z "$gateway_lssn" ]; then
-    echo "Error: gateway_lssn not configured in giipAgentGateway.cnf"
+    echo "Error: gateway_lssn (lssn) not found in configuration"
     exit 1
 fi
 
@@ -48,7 +83,7 @@ get_managed_servers() {
         -d "{
             \"text\": \"GatewayRemoteServerList\",
             \"token\": \"$sk\",
-            \"csn\": $csn,
+            \"csn\": ${csn:-0},
             \"gateway_lssn\": $gateway_lssn
         }" > "$response_file"
     

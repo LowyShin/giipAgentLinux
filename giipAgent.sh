@@ -21,6 +21,11 @@ if [ "${gateway_mode}" = "" ];then
 	gateway_mode="0"
 fi
 
+# Gateway heartbeat interval (seconds) - how often to collect remote server info
+if [ "${gateway_heartbeat_interval}" = "" ];then
+	gateway_heartbeat_interval="300"  # Default: 5 minutes
+fi
+
 # Self Check
 cntgiip=`ps aux | grep giipAgent.sh | grep -v grep | wc -l`
 
@@ -902,6 +907,9 @@ if [ "${gateway_mode}" = "1" ]; then
 	# Track last sync time
 	last_sync_time=$(date +%s)
 	
+	# Track last heartbeat time
+	last_heartbeat_time=0
+	
 	# Gateway main loop
 	while [ ${cntgiip} -le 3 ]; do
 		logdt=`date '+%Y%m%d%H%M%S'`
@@ -921,6 +929,28 @@ if [ "${gateway_mode}" = "1" ]; then
 				
 				last_sync_time=$current_time
 			fi
+		fi
+		
+		# Check if we need to run heartbeat (collect remote server info)
+		current_time=$(date +%s)
+		heartbeat_diff=$((current_time - last_heartbeat_time))
+		
+		if [ $heartbeat_diff -ge ${gateway_heartbeat_interval} ]; then
+			echo "[$logdt] [Gateway-Heartbeat] Running heartbeat to collect remote server info..." >> $LogFileName
+			
+			# Check if heartbeat script exists
+			heartbeat_script="./giipAgentGateway-heartbeat.sh"
+			if [ -f "$heartbeat_script" ]; then
+				# Execute heartbeat script in background (non-blocking)
+				bash "$heartbeat_script" >> $LogFileName 2>&1 &
+				heartbeat_pid=$!
+				echo "[$logdt] [Gateway-Heartbeat] Started (PID: $heartbeat_pid)" >> $LogFileName
+			else
+				echo "[$logdt] [Gateway-Heartbeat] ⚠️  Script not found: $heartbeat_script" >> $LogFileName
+				echo "[$logdt] [Gateway-Heartbeat] Remote server info collection will be skipped" >> $LogFileName
+			fi
+			
+			last_heartbeat_time=$current_time
 		fi
 		
 		# Process database queries first
