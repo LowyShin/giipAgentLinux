@@ -146,7 +146,8 @@ JSON_PAYLOAD=$(jq -n \
   '{kType: $kType, kKey: $kKey, kFactor: $kFactor, kValue: $kValue}')
 
 # KVSP text: procedure name + parameter NAMES only (as required by giipapi)
-KVSP_TEXT="KVSPut kType kKey kFactor kValue"
+# NOTE: kValue는 text에 포함하지 않음 (jsondata 전체로 전달됨)
+KVSP_TEXT="KVSPut kType kKey kFactor"
 
 # Build form parameters: text, token, jsondata
 POST_DATA="text=$(printf "%s" "$KVSP_TEXT" | jq -sRr @uri)"
