@@ -47,7 +47,12 @@ MSSQL_PORT="1433"
 MSSQL_USER=""
 MSSQL_PASSWORD=""
 MSSQL_DATABASE=""
+K_TYPE="lssn"
+K_KEY=""
 K_FACTOR="sqlnetinv"
+KVS_ENDPOINT=""
+USER_TOKEN=""
+FUNCTION_CODE=""
 
 # ============================================================
 # 로그 함수
@@ -97,12 +102,31 @@ load_config() {
             Endpoint) KVS_ENDPOINT="$value" ;;
             FunctionCode) FUNCTION_CODE="$value" ;;
             UserToken) USER_TOKEN="$value" ;;
+            apiaddrv2) KVS_ENDPOINT="$value" ;;
+            apiaddrcode) FUNCTION_CODE="$value" ;;
+            sk) USER_TOKEN="$value" ;;
+            lssn) K_KEY="$value" ;;
             KType) K_TYPE="$value" ;;
             KKey) K_KEY="$value" ;;
         esac
     done < "$CONFIG_FILE"
     
+    # 기본값 설정
+    if [ -z "$K_TYPE" ]; then
+        K_TYPE="lssn"
+        log "K_TYPE not set, using default: $K_TYPE"
+    fi
+    
+    if [ -z "$K_KEY" ]; then
+        log "WARNING: K_KEY not set, this will cause API errors"
+    fi
+    
+    if [ -z "$KVS_ENDPOINT" ]; then
+        log "WARNING: KVS_ENDPOINT not set"
+    fi
+    
     log "Config loaded: Host=$MSSQL_HOST, Port=$MSSQL_PORT, Database=$MSSQL_DATABASE"
+    log "KVS Config: K_TYPE=$K_TYPE, K_KEY=$K_KEY, K_FACTOR=$K_FACTOR"
 }
 
 # ============================================================
