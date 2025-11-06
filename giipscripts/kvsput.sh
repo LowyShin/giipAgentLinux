@@ -4,12 +4,19 @@
 #   Reads a JSON file and uploads its contents to KVS endpoint as per giipAgent.cfg
 #
 # USAGE:
-#   ./kvs-upload-json.sh <json_file> [<kfactor>]
+#   ./kvsput.sh <json_file> <kfactor>
 #
 # DESCRIPTION:
 #   - Reads giipAgent.cfg for KVS configuration
 #   - Reads the specified JSON file
 #   - Uploads the JSON data to the KVS endpoint using curl
+#
+# SPECIFICATIONS:
+#   - API Rules: giipfaw/docs/giipapi_rules.md (text/jsondata 분리 규칙)
+#   - API Pattern: giipfaw/docs/GIIPAPISK2_API_PATTERN.md
+#   - KVS Spec: giipAgentLinux/docs/KVSPUT_API_SPECIFICATION.md ⭐⭐
+#   - Architecture: giipdb/docs/KVSPUT_ARCHITECTURE.md
+#   - CQE System: giipdb/docs/CQE_SYSTEM_ARCHITECTURE.md
 #
 
 set -e
