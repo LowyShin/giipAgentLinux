@@ -28,8 +28,9 @@ if [ "${gateway_heartbeat_interval}" = "" ];then
 	gateway_heartbeat_interval="300"  # Default: 5 minutes
 fi
 
-# Self Check
-cntgiip=`ps aux | grep giipAgent2.sh | grep -v grep | wc -l`
+# Self Check - Skip for single execution mode (no loop)
+# cntgiip=`ps aux | grep giipAgent2.sh | grep -v grep | wc -l`
+cntgiip=1  # Always assume single process
 
 # ============================================================================
 # Gateway Mode Functions
@@ -1241,9 +1242,8 @@ echo "[$logdt] Version: ${sv}, LSSN: ${lssn}, Hostname: ${hn}" >> $LogFileName
 startup_details="{\"pid\":$$,\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${lwAPIURL}\"}"
 save_execution_log "startup" "$startup_details"
 
-# self process count = 2
-while [ ${cntgiip} -le 3 ];
-do
+# Run once and exit (no loop)
+cntgiip=999  # Force single execution
 
 	#curl -o $tmpFileName "$lwDownloadURL"
 	# Use POST method for giipApiSk2
@@ -1425,7 +1425,7 @@ do
 		fi
 	fi
 	rm -f $tmpFileName
-done
+# End of single execution (no loop)
 
 # Save Agent shutdown to KVS
 if [ ${cntgiip} -ge 4 ]; then
