@@ -74,7 +74,7 @@ cat > "$TMP_DIR/test_startup.json" << EOF
 EOF
 
 echo "[INFO] Sending startup event to KVS..." | tee -a "$LOG_FILE"
-if bash "${SCRIPT_DIR}/giipscripts/kvsput.sh" "$TMP_DIR/test_startup.json" "giipagent" 2>&1 | tee -a "$LOG_FILE"; then
+if CONFIG_FILE="$CFG_PATH" bash "${SCRIPT_DIR}/giipscripts/kvsput.sh" "$TMP_DIR/test_startup.json" "giipagent" 2>&1 | tee -a "$LOG_FILE"; then
     echo "[SUCCESS] Startup event sent" | tee -a "$LOG_FILE"
 else
     echo "[FAILED] Startup event failed" | tee -a "$LOG_FILE"
@@ -105,7 +105,7 @@ cat > "$TMP_DIR/test_queue_check.json" << EOF
 EOF
 
 echo "[INFO] Sending queue check event to KVS..." | tee -a "$LOG_FILE"
-if bash "${SCRIPT_DIR}/giipscripts/kvsput.sh" "$TMP_DIR/test_queue_check.json" "giipagent" 2>&1 | tee -a "$LOG_FILE"; then
+if CONFIG_FILE="$CFG_PATH" bash "${SCRIPT_DIR}/giipscripts/kvsput.sh" "$TMP_DIR/test_queue_check.json" "giipagent" 2>&1 | tee -a "$LOG_FILE"; then
     echo "[SUCCESS] Queue check event sent" | tee -a "$LOG_FILE"
 else
     echo "[FAILED] Queue check event failed" | tee -a "$LOG_FILE"
@@ -135,7 +135,7 @@ cat > "$TMP_DIR/test_script_execution.json" << EOF
 EOF
 
 echo "[INFO] Sending script execution event to KVS..." | tee -a "$LOG_FILE"
-if bash "${SCRIPT_DIR}/giipscripts/kvsput.sh" "$TMP_DIR/test_script_execution.json" "giipagent" 2>&1 | tee -a "$LOG_FILE"; then
+if CONFIG_FILE="$CFG_PATH" bash "${SCRIPT_DIR}/giipscripts/kvsput.sh" "$TMP_DIR/test_script_execution.json" "giipagent" 2>&1 | tee -a "$LOG_FILE"; then
     echo "[SUCCESS] Script execution event sent" | tee -a "$LOG_FILE"
 else
     echo "[FAILED] Script execution event failed" | tee -a "$LOG_FILE"
@@ -166,7 +166,7 @@ cat > "$TMP_DIR/test_error.json" << EOF
 EOF
 
 echo "[INFO] Sending error event to KVS..." | tee -a "$LOG_FILE"
-if bash "${SCRIPT_DIR}/giipscripts/kvsput.sh" "$TMP_DIR/test_error.json" "giipagent" 2>&1 | tee -a "$LOG_FILE"; then
+if CONFIG_FILE="$CFG_PATH" bash "${SCRIPT_DIR}/giipscripts/kvsput.sh" "$TMP_DIR/test_error.json" "giipagent" 2>&1 | tee -a "$LOG_FILE"; then
     echo "[SUCCESS] Error event sent" | tee -a "$LOG_FILE"
 else
     echo "[FAILED] Error event failed" | tee -a "$LOG_FILE"
@@ -196,7 +196,7 @@ cat > "$TMP_DIR/test_shutdown.json" << EOF
 EOF
 
 echo "[INFO] Sending shutdown event to KVS..." | tee -a "$LOG_FILE"
-if bash "${SCRIPT_DIR}/giipscripts/kvsput.sh" "$TMP_DIR/test_shutdown.json" "giipagent" 2>&1 | tee -a "$LOG_FILE"; then
+if CONFIG_FILE="$CFG_PATH" bash "${SCRIPT_DIR}/giipscripts/kvsput.sh" "$TMP_DIR/test_shutdown.json" "giipagent" 2>&1 | tee -a "$LOG_FILE"; then
     echo "[SUCCESS] Shutdown event sent" | tee -a "$LOG_FILE"
 else
     echo "[FAILED] Shutdown event failed" | tee -a "$LOG_FILE"
