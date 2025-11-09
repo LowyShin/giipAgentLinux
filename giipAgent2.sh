@@ -1257,11 +1257,27 @@ do
 		# Debug: Log full response (limited to 500 chars)
 		echo "[$logdt] [DEBUG] Response: $(head -c 500 $tmpFileName | tr '\n' ' ')" >> $LogFileName
 		
-		# Check if response is JSON (giipApiSk2 format)
-		# More lenient check: just look for opening brace and "data" field
-		is_json=$(cat "$tmpFileName" | grep -E '^\s*\{' | grep -E '"data"')
+		# Check if response contains JSON (even error JSON)
+		# Look for opening brace - if it's JSON, DON'T execute it as script
+		is_json=$(head -c 10 "$tmpFileName" | grep -E '^\s*\{')
 		
 		if [ -n "$is_json" ]; then
+			# It's JSON - check if it's error or success
+			if grep -q '"error"' "$tmpFileName"; then
+				# Error response
+				error_msg=$(cat "$tmpFileName" | grep -o '"error"\s*:\s*"[^"]*"' | sed 's/"error"\s*:\s*"//; s/"$//' | head -1)
+				echo "[$logdt] ❌ API Error: $error_msg" >> $LogFileName
+				
+				# Save error to KVS
+				error_details="{\"error_type\":\"api_error\",\"error_message\":\"${error_msg}\",\"error_code\":1,\"context\":\"queue_fetch\"}"
+				save_execution_log "error" "$error_details"
+				
+				rm -f $tmpFileName
+				cntgiip=999
+				continue
+			fi
+			
+			# Try to extract RstVal and other fields
 			# Extract fields from JSON
 			rstval=$(cat "$tmpFileName" | grep -o '"RstVal"\s*:\s*"[^"]*"' | sed 's/"RstVal"\s*:\s*"//; s/"$//' | head -1)
 			script_body=$(cat "$tmpFileName" | grep -o '"ms_body"\s*:\s*"[^"]*"' | sed 's/"ms_body"\s*:\s*"//; s/"$//' | sed 's/\\n/\n/g')
