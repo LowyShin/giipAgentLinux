@@ -1254,6 +1254,9 @@ do
 		--no-check-certificate -q
 
 	if [ -s ${tmpFileName} ];then
+		# Debug: Log first 200 chars of response
+		echo "[$logdt] [DEBUG] Response preview: $(head -c 200 $tmpFileName)" >> $LogFileName
+		
 		# Check if response is JSON (giipApiSk2 format)
 		# Try to detect JSON by checking for common JSON patterns
 		is_json=$(cat "$tmpFileName" | grep -E '^\s*\{.*"RstVal"')
