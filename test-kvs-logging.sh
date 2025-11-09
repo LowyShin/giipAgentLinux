@@ -21,24 +21,17 @@ echo "===============================================" | tee -a "$LOG_FILE"
 echo "KVS Logging Test - $(date '+%Y-%m-%d %H:%M:%S')" | tee -a "$LOG_FILE"
 echo "===============================================" | tee -a "$LOG_FILE"
 
-# Load config - Use DEPLOYED config, NOT repository template!
-# ⚠️ Repository giipAgent.cnf is TEMPLATE ONLY (lssn=0)
-# ✅ ALWAYS use deployed config from /home/giip
+# Load config - Follow giipAgent2.sh logic (Line 15: . ../giipAgent.cnf)
+# giipAgent2.sh reads from parent directory
+CFG_PATH="${SCRIPT_DIR}/../giipAgent.cnf"
 
-if [ -f "/home/giip/giipAgentLinux/giipAgent.cnf" ]; then
-    CFG_PATH="/home/giip/giipAgentLinux/giipAgent.cnf"
-    echo "[INFO] Using server config: /home/giip/giipAgentLinux/giipAgent.cnf" | tee -a "$LOG_FILE"
-elif [ -f "${SCRIPT_DIR}/giipAgent.cnf" ]; then
-    echo "[WARNING] Using repository template config (may have lssn=0)" | tee -a "$LOG_FILE"
-    echo "[WARNING] This is for testing only!" | tee -a "$LOG_FILE"
-    CFG_PATH="${SCRIPT_DIR}/giipAgent.cnf"
-else
-    echo "[ERROR] Config file not found in:" | tee -a "$LOG_FILE"
-    echo "  - /opt/giipAgentLinux/giipAgent.cnf" | tee -a "$LOG_FILE"
-    echo "  - /home/giip/giipAgentLinux/giipAgent.cnf" | tee -a "$LOG_FILE"
-    echo "  - ${SCRIPT_DIR}/giipAgent.cnf" | tee -a "$LOG_FILE"
+if [ ! -f "$CFG_PATH" ]; then
+    echo "[ERROR] Config file not found: $CFG_PATH" | tee -a "$LOG_FILE"
+    echo "[ERROR] giipAgent2.sh expects config at: ../giipAgent.cnf" | tee -a "$LOG_FILE"
     exit 1
 fi
+
+echo "[INFO] Using config (same as giipAgent2.sh): $CFG_PATH" | tee -a "$LOG_FILE"
 
 echo "[INFO] Loading config from: $CFG_PATH" | tee -a "$LOG_FILE"
 
