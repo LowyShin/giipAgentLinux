@@ -1255,12 +1255,16 @@ do
 
 	if [ -s ${tmpFileName} ];then
 		# Check if response is JSON (giipApiSk2 format)
-		is_json=$(cat "$tmpFileName" | grep -o '^{.*}$')
+		# Try to detect JSON by checking for common JSON patterns
+		is_json=$(cat "$tmpFileName" | grep -E '^\s*\{.*"RstVal"')
+		
 		if [ -n "$is_json" ]; then
 			# Extract fields from JSON
-			rstval=$(cat "$tmpFileName" | grep -o '"RstVal":"[^"]*"' | sed 's/"RstVal":"//; s/"$//' | head -1)
-			script_body=$(cat "$tmpFileName" | grep -o '"ms_body":"[^"]*"' | sed 's/"ms_body":"//; s/"$//' | sed 's/\\n/\n/g')
-			mssn=$(cat "$tmpFileName" | grep -o '"mssn":[0-9]*' | sed 's/"mssn"://' | head -1)
+			rstval=$(cat "$tmpFileName" | grep -o '"RstVal"\s*:\s*"[^"]*"' | sed 's/"RstVal"\s*:\s*"//; s/"$//' | head -1)
+			script_body=$(cat "$tmpFileName" | grep -o '"ms_body"\s*:\s*"[^"]*"' | sed 's/"ms_body"\s*:\s*"//; s/"$//' | sed 's/\\n/\n/g')
+			mssn=$(cat "$tmpFileName" | grep -o '"mssn"\s*:\s*[0-9]*' | sed 's/"mssn"\s*:\s*//' | head -1)
+			
+			echo "[$logdt] [DEBUG] JSON detected - RstVal=$rstval, mssn=$mssn, script_body_len=${#script_body}" >> $LogFileName
 			
 			if [ "$rstval" = "404" ]; then
 				# No queue available
@@ -1281,7 +1285,7 @@ do
 					echo "[$logdt] Queue received (ms_body)" >> $LogFileName
 					
 					# Save queue check to KVS
-					queue_check_details="{\"api_response\":\"200\",\"has_queue\":true,\"mssn\":${mssn},\"script_source\":\"ms_body\"}"
+					queue_check_details="{\"api_response\":\"200\",\"has_queue\":true,\"mssn\":${mssn:-0},\"script_source\":\"ms_body\"}"
 					save_execution_log "queue_check" "$queue_check_details"
 				elif [ -n "$mssn" ] && [ "$mssn" != "null" ] && [ "$mssn" != "0" ]; then
 					# ms_body is empty, fetch from repository
@@ -1320,18 +1324,28 @@ do
 				echo "[$logdt] ⚠️  API error: RstVal=$rstval" >> $LogFileName
 				
 				# Save error to KVS
-				error_details="{\"error_type\":\"api_error\",\"error_message\":\"Unexpected API response\",\"error_code\":${rstval},\"context\":\"queue_check\"}"
+				error_details="{\"error_type\":\"api_error\",\"error_message\":\"Unexpected API response\",\"error_code\":${rstval:-0},\"context\":\"queue_check\"}"
 				save_execution_log "error" "$error_details"
 				
 				rm -f $tmpFileName
 				cntgiip=999
 				continue
 			fi
+		else
+			# Not JSON, assume it's raw script (backward compatibility)
+			echo "[$logdt] Non-JSON response detected, treating as raw script" >> $LogFileName
 		fi
 		
-		ls -l $tmpFileName
-		dos2unix $tmpFileName
-		echo "[$logdt] Downloaded queue... " >> $LogFileName
+		# Only process if file still has content and is not JSON error response
+		if [ -s ${tmpFileName} ]; then
+			ls -l $tmpFileName
+			dos2unix $tmpFileName
+			echo "[$logdt] Downloaded queue... " >> $LogFileName
+		else
+			echo "[$logdt] Empty script file after processing" >> $LogFileName
+			cntgiip=999
+			continue
+		fi
 	else
 		echo "[$logdt] No queue" >> $LogFileName
 		
