@@ -23,12 +23,11 @@ echo "===============================================" | tee -a "$LOG_FILE"
 
 # Load config - Use DEPLOYED config, NOT repository template!
 # ⚠️ Repository giipAgent.cnf is TEMPLATE ONLY (lssn=0)
-# ✅ ALWAYS use deployed config from /opt or /home/giip
+# ✅ ALWAYS use deployed config from /home/giip
 
-if [ -f "/opt/giipAgentLinux/giipAgent.cnf" ]; then
-    CFG_PATH="/opt/giipAgentLinux/giipAgent.cnf"
-elif [ -f "/home/giip/giipAgentLinux/giipAgent.cnf" ]; then
+if [ -f "/home/giip/giipAgentLinux/giipAgent.cnf" ]; then
     CFG_PATH="/home/giip/giipAgentLinux/giipAgent.cnf"
+    echo "[INFO] Using server config: /home/giip/giipAgentLinux/giipAgent.cnf" | tee -a "$LOG_FILE"
 elif [ -f "${SCRIPT_DIR}/giipAgent.cnf" ]; then
     echo "[WARNING] Using repository template config (may have lssn=0)" | tee -a "$LOG_FILE"
     echo "[WARNING] This is for testing only!" | tee -a "$LOG_FILE"
