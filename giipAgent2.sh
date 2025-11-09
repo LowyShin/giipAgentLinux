@@ -1254,12 +1254,12 @@ do
 		--no-check-certificate -q
 
 	if [ -s ${tmpFileName} ];then
-		# Debug: Log first 200 chars of response
-		echo "[$logdt] [DEBUG] Response preview: $(head -c 200 $tmpFileName)" >> $LogFileName
+		# Debug: Log full response (limited to 500 chars)
+		echo "[$logdt] [DEBUG] Response: $(head -c 500 $tmpFileName | tr '\n' ' ')" >> $LogFileName
 		
 		# Check if response is JSON (giipApiSk2 format)
-		# Try to detect JSON by checking for common JSON patterns
-		is_json=$(cat "$tmpFileName" | grep -E '^\s*\{.*"RstVal"')
+		# More lenient check: just look for opening brace and "data" field
+		is_json=$(cat "$tmpFileName" | grep -E '^\s*\{' | grep -E '"data"')
 		
 		if [ -n "$is_json" ]; then
 			# Extract fields from JSON
