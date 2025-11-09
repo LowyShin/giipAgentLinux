@@ -911,6 +911,52 @@ process_gateway_servers() {
 # End of Gateway Mode Functions
 # ============================================================================
 
+# ============================================================================
+# KVS Execution Logging Functions
+# ============================================================================
+
+# Function: Save execution log to KVS (giipagent factor)
+save_execution_log() {
+	local event_type=$1
+	local details_json=$2
+	
+	local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+	local hostname=$(hostname)
+	local mode="${gateway_mode}"
+	[ "$mode" = "1" ] && mode="gateway" || mode="normal"
+	
+	# Escape quotes in details_json
+	details_json=$(echo "$details_json" | sed 's/"/\\"/g')
+	
+	local kvalue="{\"event_type\":\"${event_type}\",\"timestamp\":\"${timestamp}\",\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"mode\":\"${mode}\",\"version\":\"${sv}\",\"details\":${details_json}}"
+	
+	local kvs_url="${apiaddrv2}"
+	[ -n "$apiaddrcode" ] && kvs_url="${kvs_url}?code=${apiaddrcode}"
+	
+	local text="KVSPut kType kKey kFactor"
+	local jsondata="{\"kType\":\"lssn\",\"kKey\":\"${lssn}\",\"kFactor\":\"giipagent\",\"kValue\":${kvalue}}"
+	
+	# URL encode jsondata
+	jsondata_encoded=$(echo "$jsondata" | sed 's/ /%20/g' | sed 's/"/\\"/g')
+	
+	wget -O /dev/null \
+		--post-data="text=${text}&token=${sk}&jsondata=${jsondata_encoded}" \
+		--header="Content-Type: application/x-www-form-urlencoded" \
+		"${kvs_url}" \
+		--no-check-certificate -q 2>&1
+	
+	local exit_code=$?
+	if [ $exit_code -eq 0 ]; then
+		echo "[KVS-Log] ✅ Saved: ${event_type}" >> $LogFileName 2>/dev/null
+	else
+		echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >> $LogFileName 2>/dev/null
+	fi
+}
+
+# ============================================================================
+# End of KVS Execution Logging Functions
+# ============================================================================
+
 # Check dos2unix
 CHECK_Converter=`which dos2unix`
 RESULT=`echo $?`
@@ -1013,12 +1059,20 @@ if [ "${gateway_mode}" = "1" ]; then
 	kvs_data="{\"kType\":\"gateway_status\",\"kKey\":\"gateway_${lssn}_startup\",\"kFactor\":${startup_status}}"
 	wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
 	
+	# Save gateway initialization to KVS (giipagent factor)
+	init_details="{\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"pid\":$$}"
+	save_execution_log "startup" "$init_details"
+	
 	# Check and install sshpass
 	check_sshpass
 	if [ $? -ne 0 ]; then
 		echo "[$logdt] Error: Failed to setup sshpass" >> $LogFileName
 		
-		# Save error to KVS
+		# Save error to KVS (giipagent factor)
+		error_details="{\"error_type\":\"config_error\",\"error_message\":\"Failed to setup sshpass\",\"error_code\":1,\"context\":\"gateway_init\"}"
+		save_execution_log "error" "$error_details"
+		
+		# Save error to KVS (backward compatibility)
 		error_status="{\"status\":\"error\",\"error\":\"Failed to setup sshpass\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
 		kvs_data="{\"kType\":\"gateway_status\",\"kKey\":\"gateway_${lssn}_error\",\"kFactor\":${error_status}}"
 		wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
@@ -1047,6 +1101,28 @@ if [ "${gateway_mode}" = "1" ]; then
 		server_count=$(grep -v "^#" "${gateway_serverlist}" | grep -v "^$" | wc -l)
 		echo "[$logdt] [Gateway] Found ${server_count} servers to manage" >> $LogFileName
 	fi
+	
+	# Collect DB client status
+	sshpass_ok=0
+	command -v sshpass &> /dev/null && sshpass_ok=1
+	
+	mysql_ok=0
+	command -v mysql &> /dev/null && mysql_ok=1
+	
+	psql_ok=0
+	command -v psql &> /dev/null && psql_ok=1
+	
+	mssql_ok=0
+	python3 -c "import pyodbc" 2>/dev/null && mssql_ok=1
+	
+	oracle_ok=0
+	python3 -c "import cx_Oracle" 2>/dev/null && oracle_ok=1
+	
+	python_version=$(python3 --version 2>&1 | awk '{print $2}')
+	
+	# Save Gateway initialization complete to KVS (giipagent factor)
+	init_complete_details="{\"sshpass_installed\":$([ $sshpass_ok -eq 1 ] && echo 'true' || echo 'false'),\"python_version\":\"${python_version}\",\"db_clients\":{\"mysql\":$([ $mysql_ok -eq 1 ] && echo 'true' || echo 'false'),\"postgresql\":$([ $psql_ok -eq 1 ] && echo 'true' || echo 'false'),\"mssql\":$([ $mssql_ok -eq 1 ] && echo 'true' || echo 'false'),\"oracle\":$([ $oracle_ok -eq 1 ] && echo 'true' || echo 'false')},\"server_sync_status\":\"success\",\"server_count\":${server_count}}"
+	save_execution_log "gateway_init" "$init_complete_details"
 	
 	# Save initial sync status to KVS
 	sync_status="{\"status\":\"synced\",\"server_count\":${server_count},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"api\":\"giipApiSk2\"}"
@@ -1087,7 +1163,10 @@ if [ "${gateway_mode}" = "1" ]; then
 		if [ $heartbeat_diff -ge ${gateway_heartbeat_interval} ]; then
 			echo "[$logdt] [Gateway-Heartbeat] Running heartbeat to collect remote server info..." >> $LogFileName
 			
-			# Save heartbeat trigger to KVS
+			# Save heartbeat trigger to KVS (giipagent factor)
+			heartbeat_details="{\"interval_seconds\":${gateway_heartbeat_interval},\"script_path\":\"./giipAgentGateway-heartbeat.sh\",\"background_pid\":0}"
+			
+			# Save heartbeat trigger to KVS (backward compatibility)
 			heartbeat_trigger="{\"status\":\"triggered\",\"interval\":${gateway_heartbeat_interval},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
 			kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${lssn}_heartbeat_trigger\",\"kFactor\":${heartbeat_trigger}}"
 			wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
@@ -1100,7 +1179,11 @@ if [ "${gateway_mode}" = "1" ]; then
 				heartbeat_pid=$!
 				echo "[$logdt] [Gateway-Heartbeat] Started (PID: $heartbeat_pid)" >> $LogFileName
 				
-				# Save heartbeat start to KVS
+				# Update heartbeat details with PID
+				heartbeat_details="{\"interval_seconds\":${gateway_heartbeat_interval},\"script_path\":\"./giipAgentGateway-heartbeat.sh\",\"background_pid\":${heartbeat_pid}}"
+				save_execution_log "heartbeat" "$heartbeat_details"
+				
+				# Save heartbeat start to KVS (backward compatibility)
 				heartbeat_start="{\"status\":\"running\",\"pid\":${heartbeat_pid},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
 				kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${lssn}_heartbeat_status\",\"kFactor\":${heartbeat_start}}"
 				wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
@@ -1150,6 +1233,14 @@ fi
 # Normal Mode: Local agent execution
 # ============================================================================
 
+# Save Agent startup to KVS (Normal mode)
+logdt=`date '+%Y%m%d%H%M%S'`
+echo "[$logdt] Starting GIIP Agent V2.0 in NORMAL MODE" >> $LogFileName
+echo "[$logdt] Version: ${sv}, LSSN: ${lssn}, Hostname: ${hn}" >> $LogFileName
+
+startup_details="{\"pid\":$$,\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${lwAPIURL}\"}"
+save_execution_log "startup" "$startup_details"
+
 # self process count = 2
 while [ ${cntgiip} -le 3 ];
 do
@@ -1164,17 +1255,22 @@ do
 
 	if [ -s ${tmpFileName} ];then
 		# Check if response is JSON (giipApiSk2 format)
-		local is_json=$(cat "$tmpFileName" | grep -o '^{.*}$')
+		is_json=$(cat "$tmpFileName" | grep -o '^{.*}$')
 		if [ -n "$is_json" ]; then
 			# Extract fields from JSON
-			local rstval=$(cat "$tmpFileName" | grep -o '"RstVal":"[^"]*"' | sed 's/"RstVal":"//; s/"$//' | head -1)
-			local script_body=$(cat "$tmpFileName" | grep -o '"ms_body":"[^"]*"' | sed 's/"ms_body":"//; s/"$//' | sed 's/\\n/\n/g')
-			local mssn=$(cat "$tmpFileName" | grep -o '"mssn":[0-9]*' | sed 's/"mssn"://' | head -1)
+			rstval=$(cat "$tmpFileName" | grep -o '"RstVal":"[^"]*"' | sed 's/"RstVal":"//; s/"$//' | head -1)
+			script_body=$(cat "$tmpFileName" | grep -o '"ms_body":"[^"]*"' | sed 's/"ms_body":"//; s/"$//' | sed 's/\\n/\n/g')
+			mssn=$(cat "$tmpFileName" | grep -o '"mssn":[0-9]*' | sed 's/"mssn"://' | head -1)
 			
 			if [ "$rstval" = "404" ]; then
 				# No queue available
 				rm -f $tmpFileName
 				echo "[$logdt] No queue (404)" >> $LogFileName
+				
+				# Save queue check to KVS
+				queue_check_details="{\"api_response\":\"404\",\"has_queue\":false,\"mssn\":0,\"script_source\":\"none\"}"
+				save_execution_log "queue_check" "$queue_check_details"
+				
 				cntgiip=999
 				continue
 			elif [ "$rstval" = "200" ]; then
@@ -1183,20 +1279,38 @@ do
 					# ms_body is available
 					echo "$script_body" > "$tmpFileName"
 					echo "[$logdt] Queue received (ms_body)" >> $LogFileName
+					
+					# Save queue check to KVS
+					queue_check_details="{\"api_response\":\"200\",\"has_queue\":true,\"mssn\":${mssn},\"script_source\":\"ms_body\"}"
+					save_execution_log "queue_check" "$queue_check_details"
 				elif [ -n "$mssn" ] && [ "$mssn" != "null" ] && [ "$mssn" != "0" ]; then
 					# ms_body is empty, fetch from repository
 					echo "[$logdt] ms_body empty, fetching from repository (mssn=$mssn)" >> $LogFileName
 					get_script_by_mssn "$mssn" "$tmpFileName"
 					if [ $? -ne 0 ]; then
 						echo "[$logdt] ❌ Failed to fetch script from repository" >> $LogFileName
+						
+						# Save error to KVS
+						error_details="{\"error_type\":\"api_error\",\"error_message\":\"Failed to fetch script from repository\",\"error_code\":1,\"context\":\"queue_fetch\",\"mssn\":${mssn}}"
+						save_execution_log "error" "$error_details"
+						
 						rm -f $tmpFileName
 						cntgiip=999
 						continue
 					fi
 					echo "[$logdt] Queue received (repository)" >> $LogFileName
+					
+					# Save queue check to KVS
+					queue_check_details="{\"api_response\":\"200\",\"has_queue\":true,\"mssn\":${mssn},\"script_source\":\"repository\"}"
+					save_execution_log "queue_check" "$queue_check_details"
 				else
 					# No script available
 					echo "[$logdt] ⚠️  No script available (no ms_body, no mssn)" >> $LogFileName
+					
+					# Save queue check to KVS
+					queue_check_details="{\"api_response\":\"200\",\"has_queue\":false,\"mssn\":0,\"script_source\":\"none\"}"
+					save_execution_log "queue_check" "$queue_check_details"
+					
 					rm -f $tmpFileName
 					cntgiip=999
 					continue
@@ -1204,6 +1318,11 @@ do
 			else
 				# Other error
 				echo "[$logdt] ⚠️  API error: RstVal=$rstval" >> $LogFileName
+				
+				# Save error to KVS
+				error_details="{\"error_type\":\"api_error\",\"error_message\":\"Unexpected API response\",\"error_code\":${rstval},\"context\":\"queue_check\"}"
+				save_execution_log "error" "$error_details"
+				
 				rm -f $tmpFileName
 				cntgiip=999
 				continue
@@ -1215,6 +1334,10 @@ do
 		echo "[$logdt] Downloaded queue... " >> $LogFileName
 	else
 		echo "[$logdt] No queue" >> $LogFileName
+		
+		# Save queue check to KVS (no response)
+		queue_check_details="{\"api_response\":\"empty\",\"has_queue\":false,\"mssn\":0,\"script_source\":\"none\"}"
+		save_execution_log "queue_check" "$queue_check_details"
 	fi
 
 	cmpFile=`cat $tmpFileName`
@@ -1222,17 +1345,44 @@ do
 	if [ "${ErrChk}" != "" ]; then
 		rm -f $tmpFileName
 	    echo "[$logdt]Stop by error. ${ErrChk}" >> $LogFileName
+	    
+	    # Save error to KVS
+	    error_details="{\"error_type\":\"script_error\",\"error_message\":\"HTTP Error in script\",\"error_code\":1,\"context\":\"script_execution\"}"
+	    save_execution_log "error" "$error_details"
+	    
 		exit 0
 	else
 		if [ -s ${tmpFileName} ];then
 			n=`cat giipTmpScript.sh | grep 'expect=' | wc -l`
 			if [ ${n} -ge 1 ]; then
-				expect ./giipTmpScript.sh >> $LogFileName
-				echo "[$logdt]Executed expect script..." >> $LogFileName
+				# Execute expect script
+				script_start_time=$(date +%s)
+				expect ./giipTmpScript.sh >> $LogFileName 2>&1
+				script_exit_code=$?
+				script_end_time=$(date +%s)
+				script_duration=$((script_end_time - script_start_time))
+				
+				echo "[$logdt]Executed expect script (exit_code=${script_exit_code}, duration=${script_duration}s)..." >> $LogFileName
+				
+				# Save script execution to KVS
+				exec_details="{\"script_type\":\"expect\",\"exit_code\":${script_exit_code},\"execution_time_seconds\":${script_duration}}"
+				save_execution_log "script_execution" "$exec_details"
+				
 				rm -f $tmpFileName
 			else
-				sh ./giipTmpScript.sh >> $LogFileName
-				echo "[$logdt]Executed script..." >> $LogFileName
+				# Execute bash script
+				script_start_time=$(date +%s)
+				sh ./giipTmpScript.sh >> $LogFileName 2>&1
+				script_exit_code=$?
+				script_end_time=$(date +%s)
+				script_duration=$((script_end_time - script_start_time))
+				
+				echo "[$logdt]Executed bash script (exit_code=${script_exit_code}, duration=${script_duration}s)..." >> $LogFileName
+				
+				# Save script execution to KVS
+				exec_details="{\"script_type\":\"bash\",\"exit_code\":${script_exit_code},\"execution_time_seconds\":${script_duration}}"
+				save_execution_log "script_execution" "$exec_details"
+				
 				rm -f $tmpFileName
 			fi
 		else
@@ -1243,11 +1393,21 @@ do
 	fi
 	rm -f $tmpFileName
 done
+
+# Save Agent shutdown to KVS
 if [ ${cntgiip} -ge 4 ]; then
         if [ ${cntgiip} -eq 999 ]; then
                 echo "[$logdt]All process was done" >> $LogFileName
+                
+                # Save shutdown to KVS (normal completion)
+                shutdown_details="{\"reason\":\"normal\",\"process_count\":${cntgiip},\"uptime_seconds\":0}"
+                save_execution_log "shutdown" "$shutdown_details"
         else
                 echo "[$logdt]terminate by process count $cntgiip" >> $LogFileName
+                
+                # Save shutdown to KVS (duplicate process)
+                shutdown_details="{\"reason\":\"duplicate_process\",\"process_count\":${cntgiip},\"uptime_seconds\":0}"
+                save_execution_log "shutdown" "$shutdown_details"
         fi
 	ret=`ps aux | grep giipAgent2.sh | grep -v grep`
 	echo "$ret" >> $LogFileName

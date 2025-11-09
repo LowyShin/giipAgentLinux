@@ -22,16 +22,28 @@
 >   ```
 > - Repository file is ONLY for new installations, NOT for debugging
 
-## 🌟 Overview
+## 📋 Documentation
 
-GIIP Agent is an intelligent monitoring and management agent that:
-- **Executes remote commands** via CQE (Command Queue Execution) system 🚀 **v2.0**
-- **Gateway mode** for managing multiple remote servers via SSH 🆕 **v3.0**
-- **Auto-discovers infrastructure** (OS, hardware, software, services, network)
-- **Provides operational advice** based on collected data
-- **Reports heartbeat** every 5 minutes to central management
+### Architecture & Design
+- [Auto-Discovery Architecture](docs/AUTO_DISCOVERY_ARCHITECTURE.md) - 파일 구조와 실행 흐름 상세 설명
+- [Service Package Filter](docs/SERVICE_PACKAGE_FILTER.md) - 소프트웨어 필터링 규칙
+- **[giipAgent2.sh Specification](docs/GIIPAGENT2_SPECIFICATION.md)** - giipAgent2.sh 실행 조건, 동작 흐름, KVS 저장 로직 완전 문서화 🆕
 
-**NEW in v3.0**: Web UI-based Gateway configuration with automatic script deployment!
+### Gateway & Remote Control
+- **[Gateway Setup Guide](docs/GATEWAY_SETUP_GUIDE.md)** - 실제 환경 설정 가이드 (실무 중심)
+- [Gateway README](README_GATEWAY.md) - Gateway Agent 전체 매뉴얼
+- [Gateway Quick Start (KR)](GATEWAY_QUICKSTART_KR.md) - 빠른 시작 가이드
+- [Gateway Implementation Summary](docs/GATEWAY_IMPLEMENTATION_SUMMARY.md) - 기술적 구현 세부사항
+
+### API & Integration
+- [API Endpoints Comparison](../giipfaw/docs/API_ENDPOINTS_COMPARISON.md) - giipApi vs giipApiSk vs giipApiSk2 차이점
+
+### Installation & Operation
+- [Agent Installation Guide](../docs/AGENT_INSTALLATION_GUIDE.md) - Linux/Windows 에이전트 설치
+- [Test Server Installation](../docs/TEST_SERVER_INSTALLATION.md) - 테스트 환경 구축
+
+### Security
+- [Security Checklist](../docs/SECURITY_CHECKLIST.md) - 보안 점검 항목
 
 ### Deployment Options
 
@@ -62,18 +74,25 @@ For Windows version: https://github.com/LowyShin/giipAgentWin
 ## 🌟 Overview
 
 GIIP Agent is an intelligent monitoring and management agent that:
-- **Executes remote commands** via CQE (Command Queue Execution) system 🚀 **NEW v2.0**
+- **Executes remote commands** via CQE (Command Queue Execution) system 🚀 **v2.0**
+- **Gateway mode** for managing multiple remote servers via SSH 🆕 **v3.0**
 - **Auto-discovers infrastructure** (OS, hardware, software, services, network)
 - **Provides operational advice** based on collected data
 - **Reports heartbeat** every 5 minutes to central management
+- **Tracks execution history** via KVS (giipagent factor) for full audit trail 🆕 **v2.0**
 
-**NEW in v2.0**: Enhanced CQE system with automatic result collection, timeout control, and security validation!
+**NEW in v3.0**: Web UI-based Gateway configuration with automatic script deployment!
+
+**NEW in v2.0**: Execution tracking - All agent activities (queue checks, script executions, errors) are automatically logged to KVS with "giipagent" factor for complete audit trail and troubleshooting.
 
 ### Deployment Options
 
 - **Standard Agent**: Install directly on each server (standard installation)
 - **Gateway Agent**: Install on bastion/gateway server to manage multiple remote servers via SSH
-  - See [README_GATEWAY.md](README_GATEWAY.md) for gateway deployment
+  - 🆕 **Web UI Configuration**: No more manual SSH configuration!
+  - See [docs/GATEWAY_AUTO_CONFIGURATION.md](docs/GATEWAY_AUTO_CONFIGURATION.md) for details
+  - See [docs/GATEWAY_USAGE_GUIDE.md](docs/GATEWAY_USAGE_GUIDE.md) for usage guide
+  - See [README_GATEWAY.md](README_GATEWAY.md) for traditional setup
 
 For Windows version: https://github.com/LowyShin/giipAgentWin
 
@@ -413,6 +432,103 @@ Test auto-discovery script:
 # Test full auto-discovery with API call
 ./giip-auto-discover.sh
 ```
+
+---
+
+## 📊 Execution Tracking (NEW in v2.0)
+
+### Overview
+
+giipAgent2.sh automatically logs all execution activities to KVS (Key-Value Storage) with factor **"giipagent"** for complete audit trail and troubleshooting.
+
+**Tracked Events**:
+- Agent startup/shutdown
+- Queue checks (every minute)
+- Script executions (success/failure)
+- Gateway initialization
+- Heartbeat triggers
+- Database queries
+- Remote server executions
+- All errors
+
+### Query Execution History
+
+**SQL Query**:
+```sql
+SELECT TOP 100
+    kRegdt,
+    JSON_VALUE(kValue, '$.event_type') AS event_type,
+    JSON_VALUE(kValue, '$.timestamp') AS timestamp,
+    JSON_VALUE(kValue, '$.lssn') AS lssn,
+    JSON_VALUE(kValue, '$.hostname') AS hostname,
+    JSON_VALUE(kValue, '$.mode') AS mode,
+    JSON_VALUE(kValue, '$.version') AS version,
+    kValue AS details
+FROM tKVS
+WHERE kType = 'lssn'
+  AND kKey = '71174'  -- Your LSSN
+  AND kFactor = 'giipagent'
+ORDER BY kRegdt DESC
+```
+
+**Filter by Event Type**:
+```sql
+-- Queue checks only
+WHERE kFactor = 'giipagent'
+  AND JSON_VALUE(kValue, '$.event_type') = 'queue_check'
+
+-- Errors only
+WHERE kFactor = 'giipagent'
+  AND JSON_VALUE(kValue, '$.event_type') = 'error'
+
+-- Script executions only
+WHERE kFactor = 'giipagent'
+  AND JSON_VALUE(kValue, '$.event_type') = 'script_execution'
+```
+
+### Event Types
+
+| Event Type | Description | Normal Mode | Gateway Mode |
+|-----------|-------------|-------------|--------------|
+| `startup` | Agent started | ✅ | ✅ |
+| `shutdown` | Agent stopped | ✅ | ✅ |
+| `queue_check` | Queue API call result | ✅ | ✅ |
+| `script_execution` | Script executed | ✅ | ✅ |
+| `gateway_init` | Gateway initialization | ❌ | ✅ |
+| `heartbeat` | Heartbeat triggered | ❌ | ✅ |
+| `db_query` | Database query executed | ❌ | ✅ |
+| `remote_execution` | Remote server processed | ❌ | ✅ |
+| `error` | Any error occurred | ✅ | ✅ |
+
+### Example: Troubleshoot Failed Script
+
+```sql
+-- Step 1: Find failed script executions
+SELECT 
+    kRegdt,
+    JSON_VALUE(kValue, '$.details.exit_code') AS exit_code,
+    JSON_VALUE(kValue, '$.details.execution_time_seconds') AS duration,
+    JSON_VALUE(kValue, '$.details.script_type') AS script_type
+FROM tKVS
+WHERE kFactor = 'giipagent'
+  AND JSON_VALUE(kValue, '$.event_type') = 'script_execution'
+  AND JSON_VALUE(kValue, '$.details.exit_code') != '0'
+ORDER BY kRegdt DESC
+
+-- Step 2: Check errors around that time
+SELECT 
+    kRegdt,
+    JSON_VALUE(kValue, '$.details.error_type') AS error_type,
+    JSON_VALUE(kValue, '$.details.error_message') AS error_message,
+    JSON_VALUE(kValue, '$.details.context') AS context
+FROM tKVS
+WHERE kFactor = 'giipagent'
+  AND JSON_VALUE(kValue, '$.event_type') = 'error'
+  AND kRegdt >= '2025-11-08 16:00:00'
+ORDER BY kRegdt DESC
+```
+
+For complete specification, see [docs/GIIPAGENT2_SPECIFICATION.md](docs/GIIPAGENT2_SPECIFICATION.md).
 
 ---
 
