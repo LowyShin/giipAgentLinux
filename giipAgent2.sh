@@ -842,9 +842,26 @@ process_gateway_servers() {
 	
 	if [ $? -ne 0 ] || [ -z "$server_json" ]; then
 		echo "[${logdt}] [Gateway] ⚠️  Failed to fetch server list from DB" >> $LogFileName
+		
+		# Save error to KVS (giipagent factor)
+		local error_details="{\"error_type\":\"gateway_fetch_failed\",\"error_message\":\"Failed to fetch server list from DB\"}"
+		save_execution_log "gateway_error" "$error_details"
+		
 		rm -rf "$tmpdir"
 		return 1
 	fi
+	
+	# Count servers
+	local server_count=$(echo "$server_json" | jq '. | length' 2>/dev/null || echo 0)
+	
+	# Save gateway cycle start to KVS (giipagent factor)
+	local cycle_start_details="{\"action\":\"cycle_start\",\"server_count\":${server_count},\"data_source\":\"DB\"}"
+	save_execution_log "gateway_cycle" "$cycle_start_details"
+	
+	local processed_count=0
+	local success_count=0
+	local failed_count=0
+	local no_queue_count=0
 	
 	# Process each server from JSON
 	echo "$server_json" | jq -c '.[]' 2>/dev/null | while read -r server_obj; do
@@ -868,6 +885,8 @@ process_gateway_servers() {
 			continue
 		fi
 		
+		processed_count=$((processed_count + 1))
+		
 		logdt=$(date '+%Y%m%d%H%M%S')
 		echo "[${logdt}] [Gateway] Processing: $hostname (LSSN:$lssn, ${ssh_user}@${ssh_host}:${ssh_port})" >> $LogFileName
 		
@@ -881,6 +900,12 @@ process_gateway_servers() {
 			if [ -n "$err_check" ]; then
 				echo "[${logdt}] [Gateway]   ⚠️  Error: $err_check" >> $LogFileName
 				rm -f "$tmpfile"
+				
+				# Save error to KVS (giipagent factor)
+				local server_error_details="{\"action\":\"queue_fetch_error\",\"hostname\":\"${hostname}\",\"lssn\":${lssn},\"error\":\"${err_check}\"}"
+				save_execution_log "gateway_server_error" "$server_error_details"
+				
+				failed_count=$((failed_count + 1))
 				continue
 			fi
 			
@@ -891,19 +916,34 @@ process_gateway_servers() {
 			
 			if [ $? -eq 0 ]; then
 				echo "[${logdt}] [Gateway]   ✅ Success" >> $LogFileName
+				success_count=$((success_count + 1))
+				
+				# Save success to KVS (giipagent factor)
+				local server_success_details="{\"action\":\"command_executed\",\"hostname\":\"${hostname}\",\"lssn\":${lssn},\"ssh_host\":\"${ssh_host}\",\"result\":\"success\"}"
+				save_execution_log "gateway_server_execution" "$server_success_details"
 			else
 				echo "[${logdt}] [Gateway]   ❌ Failed" >> $LogFileName
+				failed_count=$((failed_count + 1))
+				
+				# Save failure to KVS (giipagent factor)
+				local server_fail_details="{\"action\":\"command_failed\",\"hostname\":\"${hostname}\",\"lssn\":${lssn},\"ssh_host\":\"${ssh_host}\",\"result\":\"failed\"}"
+				save_execution_log "gateway_server_error" "$server_fail_details"
 			fi
 			
 			rm -f "$tmpfile"
 		else
 			echo "[${logdt}] [Gateway]   ⏸️  No queue" >> $LogFileName
+			no_queue_count=$((no_queue_count + 1))
 		fi
 	done
 	
 	rm -rf "$tmpdir"
 	logdt=$(date '+%Y%m%d%H%M%S')
-	echo "[${logdt}] [Gateway] Cycle completed (data from DB)" >> $LogFileName
+	echo "[${logdt}] [Gateway] Cycle completed (data from DB, ${processed_count} servers processed)" >> $LogFileName
+	
+	# Save cycle summary to KVS (giipagent factor)
+	local cycle_summary_details="{\"action\":\"cycle_completed\",\"total_servers\":${server_count},\"processed\":${processed_count},\"success\":${success_count},\"failed\":${failed_count},\"no_queue\":${no_queue_count},\"data_source\":\"DB\"}"
+	save_execution_log "gateway_cycle" "$cycle_summary_details"
 }
 
 # ============================================================================
@@ -1031,6 +1071,11 @@ collect_gateway_server_status() {
 	get_gateway_servers server_json
 	if [ $? -ne 0 ] || [ -z "$server_json" ]; then
 		echo "[$logdt] [Gateway] No servers to check (DB query failed)" >> $LogFileName
+		
+		# Save error to KVS (giipagent factor)
+		local error_details="{\"error_type\":\"status_fetch_failed\",\"error_message\":\"DB query failed\"}"
+		save_execution_log "gateway_error" "$error_details"
+		
 		return 1
 	fi
 	
@@ -1043,10 +1088,16 @@ collect_gateway_server_status() {
 	
 	echo "[$logdt] [Gateway] Checking status of ${server_count} servers..." >> $LogFileName
 	
+	# Save status check start to KVS (giipagent factor)
+	local check_start_details="{\"action\":\"status_check_start\",\"server_count\":${server_count},\"data_source\":\"DB\"}"
+	save_execution_log "gateway_status" "$check_start_details"
+	
 	# Prepare JSON array for bulk status upload
 	local status_json="["
 	local first_server=1
 	local checked_count=0
+	local accessible_count=0
+	local failed_count=0
 	
 	# Parse JSON array and process each server
 	echo "$server_json" | jq -c '.[]' 2>/dev/null | while read -r server_obj; do
@@ -1123,6 +1174,7 @@ collect_gateway_server_status() {
 				ssh_accessible=1
 				connection_status="success"
 				status_message="SSH connection successful"
+				accessible_count=$((accessible_count + 1))
 				
 				# Parse system info (simplified)
 				local uptime_line=$(echo "$ssh_result" | grep "up" | head -1)
@@ -1133,8 +1185,14 @@ collect_gateway_server_status() {
 				fi
 				
 				echo "[$logdt] [Gateway] ✅ $hostname: Connected ($response_time_ms ms)" >> $LogFileName
+				
+				# Save success to KVS (giipagent factor)
+				local ssh_success_details="{\"action\":\"ssh_check\",\"hostname\":\"${hostname}\",\"lssn\":${remote_lssn},\"ssh_host\":\"${ssh_host}\",\"accessible\":true,\"response_ms\":${response_time_ms}}"
+				save_execution_log "gateway_ssh_check" "$ssh_success_details"
 			else
 				ssh_accessible=0
+				failed_count=$((failed_count + 1))
+				
 				if echo "$ssh_result" | grep -qi "timeout"; then
 					connection_status="timeout"
 					error_message="Connection timeout"
@@ -1149,6 +1207,10 @@ collect_gateway_server_status() {
 					error_message=$(echo "$ssh_result" | head -1 | tr -d '\n' | head -c 200)
 				fi
 				echo "[$logdt] [Gateway] ❌ $hostname: $connection_status - $error_message" >> $LogFileName
+				
+				# Save failure to KVS (giipagent factor)
+				local ssh_fail_details="{\"action\":\"ssh_check\",\"hostname\":\"${hostname}\",\"lssn\":${remote_lssn},\"ssh_host\":\"${ssh_host}\",\"accessible\":false,\"response_ms\":${response_time_ms},\"error\":\"${connection_status}\"}"
+				save_execution_log "gateway_ssh_check" "$ssh_fail_details"
 			fi
 		fi
 		
@@ -1217,16 +1279,31 @@ EOF
 		if [ "$rstval" = "200" ]; then
 			echo "[$logdt] [Gateway] ✅ Status uploaded successfully" >> $LogFileName
 			rm -f "$status_file"
+			
+			# Save status check summary to KVS (giipagent factor)
+			local check_summary_details="{\"action\":\"status_check_completed\",\"total_servers\":${server_count},\"checked\":${checked_count},\"accessible\":${accessible_count},\"failed\":${failed_count},\"data_source\":\"DB\"}"
+			save_execution_log "gateway_status" "$check_summary_details"
+			
 			return 0
 		else
 			local rstmsg=$(echo "$api_response" | jq -r '.data[0].RstMsg // "Unknown error"' 2>/dev/null || echo "Unknown error")
 			echo "[$logdt] [Gateway] ⚠️  API returned error: RstVal=$rstval, Msg=$rstmsg" >> $LogFileName
 			echo "[$logdt] [Gateway] Status file saved: $status_file" >> $LogFileName
+			
+			# Save API error to KVS (giipagent factor)
+			local api_error_details="{\"error_type\":\"status_upload_failed\",\"rstval\":\"${rstval}\",\"rstmsg\":\"${rstmsg}\"}"
+			save_execution_log "gateway_error" "$api_error_details"
+			
 			return 1
 		fi
 	else
 		echo "[$logdt] [Gateway] ❌ Failed to upload status (exit=$api_exit)" >> $LogFileName
 		echo "[$logdt] [Gateway] Status file saved: $status_file" >> $LogFileName
+		
+		# Save upload error to KVS (giipagent factor)
+		local upload_error_details="{\"error_type\":\"status_upload_failed\",\"exit_code\":${api_exit}}"
+		save_execution_log "gateway_error" "$upload_error_details"
+		
 		return 1
 	fi
 }
