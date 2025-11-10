@@ -31,10 +31,7 @@ save_execution_log() {
 	local mode="${gateway_mode}"
 	[ "$mode" = "1" ] && mode="gateway" || mode="normal"
 	
-	# Escape quotes in details_json
-	details_json=$(echo "$details_json" | sed 's/"/\\"/g')
-	
-	# Build kValue JSON
+	# Build kValue JSON (details_json is already JSON, don't escape)
 	local kvalue="{\"event_type\":\"${event_type}\",\"timestamp\":\"${timestamp}\",\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"mode\":\"${mode}\",\"version\":\"${sv}\",\"details\":${details_json}}"
 	
 	# Build API URL
@@ -47,8 +44,8 @@ save_execution_log() {
 	# ✅ jsondata contains actual values
 	local jsondata="{\"kType\":\"lssn\",\"kKey\":\"${lssn}\",\"kFactor\":\"giipagent\",\"kValue\":${kvalue}}"
 	
-	# URL encode jsondata for POST
-	local jsondata_encoded=$(echo "$jsondata" | sed 's/ /%20/g' | sed 's/"/\\"/g')
+	# URL encode jsondata for POST (only encode spaces)
+	local jsondata_encoded=$(echo "$jsondata" | sed 's/ /%20/g')
 	
 	# Call API (using giipApiSk2 with token parameter)
 	wget -O /dev/null \
@@ -59,13 +56,18 @@ save_execution_log() {
 	
 	local exit_code=$?
 	if [ $exit_code -eq 0 ]; then
+		echo "[KVS-Log] ✅ Saved: ${event_type}"
 		if [ -n "$LogFileName" ]; then
-			echo "[KVS-Log] ✅ Saved: ${event_type}" >> "$LogFileName" 2>/dev/null
+			echo "[KVS-Log] ✅ Saved: ${event_type}" >> "$LogFileName"
 		fi
 	else
+		echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >&2
 		if [ -n "$LogFileName" ]; then
-			echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >> "$LogFileName" 2>/dev/null
+			echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >> "$LogFileName"
 		fi
+		
+		# Log error to database
+		log_error "KVS logging failed: ${event_type}" "KVSError" "save_execution_log at lib/kvs.sh, exit_code=${exit_code}"
 	fi
 	
 	return $exit_code

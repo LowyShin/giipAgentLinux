@@ -64,6 +64,47 @@ log_message() {
 	fi
 }
 
+# Function: Log error to database via ErrorLogCreate API
+# Usage: log_error "Error message" "ErrorType" "stack_trace"
+log_error() {
+	local error_message="$1"
+	local error_type="${2:-ScriptError}"
+	local stack_trace="${3:-}"
+	
+	# Validate required variables
+	if [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
+		echo "[Error-Log] ⚠️  Cannot log error: missing sk or apiaddrv2" >&2
+		return 1
+	fi
+	
+	local api_url="${apiaddrv2}"
+	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
+	
+	local hostname=$(hostname)
+	local source="giipAgent"
+	
+	# Build jsondata
+	local jsondata="{\"source\":\"${source}\",\"errorMessage\":\"${error_message}\",\"errorType\":\"${error_type}\",\"stackTrace\":\"${stack_trace}\",\"lssn\":${lssn:-0},\"hostname\":\"${hostname}\",\"severity\":\"error\"}"
+	
+	# Call ErrorLogCreate API
+	local text="ErrorLogCreate source errorMessage"
+	
+	wget -O /dev/null \
+		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
+		--header="Content-Type: application/x-www-form-urlencoded" \
+		"${api_url}" \
+		--no-check-certificate -q 2>&1
+	
+	local exit_code=$?
+	if [ $exit_code -eq 0 ]; then
+		echo "[Error-Log] ✅ Error logged to database" >&2
+	else
+		echo "[Error-Log] ⚠️  Failed to log error to database (exit_code=${exit_code})" >&2
+	fi
+	
+	return $exit_code
+}
+
 # ============================================================================
 # Dependency Check Functions
 # ============================================================================
