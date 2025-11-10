@@ -965,6 +965,209 @@ EOF
 # End of KVS Execution Logging Functions
 # ============================================================================
 
+# ============================================================================
+# Gateway Server Status Collection Function
+# ============================================================================
+collect_gateway_server_status() {
+	local logdt=$(date '+%Y%m%d%H%M%S')
+	echo "[$logdt] [Gateway] Starting server status collection..." >> $LogFileName
+	
+	# Check if server list exists
+	if [ ! -f "${gateway_serverlist}" ]; then
+		echo "[$logdt] [Gateway] No server list found, skipping status collection" >> $LogFileName
+		return 1
+	fi
+	
+	# Count servers
+	local server_count=$(grep -v "^#" "${gateway_serverlist}" | grep -v "^$" | wc -l)
+	if [ $server_count -eq 0 ]; then
+		echo "[$logdt] [Gateway] No servers to check" >> $LogFileName
+		return 0
+	fi
+	
+	echo "[$logdt] [Gateway] Checking status of ${server_count} servers..." >> $LogFileName
+	
+	# Prepare JSON array for bulk status upload
+	local status_json="["
+	local first_server=1
+	local checked_count=0
+	
+	# Read server list
+	while IFS=',' read -r hostname remote_lssn ssh_host ssh_user ssh_port ssh_key_path ssh_password os_info enabled || [ -n "$hostname" ]; do
+		# Skip comments and empty lines
+		[[ "$hostname" =~ ^#.*$ ]] && continue
+		[[ -z "$hostname" ]] && continue
+		
+		# Skip disabled servers
+		if [ "$enabled" != "1" ]; then
+			continue
+		fi
+		
+		# Clean up fields (remove quotes and spaces)
+		hostname=$(echo "$hostname" | tr -d '"' | tr -d ' ')
+		remote_lssn=$(echo "$remote_lssn" | tr -d '"' | tr -d ' ')
+		ssh_host=$(echo "$ssh_host" | tr -d '"' | tr -d ' ')
+		ssh_user=$(echo "$ssh_user" | tr -d '"' | tr -d ' ')
+		ssh_port=$(echo "$ssh_port" | tr -d '"' | tr -d ' ')
+		ssh_key_path=$(echo "$ssh_key_path" | tr -d '"' | tr -d ' ')
+		ssh_password=$(echo "$ssh_password" | tr -d '"' | tr -d ' ')
+		
+		# Default port
+		if [ -z "$ssh_port" ]; then
+			ssh_port=22
+		fi
+		
+		echo "[$logdt] [Gateway] Checking: $hostname ($ssh_host:$ssh_port)" >> $LogFileName
+		
+		# Measure SSH connection time
+		local start_time=$(date +%s%3N)  # milliseconds
+		local ssh_accessible=0
+		local connection_status="unknown"
+		local status_message=""
+		local error_message=""
+		local response_time_ms=0
+		
+		# Build SSH command
+		local ssh_cmd="ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no -o BatchMode=yes"
+		
+		if [ -n "$ssh_key_path" ] && [ -f "$ssh_key_path" ]; then
+			# SSH key authentication
+			ssh_cmd="$ssh_cmd -i $ssh_key_path"
+		elif [ -n "$ssh_password" ]; then
+			# Password authentication (requires sshpass)
+			if command -v sshpass &> /dev/null; then
+				ssh_cmd="sshpass -p '$ssh_password' $ssh_cmd"
+			else
+				error_message="sshpass not installed for password auth"
+				connection_status="config_error"
+				echo "[$logdt] [Gateway] ⚠️  $hostname: $error_message" >> $LogFileName
+			fi
+		fi
+		
+		# Try SSH connection and collect system info
+		if [ "$connection_status" != "config_error" ]; then
+			local ssh_result=$($ssh_cmd -p $ssh_port ${ssh_user}@${ssh_host} "echo 'SSH_OK'; uptime; cat /proc/cpuinfo | grep 'model name' | head -1; free -m; df -h /" 2>&1)
+			local ssh_exit=$?
+			
+			local end_time=$(date +%s%3N)
+			response_time_ms=$((end_time - start_time))
+			
+			if [ $ssh_exit -eq 0 ] && echo "$ssh_result" | grep -q "SSH_OK"; then
+				ssh_accessible=1
+				connection_status="success"
+				status_message="SSH connection successful"
+				
+				# Parse system info (simplified)
+				local uptime_line=$(echo "$ssh_result" | grep "up" | head -1)
+				local uptime_seconds=0
+				if echo "$uptime_line" | grep -q "day"; then
+					local days=$(echo "$uptime_line" | grep -o "[0-9]* day" | awk '{print $1}')
+					uptime_seconds=$((days * 86400))
+				fi
+				
+				echo "[$logdt] [Gateway] ✅ $hostname: Connected ($response_time_ms ms)" >> $LogFileName
+			else
+				ssh_accessible=0
+				if echo "$ssh_result" | grep -qi "timeout"; then
+					connection_status="timeout"
+					error_message="Connection timeout"
+				elif echo "$ssh_result" | grep -qi "refused"; then
+					connection_status="refused"
+					error_message="Connection refused"
+				elif echo "$ssh_result" | grep -qi "permission denied"; then
+					connection_status="auth_failed"
+					error_message="Authentication failed"
+				else
+					connection_status="failed"
+					error_message=$(echo "$ssh_result" | head -1 | tr -d '\n' | head -c 200)
+				fi
+				echo "[$logdt] [Gateway] ❌ $hostname: $connection_status - $error_message" >> $LogFileName
+			fi
+		fi
+		
+		# Build JSON for this server
+		local server_json=$(cat <<EOF
+{
+  "remote_lssn": ${remote_lssn},
+  "ssh_accessible": $([ $ssh_accessible -eq 1 ] && echo 'true' || echo 'false'),
+  "response_time_ms": ${response_time_ms},
+  "connection_status": "${connection_status}",
+  "status_message": "${status_message}",
+  "error_message": "${error_message}",
+  "os_info": "${os_info}",
+  "uptime_seconds": null,
+  "cpu_usage_percent": null,
+  "memory_usage_percent": null,
+  "disk_usage_percent": null
+}
+EOF
+)
+		
+		# Add to array
+		if [ $first_server -eq 1 ]; then
+			status_json="${status_json}${server_json}"
+			first_server=0
+		else
+			status_json="${status_json},${server_json}"
+		fi
+		
+		checked_count=$((checked_count + 1))
+		
+	done < "${gateway_serverlist}"
+	
+	status_json="${status_json}]"
+	
+	if [ $checked_count -eq 0 ]; then
+		echo "[$logdt] [Gateway] No servers checked" >> $LogFileName
+		return 0
+	fi
+	
+	echo "[$logdt] [Gateway] Checked ${checked_count} servers, uploading status..." >> $LogFileName
+	
+	# Save to temp file for debugging
+	local status_file="/tmp/gateway_status_${lssn}_$$.json"
+	echo "$status_json" > "$status_file"
+	
+	# Upload status via API (pApiGatewayStatusPutbySk)
+	local api_url="${apiaddrv2}"
+	if [ -n "$apiaddrcode" ]; then
+		api_url="${api_url}?code=${apiaddrcode}"
+	fi
+	
+	local api_text="GatewayStatusPut gateway_lssn status_data"
+	local api_jsondata="{\"gateway_lssn\":${lssn},\"status_data\":${status_json}}"
+	
+	local api_response=$(wget -q -O - \
+		--post-data="text=${api_text}&token=${sk}&jsondata=$(echo ${api_jsondata} | jq -sRr @uri 2>/dev/null || echo ${api_jsondata} | sed 's/ /%20/g')" \
+		--header="Content-Type: application/x-www-form-urlencoded" \
+		"${api_url}" \
+		--no-check-certificate 2>&1)
+	
+	local api_exit=$?
+	
+	if [ $api_exit -eq 0 ]; then
+		local rstval=$(echo "$api_response" | jq -r '.data[0].RstVal // "0"' 2>/dev/null || echo "0")
+		if [ "$rstval" = "200" ]; then
+			echo "[$logdt] [Gateway] ✅ Status uploaded successfully" >> $LogFileName
+			rm -f "$status_file"
+			return 0
+		else
+			local rstmsg=$(echo "$api_response" | jq -r '.data[0].RstMsg // "Unknown error"' 2>/dev/null || echo "Unknown error")
+			echo "[$logdt] [Gateway] ⚠️  API returned error: RstVal=$rstval, Msg=$rstmsg" >> $LogFileName
+			echo "[$logdt] [Gateway] Status file saved: $status_file" >> $LogFileName
+			return 1
+		fi
+	else
+		echo "[$logdt] [Gateway] ❌ Failed to upload status (exit=$api_exit)" >> $LogFileName
+		echo "[$logdt] [Gateway] Status file saved: $status_file" >> $LogFileName
+		return 1
+	fi
+}
+
+# ============================================================================
+# End of Gateway Server Status Collection Function
+# ============================================================================
+
 # Check dos2unix
 CHECK_Converter=`which dos2unix`
 RESULT=`echo $?`
@@ -1171,8 +1374,11 @@ if [ "${gateway_mode}" = "1" ]; then
 		if [ $heartbeat_diff -ge ${gateway_heartbeat_interval} ]; then
 			echo "[$logdt] [Gateway-Heartbeat] Running heartbeat to collect remote server info..." >> $LogFileName
 			
+			# Collect server status (NEW!)
+			collect_gateway_server_status
+			
 			# Save heartbeat trigger to KVS (giipagent factor)
-			heartbeat_details="{\"interval_seconds\":${gateway_heartbeat_interval},\"script_path\":\"./giipAgentGateway-heartbeat.sh\",\"background_pid\":0}"
+			heartbeat_details="{\"interval_seconds\":${gateway_heartbeat_interval},\"status_collection\":\"enabled\"}"
 			
 			# Save heartbeat trigger to KVS (backward compatibility)
 			heartbeat_trigger="{\"status\":\"triggered\",\"interval\":${gateway_heartbeat_interval},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
