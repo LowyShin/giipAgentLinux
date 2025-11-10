@@ -963,6 +963,302 @@ process_gateway_servers() {
 	save_execution_log "gateway_cycle" "$cycle_summary_details"
 }
 
+# Function: Check managed databases health
+check_managed_databases() {
+	local logdt=$(date '+%Y%m%d%H%M%S')
+	echo "[$logdt] [DB-Health] Starting database health check..." >> $LogFileName
+	
+	# Save health check start to KVS (giipagent factor)
+	local check_start_details="{\"action\":\"health_check_start\"}"
+	save_execution_log "db_health_check" "$check_start_details"
+	
+	# Fetch database list from DB (pApiManagedDatabaseListForAgentbySk)
+	local api_url="${apiaddrv2}"
+	if [ -n "$apiaddrcode" ]; then
+		api_url="${api_url}?code=${apiaddrcode}"
+	fi
+	
+	local text="ManagedDatabaseListForAgent"
+	local temp_file="/tmp/managed_db_list_$$.json"
+	
+	wget -O "$temp_file" \
+		--post-data="text=${text}&sk=${sk}" \
+		--header="Content-Type: application/x-www-form-urlencoded" \
+		"$api_url" \
+		--no-check-certificate -q 2>&1
+	
+	if [ ! -s "$temp_file" ]; then
+		echo "[$logdt] [DB-Health] ⚠️  Failed to fetch database list" >> $LogFileName
+		rm -f "$temp_file"
+		
+		# Save error to KVS (giipagent factor)
+		local error_details="{\"action\":\"list_fetch_failed\",\"error\":\"API call failed\"}"
+		save_execution_log "db_health_error" "$error_details"
+		
+		return 1
+	fi
+	
+	# Check API response
+	local rstval=$(cat "$temp_file" | grep -o '"RstVal":[0-9]*' | sed 's/"RstVal"://' | head -1)
+	if [ "$rstval" != "200" ] && [ -n "$rstval" ]; then
+		echo "[$logdt] [DB-Health] ⚠️  API error (RstVal=$rstval)" >> $LogFileName
+		rm -f "$temp_file"
+		
+		# Save error to KVS (giipagent factor)
+		local error_details="{\"action\":\"list_fetch_failed\",\"error\":\"RstVal=${rstval}\"}"
+		save_execution_log "db_health_error" "$error_details"
+		
+		return 1
+	fi
+	
+	# Count databases
+	local db_count=$(cat "$temp_file" | grep -o '"mdb_id"' | wc -l)
+	
+	if [ "$db_count" -eq 0 ]; then
+		echo "[$logdt] [DB-Health] No databases to check (0 databases registered)" >> $LogFileName
+		rm -f "$temp_file"
+		
+		# Save to KVS (giipagent factor) - not an error, just no databases
+		local no_db_details="{\"action\":\"no_databases\",\"count\":0}"
+		save_execution_log "db_health_check" "$no_db_details"
+		
+		return 0
+	fi
+	
+	echo "[$logdt] [DB-Health] Found ${db_count} database(s) to check" >> $LogFileName
+	
+	# Health check results array (will be sent as JSON)
+	local results_json="["
+	local checked_count=0
+	local success_count=0
+	local failed_count=0
+	
+	# Parse each database and check health
+	# Note: Basic bash parsing (no jq), extract fields manually
+	local db_entries=$(cat "$temp_file" | grep -o '{[^}]*"mdb_id"[^}]*}')
+	
+	while IFS= read -r db_entry; do
+		[ -z "$db_entry" ] && continue
+		
+		# Extract fields
+		local mdb_id=$(echo "$db_entry" | grep -o '"mdb_id":[0-9]*' | sed 's/"mdb_id"://')
+		local db_name=$(echo "$db_entry" | grep -o '"db_name":"[^"]*"' | sed 's/"db_name":"//; s/"$//')
+		local db_type=$(echo "$db_entry" | grep -o '"db_type":"[^"]*"' | sed 's/"db_type":"//; s/"$//')
+		local db_host=$(echo "$db_entry" | grep -o '"db_host":"[^"]*"' | sed 's/"db_host":"//; s/"$//')
+		local db_port=$(echo "$db_entry" | grep -o '"db_port":[0-9]*' | sed 's/"db_port"://')
+		local db_user=$(echo "$db_entry" | grep -o '"db_user":"[^"]*"' | sed 's/"db_user":"//; s/"$//')
+		local db_password=$(echo "$db_entry" | grep -o '"db_password":"[^"]*"' | sed 's/"db_password":"//; s/"$//')
+		local db_database=$(echo "$db_entry" | grep -o '"db_database":"[^"]*"' | sed 's/"db_database":"//; s/"$//')
+		
+		[ -z "$mdb_id" ] && continue
+		
+		checked_count=$((checked_count + 1))
+		
+		echo "[$logdt] [DB-Health] Checking: $db_name (ID:$mdb_id, Type:$db_type)" >> $LogFileName
+		
+		# Perform health check based on db_type
+		local check_status="unknown"
+		local check_message=""
+		local response_time_ms=0
+		
+		local start_time=$(date +%s%3N 2>/dev/null || date +%s)
+		
+		case "$db_type" in
+			mysql|mariadb)
+				# MySQL/MariaDB health check
+				if command -v mysql &> /dev/null; then
+					local mysql_cmd="mysql -h${db_host} -P${db_port} -u${db_user} -p${db_password}"
+					[ -n "$db_database" ] && mysql_cmd="${mysql_cmd} -D${db_database}"
+					mysql_cmd="${mysql_cmd} -e 'SELECT 1' --connect-timeout=5 2>&1"
+					
+					local mysql_result=$(eval "$mysql_cmd")
+					
+					if echo "$mysql_result" | grep -q "ERROR"; then
+						check_status="error"
+						check_message=$(echo "$mysql_result" | grep "ERROR" | head -1 | sed 's/ERROR [0-9]* ([^)]*): //')
+					elif echo "$mysql_result" | grep -q "1"; then
+						check_status="success"
+						check_message="Connection successful"
+						success_count=$((success_count + 1))
+					else
+						check_status="error"
+						check_message="Unexpected response"
+					fi
+				else
+					check_status="error"
+					check_message="mysql client not installed"
+				fi
+				;;
+				
+			postgresql|postgres)
+				# PostgreSQL health check
+				if command -v psql &> /dev/null; then
+					local pg_cmd="PGPASSWORD='${db_password}' psql -h ${db_host} -p ${db_port} -U ${db_user}"
+					[ -n "$db_database" ] && pg_cmd="${pg_cmd} -d ${db_database}"
+					pg_cmd="${pg_cmd} -c 'SELECT 1' -t --connect-timeout=5 2>&1"
+					
+					local pg_result=$(eval "$pg_cmd")
+					
+					if echo "$pg_result" | grep -q "error"; then
+						check_status="error"
+						check_message=$(echo "$pg_result" | grep "error" | head -1)
+					elif echo "$pg_result" | grep -q "1"; then
+						check_status="success"
+						check_message="Connection successful"
+						success_count=$((success_count + 1))
+					else
+						check_status="error"
+						check_message="Unexpected response"
+					fi
+				else
+					check_status="error"
+					check_message="psql client not installed"
+				fi
+				;;
+				
+			mssql|sqlserver)
+				# MSSQL health check (requires sqlcmd)
+				if command -v sqlcmd &> /dev/null; then
+					local mssql_cmd="sqlcmd -S ${db_host},${db_port} -U ${db_user} -P '${db_password}'"
+					[ -n "$db_database" ] && mssql_cmd="${mssql_cmd} -d ${db_database}"
+					mssql_cmd="${mssql_cmd} -Q 'SELECT 1' -t 5 2>&1"
+					
+					local mssql_result=$(eval "$mssql_cmd")
+					
+					if echo "$mssql_result" | grep -q "Sqlcmd: Error"; then
+						check_status="error"
+						check_message=$(echo "$mssql_result" | grep "Error" | head -1)
+					elif echo "$mssql_result" | grep -q "1"; then
+						check_status="success"
+						check_message="Connection successful"
+						success_count=$((success_count + 1))
+					else
+						check_status="error"
+						check_message="Unexpected response"
+					fi
+				else
+					check_status="error"
+					check_message="sqlcmd not installed"
+				fi
+				;;
+				
+			redis)
+				# Redis health check (requires redis-cli)
+				if command -v redis-cli &> /dev/null; then
+					local redis_cmd="redis-cli -h ${db_host} -p ${db_port}"
+					[ -n "$db_password" ] && redis_cmd="${redis_cmd} -a '${db_password}'"
+					redis_cmd="${redis_cmd} PING 2>&1"
+					
+					local redis_result=$(eval "$redis_cmd")
+					
+					if echo "$redis_result" | grep -q "PONG"; then
+						check_status="success"
+						check_message="Connection successful (PONG)"
+						success_count=$((success_count + 1))
+					else
+						check_status="error"
+						check_message="No PONG response"
+					fi
+				else
+					check_status="error"
+					check_message="redis-cli not installed"
+				fi
+				;;
+				
+			mongodb|mongo)
+				# MongoDB health check (requires mongo or mongosh)
+				local mongo_bin=""
+				if command -v mongosh &> /dev/null; then
+					mongo_bin="mongosh"
+				elif command -v mongo &> /dev/null; then
+					mongo_bin="mongo"
+				fi
+				
+				if [ -n "$mongo_bin" ]; then
+					local mongo_uri="mongodb://${db_user}:${db_password}@${db_host}:${db_port}/${db_database}"
+					local mongo_cmd="${mongo_bin} '${mongo_uri}' --eval 'db.adminCommand({ping:1})' --quiet 2>&1"
+					
+					local mongo_result=$(eval "$mongo_cmd")
+					
+					if echo "$mongo_result" | grep -q '"ok".*1'; then
+						check_status="success"
+						check_message="Connection successful"
+						success_count=$((success_count + 1))
+					else
+						check_status="error"
+						check_message="Connection failed"
+					fi
+				else
+					check_status="error"
+					check_message="mongo/mongosh not installed"
+				fi
+				;;
+				
+			*)
+				check_status="unknown"
+				check_message="Unsupported database type: $db_type"
+				;;
+		esac
+		
+		local end_time=$(date +%s%3N 2>/dev/null || date +%s)
+		response_time_ms=$((end_time - start_time))
+		
+		# Escape message for JSON
+		check_message=$(echo "$check_message" | sed 's/"/\\"/g; s/\\/\\\\/g')
+		
+		# Add result to JSON array
+		if [ "$checked_count" -gt 1 ]; then
+			results_json="${results_json},"
+		fi
+		results_json="${results_json}{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":${response_time_ms}}"
+		
+		echo "[$logdt] [DB-Health]   ${check_status}: $db_name (${response_time_ms}ms)" >> $LogFileName
+		
+		# Save individual check to KVS (giipagent factor)
+		local check_details="{\"action\":\"database_checked\",\"mdb_id\":${mdb_id},\"db_name\":\"${db_name}\",\"db_type\":\"${db_type}\",\"status\":\"${check_status}\",\"response_time_ms\":${response_time_ms}}"
+		save_execution_log "db_health_check" "$check_details"
+		
+		# Log failures separately
+		if [ "$check_status" = "error" ]; then
+			failed_count=$((failed_count + 1))
+		fi
+		
+	done <<< "$db_entries"
+	
+	results_json="${results_json}]"
+	
+	rm -f "$temp_file"
+	
+	# Upload health check results to DB (pApiManagedDatabaseHealthUpdatebySk)
+	if [ "$checked_count" -gt 0 ]; then
+		echo "[$logdt] [DB-Health] Uploading results to DB..." >> $LogFileName
+		
+		local upload_file="/tmp/health_update_$$.txt"
+		
+		wget -O "$upload_file" \
+			--post-data="text=ManagedDatabaseHealthUpdate&jsondata=${results_json}&sk=${sk}" \
+			--header="Content-Type: application/x-www-form-urlencoded" \
+			"$api_url" \
+			--no-check-certificate -q 2>&1
+		
+		local upload_rstval=$(cat "$upload_file" | grep -o '"RstVal":[0-9]*' | sed 's/"RstVal"://' | head -1)
+		
+		if [ "$upload_rstval" = "200" ]; then
+			echo "[$logdt] [DB-Health] ✅ Results uploaded successfully" >> $LogFileName
+		else
+			echo "[$logdt] [DB-Health] ⚠️  Failed to upload results (RstVal=$upload_rstval)" >> $LogFileName
+		fi
+		
+		rm -f "$upload_file"
+	fi
+	
+	echo "[$logdt] [DB-Health] Check completed: ${checked_count} checked, ${success_count} success, ${failed_count} failed" >> $LogFileName
+	
+	# Save summary to KVS (giipagent factor)
+	local summary_details="{\"action\":\"health_check_completed\",\"total\":${db_count},\"checked\":${checked_count},\"success\":${success_count},\"failed\":${failed_count}}"
+	save_execution_log "db_health_check" "$summary_details"
+}
+
 # ============================================================================
 # End of Gateway Mode Functions
 # ============================================================================
@@ -1413,6 +1709,7 @@ fi
 if [ -z "$gateway_mode" ] && [ "${lssn}" != "0" ]; then
 	logdt=`date '+%Y%m%d%H%M%S'`
 	echo "[$logdt] [Init] Fetching server configuration from DB..." >> $LogFileName
+	echo "[$logdt] [Init] DEBUG: lssn=${lssn}, hostname=${hn}" >> $LogFileName
 	
 	# Use giipApiSk2 API
 	local config_url="${apiaddrv2}"
@@ -1424,6 +1721,9 @@ if [ -z "$gateway_mode" ] && [ "${lssn}" != "0" ]; then
 	local config_text="LSvrGetConfig ${lssn} ${hn}"
 	local config_file="/tmp/giip_config_${lssn}.json"
 	
+	echo "[$logdt] [Init] DEBUG: API URL: ${config_url}" >> $LogFileName
+	echo "[$logdt] [Init] DEBUG: Command: ${config_text}" >> $LogFileName
+	
 	wget -O "$config_file" \
 		--post-data="text=${config_text}&token=${sk}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
@@ -1431,16 +1731,28 @@ if [ -z "$gateway_mode" ] && [ "${lssn}" != "0" ]; then
 		--no-check-certificate -q 2>&1
 	
 	if [ -s "$config_file" ]; then
+		echo "[$logdt] [Init] DEBUG: API Response:" >> $LogFileName
+		cat "$config_file" >> $LogFileName
+		echo "" >> $LogFileName
+		
 		# Parse JSON response
 		local rstval=$(cat "$config_file" | grep -o '"RstVal":"[^"]*"' | sed 's/"RstVal":"//; s/"$//' | head -1)
+		
+		echo "[$logdt] [Init] DEBUG: RstVal=${rstval}" >> $LogFileName
 		
 		if [ "$rstval" = "200" ]; then
 			# Extract is_gateway value
 			local is_gateway=$(cat "$config_file" | grep -o '"is_gateway":[0-9]*' | sed 's/"is_gateway"://' | head -1)
 			
+			echo "[$logdt] [Init] DEBUG: is_gateway=${is_gateway}" >> $LogFileName
+			
 			if [ "$is_gateway" = "1" ]; then
 				gateway_mode="1"
 				echo "[$logdt] [Init] ✅ Gateway mode ENABLED (is_gateway=1 in DB)" >> $LogFileName
+				
+				# Save gateway init to KVS (giipagent factor)
+				local init_details="{\"action\":\"gateway_detected\",\"lssn\":${lssn},\"hostname\":\"${hn}\",\"is_gateway\":1}"
+				save_execution_log "gateway_init" "$init_details"
 			else
 				gateway_mode="0"
 				echo "[$logdt] [Init] ℹ️  Normal agent mode (is_gateway=0 in DB)" >> $LogFileName
@@ -1448,14 +1760,14 @@ if [ -z "$gateway_mode" ] && [ "${lssn}" != "0" ]; then
 		else
 			# Default to normal mode if API call fails
 			gateway_mode="0"
-			echo "[$logdt] [Init] ⚠️  Failed to fetch config (RstVal=$rstval), defaulting to normal mode" >> $LogFileName
+			echo "[$logdt] [Init] ⚠️  Failed to get config (RstVal=${rstval}), defaulting to normal mode" >> $LogFileName
 		fi
+		
+		rm -f "$config_file"
 	else
+		echo "[$logdt] [Init] ⚠️  API call failed or returned empty response" >> $LogFileName
 		gateway_mode="0"
-		echo "[$logdt] [Init] ⚠️  API call failed, defaulting to normal mode" >> $LogFileName
 	fi
-	
-	rm -f "$config_file"
 fi
 
 # Default to normal mode if still empty
@@ -1513,8 +1825,13 @@ if [ "${gateway_mode}" = "1" ]; then
 	
 	# Test DB connection - fetch server list
 	echo "[$logdt] [Gateway] Fetching server list from DB..." >> $LogFileName
+	echo "[$logdt] [Gateway] DEBUG: Calling get_gateway_servers..." >> $LogFileName
+	
 	local test_servers=""
 	get_gateway_servers test_servers
+	local fetch_result=$?
+	
+	echo "[$logdt] [Gateway] DEBUG: get_gateway_servers returned: ${fetch_result}" >> $LogFileName
 	
 	# Check if we got any servers
 	local server_count=0
@@ -1522,9 +1839,19 @@ if [ "${gateway_mode}" = "1" ]; then
 		echo "[$logdt] [Gateway] Warning: No servers found in DB" >> $LogFileName
 		echo "[$logdt] [Gateway] Please configure remote servers via Web UI" >> $LogFileName
 		echo "[$logdt] [Gateway] Go to: lsvrdetail page > Gateway Settings > Add Remote Servers" >> $LogFileName
+		
+		# Save warning to KVS (giipagent factor)
+		local warn_details="{\"warning_type\":\"no_servers\",\"warning_message\":\"No remote servers configured in DB\",\"gateway_lssn\":${lssn}}"
+		save_execution_log "gateway_init" "$warn_details"
 	else
 		server_count=$(echo "$test_servers" | grep -o "hostname" | wc -l)
 		echo "[$logdt] [Gateway] ✅ Found ${server_count} servers to manage (from DB)" >> $LogFileName
+		echo "[$logdt] [Gateway] DEBUG: Server list preview:" >> $LogFileName
+		echo "$test_servers" | head -20 >> $LogFileName
+		
+		# Save server count to KVS (giipagent factor)
+		local count_details="{\"action\":\"servers_loaded\",\"server_count\":${server_count},\"gateway_lssn\":${lssn},\"data_source\":\"DB\"}"
+		save_execution_log "gateway_init" "$count_details"
 	fi
 	
 	# Collect DB client status
@@ -1554,89 +1881,25 @@ if [ "${gateway_mode}" = "1" ]; then
 	kvs_data="{\"kType\":\"gateway_status\",\"kKey\":\"gateway_${lssn}_sync\",\"kFactor\":${sync_status}}"
 	wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
 	
-	# Track last sync time
-	last_sync_time=$(date +%s)
-	
-	# Track last heartbeat time
-	last_heartbeat_time=0
-	
-	# Gateway main loop
+	# Gateway main loop - simplified (no intervals, run every cycle)
 	while [ ${cntgiip} -le 3 ]; do
 		logdt=`date '+%Y%m%d%H%M%S'`
 		
-		# Check if we need to re-sync from API
-		if [ "${gateway_sync_interval}" != "0" ]; then
-			current_time=$(date +%s)
-			time_diff=$((current_time - last_sync_time))
-			
-			if [ $time_diff -ge ${gateway_sync_interval} ]; then
-				echo "[$logdt] [Gateway] Auto-refreshing server list from Web UI..." >> $LogFileName
-				sync_gateway_servers
-				
-				# Also refresh DB queries
-				echo "[$logdt] [Gateway-DB] Auto-refreshing database query list..." >> $LogFileName
-				sync_db_queries
-				
-				last_sync_time=$current_time
-			fi
-		fi
+		echo "[$logdt] [Gateway] ========== Cycle Start ==========" >> $LogFileName
 		
-		# Check if we need to run heartbeat (collect remote server info)
-		current_time=$(date +%s)
-		heartbeat_diff=$((current_time - last_heartbeat_time))
+		# 1. Collect remote server status (heartbeat)
+		echo "[$logdt] [Gateway] Collecting remote server status..." >> $LogFileName
+		collect_gateway_server_status
 		
-		if [ $heartbeat_diff -ge ${gateway_heartbeat_interval} ]; then
-			echo "[$logdt] [Gateway-Heartbeat] Running heartbeat to collect remote server info..." >> $LogFileName
-			
-			# Collect server status (NEW!)
-			collect_gateway_server_status
-			
-			# Save heartbeat trigger to KVS (giipagent factor)
-			heartbeat_details="{\"interval_seconds\":${gateway_heartbeat_interval},\"status_collection\":\"enabled\"}"
-			
-			# Save heartbeat trigger to KVS (backward compatibility)
-			heartbeat_trigger="{\"status\":\"triggered\",\"interval\":${gateway_heartbeat_interval},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
-			kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${lssn}_heartbeat_trigger\",\"kFactor\":${heartbeat_trigger}}"
-			wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
-			
-			# Check if heartbeat script exists
-			heartbeat_script="./giipAgentGateway-heartbeat.sh"
-			if [ -f "$heartbeat_script" ]; then
-				# Execute heartbeat script in background (non-blocking)
-				bash "$heartbeat_script" >> $LogFileName 2>&1 &
-				heartbeat_pid=$!
-				echo "[$logdt] [Gateway-Heartbeat] Started (PID: $heartbeat_pid)" >> $LogFileName
-				
-				# Update heartbeat details with PID
-				heartbeat_details="{\"interval_seconds\":${gateway_heartbeat_interval},\"script_path\":\"./giipAgentGateway-heartbeat.sh\",\"background_pid\":${heartbeat_pid}}"
-				save_execution_log "heartbeat" "$heartbeat_details"
-				
-				# Save heartbeat start to KVS (backward compatibility)
-				heartbeat_start="{\"status\":\"running\",\"pid\":${heartbeat_pid},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
-				kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${lssn}_heartbeat_status\",\"kFactor\":${heartbeat_start}}"
-				wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
-			else
-				echo "[$logdt] [Gateway-Heartbeat] ⚠️  Script not found: $heartbeat_script" >> $LogFileName
-				echo "[$logdt] [Gateway-Heartbeat] Remote server info collection will be skipped" >> $LogFileName
-				
-				# Save error to KVS
-				heartbeat_error="{\"status\":\"error\",\"error\":\"Script not found: ${heartbeat_script}\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
-				kvs_data="{\"kType\":\"gateway_heartbeat\",\"kKey\":\"gateway_${lssn}_heartbeat_error\",\"kFactor\":${heartbeat_error}}"
-				wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
-			fi
-			
-			last_heartbeat_time=$current_time
-		fi
+		# 2. Process gateway servers (check queues and execute)
+		echo "[$logdt] [Gateway] Processing gateway servers..." >> $LogFileName
+		process_gateway_servers
 		
-		# Process database queries first
-		process_db_queries
+		# 3. Check managed databases health (Database Management feature)
+		echo "[$logdt] [Gateway] Checking managed databases health..." >> $LogFileName
+		check_managed_databases
 		
-		# Process all gateway servers
-		if [ -f "${gateway_serverlist}" ]; then
-			process_gateway_servers
-		else
-			echo "[$logdt] [Gateway] No server list available, skipping cycle" >> $LogFileName
-		fi
+		echo "[$logdt] [Gateway] ========== Cycle End ==========" >> $LogFileName
 		
 		# Sleep before next cycle
 		logdt=`date '+%Y%m%d%H%M%S'`
