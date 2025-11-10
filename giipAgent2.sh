@@ -649,7 +649,7 @@ process_db_queries() {
 		# Skip if should_execute is not 1
 		if [ "${should_execute}" != "1" ]; then
 			echo "[Gateway-DB] Skipping gmq_sn=${gmq_sn} (not scheduled)"
-			continue
+			# Exit instead of continue (no loop)
 		fi
 		
 		processed=$((processed + 1))
@@ -882,7 +882,7 @@ process_gateway_servers() {
 			if [ -n "$err_check" ]; then
 				echo "[${logdt}] [Gateway]   ⚠️  Error: $err_check" >> $LogFileName
 				rm -f "$tmpfile"
-				continue
+				# Exit instead of continue (no loop)
 			fi
 			
 			echo "[${logdt}] [Gateway]   📥 Queue received, executing..." >> $LogFileName
@@ -1313,17 +1313,16 @@ cntgiip=999  # Force single execution
 					if [ $? -ne 0 ]; then
 						echo "[$logdt] ❌ Failed to fetch script from repository" >> $LogFileName
 						
-						# Save error to KVS
-						error_details="{\"error_type\":\"api_error\",\"error_message\":\"Failed to fetch script from repository\",\"error_code\":1,\"context\":\"queue_fetch\",\"mssn\":${mssn}}"
-						save_execution_log "error" "$error_details"
-						
-						rm -f $tmpFileName
-						cntgiip=999
-						continue
-					fi
-					echo "[$logdt] Queue received (repository)" >> $LogFileName
 					
-					# Save queue check to KVS
+					# Save error to KVS
+					error_details="{\"error_type\":\"api_error\",\"error_message\":\"Failed to fetch script from repository\",\"error_code\":1,\"context\":\"queue_fetch\",\"mssn\":${mssn}}"
+					save_execution_log "error" "$error_details"
+					
+					rm -f $tmpFileName
+					cntgiip=999
+					# Exit instead of continue (no loop)
+				fi
+				echo "[$logdt] Queue received (repository)" >> $LogFileName					# Save queue check to KVS
 					queue_check_details="{\"api_response\":\"200\",\"has_queue\":true,\"mssn\":${mssn},\"script_source\":\"repository\"}"
 					save_execution_log "queue_check" "$queue_check_details"
 				else
@@ -1336,7 +1335,7 @@ cntgiip=999  # Force single execution
 					
 					rm -f $tmpFileName
 					cntgiip=999
-					continue
+					# Exit instead of continue (no loop)
 				fi
 			else
 				# Other error
@@ -1348,7 +1347,7 @@ cntgiip=999  # Force single execution
 				
 				rm -f $tmpFileName
 				cntgiip=999
-				continue
+				# Exit instead of continue (no loop)
 			fi
 		else
 			# Not JSON, assume it's raw script (backward compatibility)
@@ -1363,7 +1362,7 @@ cntgiip=999  # Force single execution
 		else
 			echo "[$logdt] Empty script file after processing" >> $LogFileName
 			cntgiip=999
-			continue
+			# Exit instead of continue (no loop)
 		fi
 	else
 		echo "[$logdt] No queue" >> $LogFileName
