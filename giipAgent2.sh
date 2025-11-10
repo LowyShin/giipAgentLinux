@@ -1887,19 +1887,49 @@ if [ "${gateway_mode}" = "1" ]; then
 		
 		echo "[$logdt] [Gateway] ========== Cycle Start ==========" >> $LogFileName
 		
+		# Save Gateway cycle start to KVS (giipagent factor)
+		local cycle_start_details="{\"action\":\"gateway_cycle_start\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+		save_execution_log "gateway_cycle" "$cycle_start_details"
+		
 		# 1. Collect remote server status (heartbeat)
 		echo "[$logdt] [Gateway] Collecting remote server status..." >> $LogFileName
+		local status_start=$(date +%s)
 		collect_gateway_server_status
+		local status_end=$(date +%s)
+		local status_duration=$((status_end - status_start))
+		
+		# Save status collection result to KVS
+		local status_details="{\"action\":\"status_collection\",\"duration_sec\":${status_duration}}"
+		save_execution_log "gateway_status" "$status_details"
 		
 		# 2. Process gateway servers (check queues and execute)
 		echo "[$logdt] [Gateway] Processing gateway servers..." >> $LogFileName
+		local process_start=$(date +%s)
 		process_gateway_servers
+		local process_end=$(date +%s)
+		local process_duration=$((process_end - process_start))
+		
+		# Save processing result to KVS
+		local process_details="{\"action\":\"queue_processing\",\"duration_sec\":${process_duration}}"
+		save_execution_log "gateway_process" "$process_details"
 		
 		# 3. Check managed databases health (Database Management feature)
 		echo "[$logdt] [Gateway] Checking managed databases health..." >> $LogFileName
+		local dbcheck_start=$(date +%s)
 		check_managed_databases
+		local dbcheck_end=$(date +%s)
+		local dbcheck_duration=$((dbcheck_end - dbcheck_start))
+		
+		# Save DB check result to KVS
+		local dbcheck_details="{\"action\":\"database_health_check\",\"duration_sec\":${dbcheck_duration}}"
+		save_execution_log "gateway_dbcheck" "$dbcheck_details"
 		
 		echo "[$logdt] [Gateway] ========== Cycle End ==========" >> $LogFileName
+		
+		# Save Gateway cycle end to KVS (giipagent factor)
+		local total_cycle_duration=$((status_duration + process_duration + dbcheck_duration))
+		local cycle_end_details="{\"action\":\"gateway_cycle_end\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"total_duration_sec\":${total_cycle_duration},\"status_duration\":${status_duration},\"process_duration\":${process_duration},\"dbcheck_duration\":${dbcheck_duration}}"
+		save_execution_log "gateway_cycle" "$cycle_end_details"
 		
 		# Sleep before next cycle
 		logdt=`date '+%Y%m%d%H%M%S'`
