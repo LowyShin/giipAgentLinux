@@ -22,11 +22,6 @@ fi
 # Will be fetched from tLSvr.is_gateway via API
 gateway_mode=""  # Empty = not yet fetched
 
-# Gateway heartbeat interval (seconds) - how often to collect remote server info
-if [ "${gateway_heartbeat_interval}" = "" ];then
-	gateway_heartbeat_interval="300"  # Default: 5 minutes
-fi
-
 # Self Check - Skip for single execution mode (no loop)
 # cntgiip=`ps aux | grep giipAgent2.sh | grep -v grep | wc -l`
 cntgiip=1  # Always assume single process
@@ -833,40 +828,45 @@ get_remote_queue() {
 }
 
 # Function: Process gateway servers
+# Function: Process gateway servers (fetches from DB, not CSV!)
 process_gateway_servers() {
-	local serverlist="${gateway_serverlist}"
 	local tmpdir="/tmp/giipAgent_gateway_$$"
-	
 	mkdir -p "$tmpdir"
-	
-	if [ ! -f "$serverlist" ]; then
-		echo "[Gateway] Error: Server list not found: $serverlist"
-		return 1
-	fi
 	
 	local logdt=$(date '+%Y%m%d%H%M%S')
 	echo "[${logdt}] [Gateway] Starting server processing cycle..." >> $LogFileName
 	
-	while IFS=',' read -r hostname lssn ssh_host ssh_user ssh_port ssh_key ssh_password os_info enabled; do
-		# Skip comments and empty lines
-		[[ $hostname =~ ^#.*$ ]] && continue
-		[[ -z $hostname ]] && continue
-		[[ $enabled == "0" ]] && continue
+	# Fetch server list from DB
+	local server_json=""
+	get_gateway_servers server_json
+	
+	if [ $? -ne 0 ] || [ -z "$server_json" ]; then
+		echo "[${logdt}] [Gateway] ⚠️  Failed to fetch server list from DB" >> $LogFileName
+		rm -rf "$tmpdir"
+		return 1
+	fi
+	
+	# Process each server from JSON
+	echo "$server_json" | jq -c '.[]' 2>/dev/null | while read -r server_obj; do
+		# Extract server details
+		hostname=$(echo "$server_obj" | jq -r '.hostname // empty')
+		lssn=$(echo "$server_obj" | jq -r '.lssn // 0')
+		ssh_host=$(echo "$server_obj" | jq -r '.ssh_host // empty')
+		ssh_user=$(echo "$server_obj" | jq -r '.ssh_user // "root"')
+		ssh_port=$(echo "$server_obj" | jq -r '.ssh_port // 22')
+		ssh_key=$(echo "$server_obj" | jq -r '.ssh_key_path // empty')
+		ssh_password=$(echo "$server_obj" | jq -r '.ssh_password // empty')
+		os_info=$(echo "$server_obj" | jq -r '.os_info // "Linux"')
+		enabled=$(echo "$server_obj" | jq -r '.enabled // 1')
 		
-		# Clean variables
-		hostname=$(echo $hostname | xargs)
-		lssn=$(echo $lssn | xargs)
-		ssh_host=$(echo $ssh_host | xargs)
-		ssh_user=$(echo $ssh_user | xargs)
-		ssh_port=$(echo $ssh_port | xargs)
-		ssh_key=$(echo $ssh_key | xargs)
-		ssh_password=$(echo $ssh_password | xargs)
-		os_info=$(echo $os_info | xargs)
+		# Skip disabled servers
+		[ "$enabled" != "1" ] && continue
 		
-		# Defaults
-		[ -z "$ssh_port" ] && ssh_port="22"
-		[ -z "$ssh_user" ] && ssh_user="root"
-		[ -z "$os_info" ] && os_info="Linux"
+		# Skip if missing required fields
+		if [ -z "$hostname" ] || [ -z "$ssh_host" ] || [ "$lssn" = "0" ]; then
+			echo "[${logdt}] [Gateway] ⚠️  Skipping invalid server config: hostname=$hostname, lssn=$lssn" >> $LogFileName
+			continue
+		fi
 		
 		logdt=$(date '+%Y%m%d%H%M%S')
 		echo "[${logdt}] [Gateway] Processing: $hostname (LSSN:$lssn, ${ssh_user}@${ssh_host}:${ssh_port})" >> $LogFileName
@@ -881,7 +881,7 @@ process_gateway_servers() {
 			if [ -n "$err_check" ]; then
 				echo "[${logdt}] [Gateway]   ⚠️  Error: $err_check" >> $LogFileName
 				rm -f "$tmpfile"
-				# Exit instead of continue (no loop)
+				continue
 			fi
 			
 			echo "[${logdt}] [Gateway]   📥 Queue received, executing..." >> $LogFileName
@@ -899,12 +899,11 @@ process_gateway_servers() {
 		else
 			echo "[${logdt}] [Gateway]   ⏸️  No queue" >> $LogFileName
 		fi
-		
-	done < "$serverlist"
+	done
 	
 	rm -rf "$tmpdir"
 	logdt=$(date '+%Y%m%d%H%M%S')
-	echo "[${logdt}] [Gateway] Cycle completed" >> $LogFileName
+	echo "[${logdt}] [Gateway] Cycle completed (data from DB)" >> $LogFileName
 }
 
 # ============================================================================
@@ -967,18 +966,76 @@ EOF
 # ============================================================================
 # Gateway Server Status Collection Function
 # ============================================================================
+# Function: Get remote server list from DB (no CSV file needed!)
+get_gateway_servers() {
+	local output_var=$1  # Variable name to store JSON result
+	
+	local logdt=$(date '+%Y%m%d%H%M%S')
+	
+	# Use giipApiSk2 API
+	local api_url="${apiaddrv2}"
+	if [ -n "$apiaddrcode" ]; then
+		api_url="${api_url}?code=${apiaddrcode}"
+	fi
+	
+	# Call pApiGatewayRemoteServerListForAgentbySK
+	local text="GatewayRemoteServerList ${lssn}"
+	local temp_file="/tmp/gateway_servers_${lssn}_$$.json"
+	
+	wget -O "$temp_file" \
+		--post-data="text=${text}&token=${sk}" \
+		--header="Content-Type: application/x-www-form-urlencoded" \
+		"$api_url" \
+		--no-check-certificate -q 2>&1
+	
+	if [ ! -s "$temp_file" ]; then
+		echo "[$logdt] [Gateway] ⚠️  Failed to fetch server list from DB" >> $LogFileName
+		rm -f "$temp_file"
+		eval "$output_var=''"
+		return 1
+	fi
+	
+	# Check for error response
+	local rstval=$(cat "$temp_file" | grep -o '"RstVal":"[^"]*"' | sed 's/"RstVal":"//; s/"$//' | head -1)
+	if [ "$rstval" != "200" ] && [ -n "$rstval" ]; then
+		echo "[$logdt] [Gateway] ⚠️  API error (RstVal=$rstval)" >> $LogFileName
+		cat "$temp_file" | head -5 >> $LogFileName
+		rm -f "$temp_file"
+		eval "$output_var=''"
+		return 1
+	fi
+	
+	# Extract data array from JSON response
+	# Expected format: {"data":[{server1},{server2},...]}
+	local server_list=$(cat "$temp_file" | grep -o '"data":\[.*\]' | sed 's/"data"://; s/^{//; s/}$//')
+	
+	if [ -z "$server_list" ]; then
+		# Fallback: maybe it's already an array
+		server_list=$(cat "$temp_file")
+	fi
+	
+	echo "[$logdt] [Gateway] ✅ Fetched server list from DB (no CSV needed)" >> $LogFileName
+	rm -f "$temp_file"
+	
+	eval "$output_var='$server_list'"
+	return 0
+}
+
+# Function: Collect server status (using DB, not CSV!)
 collect_gateway_server_status() {
 	local logdt=$(date '+%Y%m%d%H%M%S')
 	echo "[$logdt] [Gateway] Starting server status collection..." >> $LogFileName
 	
-	# Check if server list exists
-	if [ ! -f "${gateway_serverlist}" ]; then
-		echo "[$logdt] [Gateway] No server list found, skipping status collection" >> $LogFileName
+	# Fetch server list from DB
+	local server_json=""
+	get_gateway_servers server_json
+	if [ $? -ne 0 ] || [ -z "$server_json" ]; then
+		echo "[$logdt] [Gateway] No servers to check (DB query failed)" >> $LogFileName
 		return 1
 	fi
 	
-	# Count servers
-	local server_count=$(grep -v "^#" "${gateway_serverlist}" | grep -v "^$" | wc -l)
+	# Count servers (JSON array parsing)
+	local server_count=$(echo "$server_json" | grep -o "hostname" | wc -l)
 	if [ $server_count -eq 0 ]; then
 		echo "[$logdt] [Gateway] No servers to check" >> $LogFileName
 		return 0
@@ -991,13 +1048,24 @@ collect_gateway_server_status() {
 	local first_server=1
 	local checked_count=0
 	
-	# Read server list
-	while IFS=',' read -r hostname remote_lssn ssh_host ssh_user ssh_port ssh_key_path ssh_password os_info enabled || [ -n "$hostname" ]; do
-		# Skip comments and empty lines
-		[[ "$hostname" =~ ^#.*$ ]] && continue
-		[[ -z "$hostname" ]] && continue
+	# Parse JSON array and process each server
+	echo "$server_json" | jq -c '.[]' 2>/dev/null | while read -r server_obj; do
+		# Extract server details from JSON
+		hostname=$(echo "$server_obj" | jq -r '.hostname // empty')
+		remote_lssn=$(echo "$server_obj" | jq -r '.lssn // 0')
+		ssh_host=$(echo "$server_obj" | jq -r '.ssh_host // empty')
+		ssh_user=$(echo "$server_obj" | jq -r '.ssh_user // "root"')
+		ssh_port=$(echo "$server_obj" | jq -r '.ssh_port // 22')
+		ssh_key_path=$(echo "$server_obj" | jq -r '.ssh_key_path // empty')
+		ssh_password=$(echo "$server_obj" | jq -r '.ssh_password // empty')
+		os_info=$(echo "$server_obj" | jq -r '.os_info // "Linux"')
+		enabled=$(echo "$server_obj" | jq -r '.enabled // 1')
 		
 		# Skip disabled servers
+		[ "$enabled" != "1" ] && continue
+		
+		# Skip if missing required fields
+		[ -z "$hostname" ] || [ -z "$ssh_host" ] || [ "$remote_lssn" = "0" ] && continue
 		if [ "$enabled" != "1" ]; then
 			continue
 		fi
@@ -1349,23 +1417,20 @@ if [ "${gateway_mode}" = "1" ]; then
 	# Check and install database clients
 	check_db_clients
 	
-	# Initial fetch from API
-	echo "[$logdt] [Gateway] Fetching initial server list from Web UI..." >> $LogFileName
-	sync_gateway_servers
-	
-	# Fetch DB queries
-	echo "[$logdt] [Gateway-DB] Fetching database query list from Web UI..." >> $LogFileName
-	sync_db_queries
+	# Test DB connection - fetch server list
+	echo "[$logdt] [Gateway] Fetching server list from DB..." >> $LogFileName
+	local test_servers=""
+	get_gateway_servers test_servers
 	
 	# Check if we got any servers
-	server_count=0
-	if [ ! -f "${gateway_serverlist}" ]; then
-		echo "[$logdt] [Gateway] Warning: No server list file created" >> $LogFileName
+	local server_count=0
+	if [ -z "$test_servers" ]; then
+		echo "[$logdt] [Gateway] Warning: No servers found in DB" >> $LogFileName
 		echo "[$logdt] [Gateway] Please configure remote servers via Web UI" >> $LogFileName
-		echo "[$logdt] [Gateway] Go to: lsvrdetail page > Gateway Settings" >> $LogFileName
+		echo "[$logdt] [Gateway] Go to: lsvrdetail page > Gateway Settings > Add Remote Servers" >> $LogFileName
 	else
-		server_count=$(grep -v "^#" "${gateway_serverlist}" | grep -v "^$" | wc -l)
-		echo "[$logdt] [Gateway] Found ${server_count} servers to manage" >> $LogFileName
+		server_count=$(echo "$test_servers" | grep -o "hostname" | wc -l)
+		echo "[$logdt] [Gateway] ✅ Found ${server_count} servers to manage (from DB)" >> $LogFileName
 	fi
 	
 	# Collect DB client status

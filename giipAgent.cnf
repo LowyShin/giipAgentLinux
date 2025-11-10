@@ -23,36 +23,21 @@ lssn="0"
 # 60 = Check queue every 60 seconds
 giipagentdelay="60"
 
-# Gateway Configuration (AUTO-DETECTED from DB)
-# ⚠️ DO NOT manually set gateway_mode here!
-# Gateway mode is automatically determined from tLSvr.is_gateway in database
-# Configure via Web UI -> lsvrdetail page instead
+# ============================================================================
+# Gateway Configuration - 100% AUTO-DETECTED FROM DB
+# ============================================================================
+# ⚠️ DO NOT add any gateway-related settings here!
+# ⚠️ ALL gateway settings are managed in the database (tLSvr table)
+# ⚠️ Configure ONLY via Web UI -> lsvrdetail page
 #
-# When Gateway mode is enabled in DB:
-#   - Automatically fetches remote server list from GIIP Web UI
-#   - No manual CSV file editing needed
-#   - All configuration done via Web UI (lsvrdetail page)
-#   - Auto-installs sshpass if needed
-#   - Supports both SSH key and password authentication
-
-# Gateway server list cache file (auto-generated from API)
-gateway_serverlist="./giipAgentGateway_servers.csv"
-
-# Gateway database query list cache file (auto-generated from API)
-# Supports: MySQL, MariaDB, MSSQL, PostgreSQL, Oracle, MongoDB, Redis
-gateway_db_querylist="./giipAgentGateway_db_queries.csv"
-
-# Auto-sync interval (seconds)
-# How often to refresh server list from Web UI
-# Default: 300 = 5 minutes
-gateway_sync_interval="300"
-
-# Gateway heartbeat interval (seconds)
-# How often to collect remote server info (OS, memory, disk, etc.) via SSH
-# This keeps LSChkdt updated in tLSvr table so servers show as "online"
-# Recommended: 300 (5 minutes) or 600 (10 minutes)
-# Set to 0 to disable heartbeat
-gateway_heartbeat_interval="300"
+# Auto-detected settings (NO manual configuration needed):
+#   - gateway_mode        → from tLSvr.is_gateway
+#   - server list         → from pApiGatewayRemoteServerListForAgentbySK
+#   - heartbeat interval  → hardcoded in script (every cycle)
+#   - ssh credentials     → from tLSvr.gateway_ssh_* columns
+#
+# See: docs/GATEWAY_CONFIG_PHILOSOPHY.md
+# ============================================================================
 
 # API v2 (Recommended) - PowerShell-based, faster and more stable
 apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"

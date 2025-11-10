@@ -32,6 +32,8 @@
 - **[giipAgent2.sh Specification](docs/GIIPAGENT2_SPECIFICATION.md)** - giipAgent2.sh 실행 조건, 동작 흐름, KVS 저장 로직 완전 문서화 🆕
 
 ### Gateway & Remote Control
+- **[⚠️ Gateway Configuration Philosophy](docs/GATEWAY_CONFIG_PHILOSOPHY.md)** - **필독! DB as Single Source of Truth** 🔥
+- **[⚠️ Config Addition Checklist](docs/CHECKLIST_BEFORE_ADDING_CONFIG.md)** - **설정 추가 전 필수 확인사항** 🚨
 - **[Gateway Setup Guide](docs/GATEWAY_SETUP_GUIDE.md)** - 실제 환경 설정 가이드 (실무 중심)
 - [Gateway README](README_GATEWAY.md) - Gateway Agent 전체 매뉴얼
 - [Gateway Quick Start (KR)](GATEWAY_QUICKSTART_KR.md) - 빠른 시작 가이드
