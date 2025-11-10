@@ -54,11 +54,12 @@ parse_json_response() {
 	if [ -n "$is_json" ]; then
 		# Check for error in JSON
 		if grep -q '"error"' "$response_file"; then
-			local error_msg=$(cat "$response_file" | grep -o '"error"\s*:\s*"[^"]*"' | sed 's/"error"\s*:\s*"//; s/"$//' | head -1)
-			echo "[Normal] ❌ API Error: $error_msg"
+			local error_msg=$(cat "$response_file")
+			echo "[Normal] ❌ API Error Response:"
+			echo "$error_msg"
 			
 			# Save error to KVS
-			local error_details="{\"error_type\":\"api_error\",\"error_message\":\"${error_msg}\",\"error_code\":1,\"context\":\"queue_fetch\"}"
+			local error_details="{\"error_type\":\"api_error\",\"error_message\":\"API returned error\",\"error_code\":1,\"context\":\"queue_fetch\"}"
 			save_execution_log "error" "$error_details" 2>/dev/null
 			
 			return 2
