@@ -48,17 +48,50 @@ if [ $? -ne 0 ]; then
 fi
 
 # ============================================================================
-# Initialize Logging
+# Fetch Server Configuration from DB (is_gateway auto-detection)
 # ============================================================================
 
-# Detect OS
+# Detect OS first (needed for API call)
 os=$(detect_os)
-
-# Setup log directory
-init_log_dir "$SCRIPT_DIR"
 
 # Get hostname
 hn=$(hostname)
+
+# Fetch server config from DB
+echo "🔍 Fetching server configuration from DB..."
+config_tmpfile="giipTmpConfig.json"
+api_url=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
+config_text="LSvrGetConfig ${lssn} ${hn}"
+
+wget -O "$config_tmpfile" \
+	--post-data="text=${config_text}&token=${sk}" \
+	--header="Content-Type: application/x-www-form-urlencoded" \
+	"${api_url}" \
+	--no-check-certificate -q 2>&1
+
+if [ -f "$config_tmpfile" ]; then
+	# Extract is_gateway value from JSON response
+	# Response format: {"RstVal":"200","lssn":71174,"is_gateway":1,...}
+	is_gateway_from_db=$(grep -o '"is_gateway":[0-9]*' "$config_tmpfile" | grep -o '[0-9]*$')
+	
+	if [ -n "$is_gateway_from_db" ]; then
+		gateway_mode="$is_gateway_from_db"
+		echo "✅ DB config loaded: is_gateway=${gateway_mode}"
+	else
+		echo "⚠️  Failed to parse is_gateway from DB, using default: gateway_mode=${gateway_mode}"
+	fi
+	
+	rm -f "$config_tmpfile"
+else
+	echo "⚠️  Failed to fetch server config from DB, using default: gateway_mode=${gateway_mode}"
+fi
+
+# ============================================================================
+# Initialize Logging
+# ============================================================================
+
+# Setup log directory
+init_log_dir "$SCRIPT_DIR"
 
 # Log startup
 logdt=$(date '+%Y%m%d%H%M%S')
