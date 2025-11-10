@@ -1296,7 +1296,44 @@ cntgiip=999  # Force single execution
 			
 			echo "[$logdt] [DEBUG] JSON parsed - RstVal='$rstval', mssn='$mssn', script_body_len=${#script_body}" >> $LogFileName
 			
-			if [ "$rstval" = "404" ]; then
+			# Check if parsing failed (empty rstval could mean empty response or parsing error)
+			if [ -z "$rstval" ]; then
+				# Check if response is actually empty or just malformed
+				RESPONSE_SIZE=$(wc -c < "$tmpFileName")
+				if [ "$RESPONSE_SIZE" -lt 10 ]; then
+					# Response is too small, treat as empty
+					echo "[$logdt] API response too small (${RESPONSE_SIZE} bytes), treating as empty queue" >> $LogFileName
+					queue_check_details="{\"api_response\":\"empty_or_malformed\",\"has_queue\":false,\"response_size\":${RESPONSE_SIZE},\"script_source\":\"none\"}"
+					save_execution_log "queue_check" "$queue_check_details"
+					rm -f $tmpFileName
+					cntgiip=999
+					# Exit instead of continue (no loop)
+				else
+					# Response has content but parsing failed
+					echo "[$logdt] [WARN] Failed to parse RstVal from response (${RESPONSE_SIZE} bytes)" >> $LogFileName
+					
+					# Save response for debugging
+					RESPONSE_DEBUG="/tmp/giip_parse_failed_$(date +%Y%m%d_%H%M%S).json"
+					cp "$tmpFileName" "$RESPONSE_DEBUG" 2>/dev/null
+					echo "[$logdt] [DEBUG] Response saved to: $RESPONSE_DEBUG" >> $LogFileName
+					
+					# Try alternative parsing (maybe different JSON structure)
+					# Check if it's a simple success response without data
+					if grep -q '"success"' "$tmpFileName" || grep -q '"status".*200' "$tmpFileName"; then
+						echo "[$logdt] Detected success response without queue data" >> $LogFileName
+						queue_check_details="{\"api_response\":\"success_no_data\",\"has_queue\":false,\"response_file\":\"$RESPONSE_DEBUG\",\"script_source\":\"none\"}"
+						save_execution_log "queue_check" "$queue_check_details"
+					else
+						# Unknown response format
+						error_details="{\"error_type\":\"parse_error\",\"error_message\":\"Failed to parse API response\",\"response_size\":${RESPONSE_SIZE},\"response_file\":\"$RESPONSE_DEBUG\",\"context\":\"json_parsing\"}"
+						save_execution_log "error" "$error_details"
+					fi
+					
+					rm -f $tmpFileName
+					cntgiip=999
+					# Exit instead of continue (no loop)
+				fi
+			elif [ "$rstval" = "404" ]; then
 				# No queue available
 				rm -f $tmpFileName
 				echo "[$logdt] No queue (404)" >> $LogFileName
@@ -1349,8 +1386,8 @@ cntgiip=999  # Force single execution
 					# Exit instead of continue (no loop)
 				fi
 			else
-				# Other error or empty rstval
-				echo "[$logdt] ⚠️  API error or unexpected response: RstVal='$rstval'" >> $LogFileName
+				# Other error (but rstval has some value)
+				echo "[$logdt] ⚠️  API returned unexpected RstVal: '$rstval'" >> $LogFileName
 				
 				# Save raw response to temp file for analysis
 				RESPONSE_DEBUG="/tmp/giip_api_response_debug_$(date +%Y%m%d_%H%M%S).json"
@@ -1358,7 +1395,7 @@ cntgiip=999  # Force single execution
 				echo "[$logdt] [DEBUG] Response saved to: $RESPONSE_DEBUG" >> $LogFileName
 				
 				# Save error to KVS with more details
-				error_details="{\"error_type\":\"api_error\",\"error_message\":\"Unexpected API response\",\"error_code\":${rstval:-0},\"context\":\"queue_check\",\"rstval_raw\":\"$rstval\",\"response_file\":\"$RESPONSE_DEBUG\"}"
+				error_details="{\"error_type\":\"unexpected_rstval\",\"error_message\":\"Unexpected RstVal value\",\"rstval\":\"$rstval\",\"context\":\"queue_check\",\"response_file\":\"$RESPONSE_DEBUG\"}"
 				save_execution_log "error" "$error_details"
 				
 				rm -f $tmpFileName
