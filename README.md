@@ -8,7 +8,7 @@
 
 ![GIIP Logo](https://giipasp.azurewebsites.net/logo.png)
 
-**Last Updated**: 2025-11-02 - Gateway Auto-Configuration Added 🎉
+**Last Updated**: 2025-01-10 - Modular Architecture (v3.0) 🎉
 
 > **🚨 FOR AI AGENTS: Configuration File Warning**
 > 
@@ -24,9 +24,11 @@
 
 ## 📋 Documentation
 
-### Architecture & Design
+### 🆕 Architecture & Design (v3.0)
+- **[Modular Architecture Guide](docs/MODULAR_ARCHITECTURE.md)** - 리팩토링된 구조 설명 (v3.0) 🆕
 - [Auto-Discovery Architecture](docs/AUTO_DISCOVERY_ARCHITECTURE.md) - 파일 구조와 실행 흐름 상세 설명
 - [Service Package Filter](docs/SERVICE_PACKAGE_FILTER.md) - 소프트웨어 필터링 규칙
+- **[giipAgent2.sh Specification](docs/GIIPAGENT2_SPECIFICATION.md)** - giipAgent2.sh 실행 조건, 동작 흐름, KVS 저장 로직 완전 문서화
 - **[giipAgent2.sh Specification](docs/GIIPAGENT2_SPECIFICATION.md)** - giipAgent2.sh 실행 조건, 동작 흐름, KVS 저장 로직 완전 문서화 🆕
 
 ### Gateway & Remote Control

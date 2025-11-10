@@ -1274,7 +1274,7 @@ cntgiip=999  # Force single execution
 				
 				rm -f $tmpFileName
 				cntgiip=999
-				continue
+				# Exit instead of continue (no loop)
 			fi
 			
 			# Try to extract RstVal and other fields
@@ -1295,7 +1295,7 @@ cntgiip=999  # Force single execution
 				save_execution_log "queue_check" "$queue_check_details"
 				
 				cntgiip=999
-				continue
+				# Exit instead of continue (no loop)
 			elif [ "$rstval" = "200" ]; then
 				# Success - check if we have script body
 				if [ -n "$script_body" ] && [ "$script_body" != "null" ]; then
