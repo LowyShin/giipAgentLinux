@@ -31,8 +31,8 @@ Gateway 서버가 관리 중인 원격 서버들의 정보를 자동으로 수�
 cd /home/giip/giipAgentLinux
 
 # 설정 파일 생성
-cp giipAgentGateway.cnf.template giipAgentGateway.cnf
-vi giipAgentGateway.cnf
+cp giipAgent.cnf.template giipAgent.cnf
+vi giipAgent.cnf
 ```
 
 **필수 설정 항목**:
@@ -210,7 +210,7 @@ exit
 
 ```bash
 # Gateway 설정 확인
-grep -E "gateway_lssn|csn|sk|apiaddrv2|apiaddrcode" giipAgentGateway.cnf
+grep -E "gateway_lssn|csn|sk|apiaddrv2|apiaddrcode" giipAgent.cnf
 
 # API 테스트 (수동 호출)
 curl -X POST "https://giipfaw.azurewebsites.net/api/giipApiSk2?code=YOUR_CODE" \

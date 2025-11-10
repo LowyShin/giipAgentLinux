@@ -4,12 +4,12 @@
 # and creates the giipAgentGateway_servers.csv file
 
 # Load configuration
-if [ ! -f "./giipAgentGateway.cnf" ]; then
-    echo "Error: giipAgentGateway.cnf not found"
+if [ ! -f "./giipAgent.cnf" ]; then
+    echo "Error: giipAgent.cnf not found"
     exit 1
 fi
 
-. ./giipAgentGateway.cnf
+. ./giipAgent.cnf
 
 # Check required tools
 if ! command -v sqlcmd &> /dev/null; then
@@ -25,7 +25,7 @@ DB_USER="${db_user}"
 DB_PASS="${db_password}"
 
 if [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then
-    echo "Error: Database credentials not configured in giipAgentGateway.cnf"
+    echo "Error: Database credentials not configured in giipAgent.cnf"
     echo "Add: db_server, db_name, db_user, db_password"
     exit 1
 fi

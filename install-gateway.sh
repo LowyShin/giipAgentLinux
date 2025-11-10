@@ -69,7 +69,7 @@ echo ""
 # Copy gateway files
 echo "Installing gateway agent files..."
 cp ../giipAgentLinux/giipAgentGateway.sh .
-cp ../giipAgentLinux/giipAgentGateway.cnf .
+cp ../giipAgentLinux/giipAgent.cnf .
 cp ../giipAgentLinux/giipAgentGateway_servers.csv .
 
 chmod +x giipAgentGateway.sh
@@ -137,7 +137,7 @@ echo ""
 read -p "Enter your GIIP Secret Key (sk): " GIIP_SK
 
 if [ "$GIIP_SK" != "" ]; then
-	sed -i "s|sk=\"<your secret key>\"|sk=\"$GIIP_SK\"|g" giipAgentGateway.cnf
+	sed -i "s|sk=\"<your secret key>\"|sk=\"$GIIP_SK\"|g" giipAgent.cnf
 	echo "✓ Secret key configured"
 fi
 

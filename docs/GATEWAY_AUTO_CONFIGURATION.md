@@ -8,7 +8,7 @@ Gateway 서버에서 수동 설정 작업을 최소화하고, 웹 UI에서 Gatew
 
 ### 문제점
 1. **수동 설정 필요**
-   - `giipAgentGateway.cnf` 수동 작성
+   - `giipAgent.cnf` 수동 작성
    - `giipAgentGateway_servers.csv` 수동 관리
    - SSH 키 수동 배포
    - 원격 서버별 스크립트 수동 설치
@@ -257,7 +257,7 @@ tMgmtScript에 등록할 내용:
 set -e
 
 INSTALL_DIR="/opt/giipAgentLinux"
-CONFIG_FILE="$INSTALL_DIR/giipAgentGateway.cnf"
+CONFIG_FILE="$INSTALL_DIR/giipAgent.cnf"
 SERVERLIST_FILE="$INSTALL_DIR/giipAgentGateway_servers.csv"
 
 echo "===== Gateway Server Auto Setup Started ====="
@@ -378,7 +378,7 @@ INSERT INTO tMgmtScript (
 set -e
 
 INSTALL_DIR="/opt/giipAgentLinux"
-CONFIG_FILE="$INSTALL_DIR/giipAgentGateway.cnf"
+CONFIG_FILE="$INSTALL_DIR/giipAgent.cnf"
 SERVERLIST_FILE="$INSTALL_DIR/giipAgentGateway_servers.csv"
 
 echo "===== Refreshing Gateway Server List ====="
@@ -537,7 +537,7 @@ const remoteServers = await fetchAzureCommand('GatewayRemoteServerList', {
 . ./giipAgent.cnf
 
 # Gateway 모드 확인
-if [ -f "/opt/giipAgentLinux/giipAgentGateway.cnf" ]; then
+if [ -f "/opt/giipAgentLinux/giipAgent.cnf" ]; then
     echo "Gateway mode detected"
     exec /opt/giipAgentLinux/giipAgentGateway.sh
     exit 0

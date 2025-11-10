@@ -23,17 +23,17 @@ lssn="0"
 # 60 = Check queue every 60 seconds
 giipagentdelay="60"
 
-# Gateway Mode (NEW in v1.80)
-# Set to "1" to enable Gateway mode for managing remote servers
-# Set to "0" for normal local agent mode
-# 
-# When enabled:
+# Gateway Configuration (AUTO-DETECTED from DB)
+# ⚠️ DO NOT manually set gateway_mode here!
+# Gateway mode is automatically determined from tLSvr.is_gateway in database
+# Configure via Web UI -> lsvrdetail page instead
+#
+# When Gateway mode is enabled in DB:
 #   - Automatically fetches remote server list from GIIP Web UI
 #   - No manual CSV file editing needed
 #   - All configuration done via Web UI (lsvrdetail page)
 #   - Auto-installs sshpass if needed
 #   - Supports both SSH key and password authentication
-gateway_mode="0"
 
 # Gateway server list cache file (auto-generated from API)
 gateway_serverlist="./giipAgentGateway_servers.csv"

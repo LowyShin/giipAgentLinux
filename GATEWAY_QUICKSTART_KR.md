@@ -30,7 +30,7 @@ cd ~/giipAgentGateway
 
 # 파일 복사
 cp ~/giipAgentLinux/giipAgentGateway.sh .
-cp ~/giipAgentLinux/giipAgentGateway.cnf.template giipAgentGateway.cnf
+cp ~/giipAgentLinux/giipAgent.cnf.template giipAgent.cnf
 cp ~/giipAgentLinux/giipAgentGateway_servers.csv.template giipAgentGateway_servers.csv
 
 # 실행 권한 부여
@@ -39,10 +39,10 @@ chmod +x giipAgentGateway.sh
 
 ## 설정
 
-### 1. Gateway 설정 (`giipAgentGateway.cnf`)
+### 1. Gateway 설정 (`giipAgent.cnf`)
 
 ```bash
-vi giipAgentGateway.cnf
+vi giipAgent.cnf
 ```
 
 ```bash
@@ -194,7 +194,7 @@ ssh-keyscan -H 192.168.1.10 >> ~/.ssh/known_hosts
 curl "https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=YOUR_SK&lssn=1001&hn=test&os=Linux&df=os&sv=1.0"
 
 # 설정 확인
-cat ~/giipAgentGateway/giipAgentGateway.cnf | grep sk=
+cat ~/giipAgentGateway/giipAgent.cnf | grep sk=
 ```
 
 ### Agent 실행되지 않음

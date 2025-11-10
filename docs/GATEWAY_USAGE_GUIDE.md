@@ -71,7 +71,7 @@ Gateway 서버 기능을 사용하면 SSH를 통해 원격 서버들을 중앙�
 
 2. giipAgent가 큐를 폴링하여 스크립트 실행
    └─> Git 레포지토리 클론
-   └─> giipAgentGateway.cnf 생성
+   └─> giipAgent.cnf 생성
    └─> giipAgentGateway_servers.csv 생성 (API에서 가져옴)
    └─> Cron 작업 등록 (5분마다 실행)
    └─> SSH 키 디렉토리 생성
@@ -85,7 +85,7 @@ Gateway 서버 기능을 사용하면 SSH를 통해 원격 서버들을 중앙�
 ssh user@gateway-server
 
 # 1. Config 파일 확인
-cat /opt/giipAgentLinux/giipAgentGateway.cnf
+cat /opt/giipAgentLinux/giipAgent.cnf
 
 # 2. 서버 목록 파일 확인
 cat /opt/giipAgentLinux/giipAgentGateway_servers.csv

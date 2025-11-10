@@ -12,10 +12,8 @@ if [ -f "./giipAgent.cnf" ]; then
     config_file="./giipAgent.cnf"
 elif [ -f "../giipAgent.cnf" ]; then
     config_file="../giipAgent.cnf"
-elif [ -f "./giipAgentGateway.cnf" ]; then
-    config_file="./giipAgentGateway.cnf"
 else
-    echo "Error: Configuration file not found (giipAgent.cnf or giipAgentGateway.cnf)"
+    echo "Error: Configuration file not found (giipAgent.cnf)"
     exit 1
 fi
 

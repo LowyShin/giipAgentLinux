@@ -83,20 +83,20 @@ cd ~/giipAgentGateway
 
 # 2. Copy gateway files
 cp /path/to/giipAgentLinux/giipAgentGateway.sh .
-cp /path/to/giipAgentLinux/giipAgentGateway.cnf .
+cp /path/to/giipAgentLinux/giipAgent.cnf .
 cp /path/to/giipAgentLinux/giipAgentGateway_servers.csv .
 
 # 3. Make executable
 chmod +x giipAgentGateway.sh
 
 # 4. Configure
-vi giipAgentGateway.cnf  # Set your GIIP secret key
+vi giipAgent.cnf  # Set gateway_mode="1" and your GIIP secret key
 vi giipAgentGateway_servers.csv  # Add your servers
 ```
 
 ## Configuration
 
-### 1. giipAgentGateway.cnf
+### 1. giipAgent.cnf
 
 Basic gateway configuration:
 
@@ -238,7 +238,7 @@ chmod 600 giipAgentGateway_servers.csv
 If you store passwords encrypted in the GIIP database:
 
 ```bash
-# Configure database connection in giipAgentGateway.cnf
+# Configure database connection in giipAgent.cnf
 db_server="your-db-server.database.windows.net"
 db_name="giipDB"
 db_user="giip_readonly"
@@ -345,7 +345,7 @@ ssh-keyscan -H 192.168.1.10 >> ~/.ssh/known_hosts
 curl "https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=YOUR_SK&lssn=1001&hn=test&os=Linux&df=os&sv=1.0"
 
 # Check configuration
-cat ~/giipAgentGateway/giipAgentGateway.cnf | grep sk=
+cat ~/giipAgentGateway/giipAgent.cnf | grep sk=
 ```
 
 ### Agent Not Running

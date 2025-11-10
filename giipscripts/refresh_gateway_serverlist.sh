@@ -30,7 +30,7 @@ log_success() {
 
 # 설정
 INSTALL_DIR="/opt/giipAgentLinux"
-CONFIG_FILE="$INSTALL_DIR/giipAgentGateway.cnf"
+CONFIG_FILE="$INSTALL_DIR/giipAgent.cnf"
 SERVERLIST_FILE="$INSTALL_DIR/giipAgentGateway_servers.csv"
 
 log_info "===== Refreshing Gateway Server List ====="

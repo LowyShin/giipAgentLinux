@@ -18,10 +18,9 @@ if [ "${giipagentdelay}" = "" ];then
 	giipagentdelay="60"
 fi
 
-# Gateway mode default
-if [ "${gateway_mode}" = "" ];then
-	gateway_mode="0"
-fi
+# Gateway mode - AUTO-DETECTED from DB (DO NOT SET MANUALLY!)
+# Will be fetched from tLSvr.is_gateway via API
+gateway_mode=""  # Empty = not yet fetched
 
 # Gateway heartbeat interval (seconds) - how often to collect remote server info
 if [ "${gateway_heartbeat_interval}" = "" ];then
@@ -1244,6 +1243,62 @@ if [ "${lssn}" = "0" ];then
 	
 	# Rebuild command with new lssn
 	lwDownloadText="CQEQueueGet ${lssn} ${hn} ${os} op"
+fi
+
+# ============================================================================
+# Fetch Gateway Mode from DB (Single Source of Truth)
+# ============================================================================
+if [ -z "$gateway_mode" ] && [ "${lssn}" != "0" ]; then
+	logdt=`date '+%Y%m%d%H%M%S'`
+	echo "[$logdt] [Init] Fetching server configuration from DB..." >> $LogFileName
+	
+	# Use giipApiSk2 API
+	local config_url="${apiaddrv2}"
+	if [ -n "$apiaddrcode" ]; then
+		config_url="${config_url}?code=${apiaddrcode}"
+	fi
+	
+	# Call pApiLSvrGetConfigbySK
+	local config_text="LSvrGetConfig ${lssn} ${hn}"
+	local config_file="/tmp/giip_config_${lssn}.json"
+	
+	wget -O "$config_file" \
+		--post-data="text=${config_text}&token=${sk}" \
+		--header="Content-Type: application/x-www-form-urlencoded" \
+		"${config_url}" \
+		--no-check-certificate -q 2>&1
+	
+	if [ -s "$config_file" ]; then
+		# Parse JSON response
+		local rstval=$(cat "$config_file" | grep -o '"RstVal":"[^"]*"' | sed 's/"RstVal":"//; s/"$//' | head -1)
+		
+		if [ "$rstval" = "200" ]; then
+			# Extract is_gateway value
+			local is_gateway=$(cat "$config_file" | grep -o '"is_gateway":[0-9]*' | sed 's/"is_gateway"://' | head -1)
+			
+			if [ "$is_gateway" = "1" ]; then
+				gateway_mode="1"
+				echo "[$logdt] [Init] ✅ Gateway mode ENABLED (is_gateway=1 in DB)" >> $LogFileName
+			else
+				gateway_mode="0"
+				echo "[$logdt] [Init] ℹ️  Normal agent mode (is_gateway=0 in DB)" >> $LogFileName
+			fi
+		else
+			# Default to normal mode if API call fails
+			gateway_mode="0"
+			echo "[$logdt] [Init] ⚠️  Failed to fetch config (RstVal=$rstval), defaulting to normal mode" >> $LogFileName
+		fi
+	else
+		gateway_mode="0"
+		echo "[$logdt] [Init] ⚠️  API call failed, defaulting to normal mode" >> $LogFileName
+	fi
+	
+	rm -f "$config_file"
+fi
+
+# Default to normal mode if still empty
+if [ -z "$gateway_mode" ]; then
+	gateway_mode="0"
 fi
 
 # ============================================================================

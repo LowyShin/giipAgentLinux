@@ -8,7 +8,7 @@
    - SSH를 통한 원격 명령 실행 로직
    - 여러 서버 순차 처리
 
-2. **giipAgentGateway.cnf.template** (1.0 KB)
+2. **giipAgent.cnf.template** (1.0 KB)
    - 게이트웨이 설정 템플릿
    - GIIP API 키 및 주기 설정
    - 실제 사용시 복사하여 편집
@@ -108,7 +108,7 @@ chmod +x install-gateway.sh
 ./install-gateway.sh
 
 # 2. 설정
-vi ~/giipAgentGateway/giipAgentGateway.cnf
+vi ~/giipAgentGateway/giipAgent.cnf
 # sk="your_secret_key"
 
 vi ~/giipAgentGateway/giipAgentGateway_servers.csv

@@ -8,13 +8,13 @@ echo "======================================"
 echo ""
 
 # Load configuration
-if [ ! -f "./giipAgentGateway.cnf" ]; then
-	echo "❌ Error: giipAgentGateway.cnf not found"
+if [ ! -f "./giipAgent.cnf" ]; then
+	echo "❌ Error: giipAgent.cnf not found"
 	echo "   Run this script from giipAgentGateway installation directory"
 	exit 1
 fi
 
-. ./giipAgentGateway.cnf
+. ./giipAgent.cnf
 
 echo "✓ Configuration loaded"
 echo ""

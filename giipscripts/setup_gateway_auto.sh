@@ -9,7 +9,7 @@
 #   
 # What it does:
 #   1. giipAgentLinux 레포지토리 클론 (또는 업데이트)
-#   2. giipAgentGateway.cnf 설정 파일 생성
+#   2. giipAgent.cnf 설정 파일 생성
 #   3. giipAgentGateway_servers.csv 서버 목록 생성 (API에서 가져옴)
 #   4. Cron 작업 등록 (5분마다 실행)
 #   5. SSH 키 디렉토리 생성
@@ -40,7 +40,7 @@ log_success() {
 
 # 설치 디렉토리 설정
 INSTALL_DIR="/opt/giipAgentLinux"
-CONFIG_FILE="$INSTALL_DIR/giipAgentGateway.cnf"
+CONFIG_FILE="$INSTALL_DIR/giipAgent.cnf"
 SERVERLIST_FILE="$INSTALL_DIR/giipAgentGateway_servers.csv"
 SSH_KEY_DIR="$INSTALL_DIR/ssh_keys"
 LOG_FILE="/var/log/giipAgentGateway.log"

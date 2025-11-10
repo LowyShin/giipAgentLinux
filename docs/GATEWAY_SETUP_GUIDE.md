@@ -71,18 +71,18 @@ chmod +x install-gateway.sh
 > ```bash
 > mkdir -p ~/giipAgentGateway && cd ~/giipAgentGateway
 > cp ~/giipAgentLinux/giipAgentGateway.sh .
-> cp ~/giipAgentLinux/giipAgentGateway.cnf.template giipAgentGateway.cnf
+> cp ~/giipAgentLinux/giipAgent.cnf.template giipAgent.cnf
 > cp ~/giipAgentLinux/giipAgentGateway_servers.csv.template giipAgentGateway_servers.csv
 > chmod +x giipAgentGateway.sh
 > ```
 
 ### Step 2: Gateway 설정 파일 편집
 
-#### 2-1. `giipAgentGateway.cnf` 설정
+#### 2-1. `giipAgent.cnf` 설정
 
 ```bash
 cd ~/giipAgentGateway
-vi giipAgentGateway.cnf
+vi giipAgent.cnf
 ```
 
 **설정 내용**:
@@ -454,7 +454,7 @@ cd ~/giipAgentGateway && ./giipAgentGateway.sh
 **해결**:
 ```bash
 # Secret Key 확인
-grep "^sk=" ~/giipAgentGateway/giipAgentGateway.cnf
+grep "^sk=" ~/giipAgentGateway/giipAgent.cnf
 
 # API 연결 테스트
 curl -X POST https://giipasp.azurewebsites.net/api \
@@ -471,7 +471,7 @@ ping -c 3 giipasp.azurewebsites.net
 ### 초기 설정 체크리스트
 
 - [ ] Gateway 서버(71240)에 giipAgentGateway 설치됨
-- [ ] `giipAgentGateway.cnf`에 Secret Key 설정됨
+- [ ] `giipAgent.cnf`에 Secret Key 설정됨
 - [ ] `giipAgentGateway_servers.csv`에 3개 서버(71221, 71222, 71223) 등록됨
 - [ ] SSH 키 생성됨 (`~/.ssh/giip_gateway_key`)
 - [ ] SSH 공개키가 3개 원격 서버에 배포됨

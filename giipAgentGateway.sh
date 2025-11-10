@@ -7,7 +7,7 @@
 sv="1.0"
 
 # Load configuration
-. ./giipAgentGateway.cnf
+. ./giipAgent.cnf
 
 if [ "${giipagentdelay}" = "" ];then
 	giipagentdelay="60"
