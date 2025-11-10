@@ -921,36 +921,43 @@ save_execution_log() {
 	local event_type=$1
 	local details_json=$2
 	
+	# Check if kvsput.sh is available
+	local kvsput_script="./giipscripts/kvsput.sh"
+	if [ ! -f "$kvsput_script" ]; then
+		echo "[KVS-Log] ⚠️  kvsput.sh not found, skipping: ${event_type}" >> $LogFileName 2>/dev/null
+		return 1
+	fi
+	
+	# Create temp JSON file
+	local tmp_json="/tmp/giip_kvs_log_$$.json"
+	
 	local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 	local hostname=$(hostname)
 	local mode="${gateway_mode}"
 	[ "$mode" = "1" ] && mode="gateway" || mode="normal"
 	
-	# Escape quotes in details_json
-	details_json=$(echo "$details_json" | sed 's/"/\\"/g')
+	# Build JSON using cat (no jq dependency in giipAgent2.sh)
+	cat > "$tmp_json" <<EOF
+{
+  "event_type": "${event_type}",
+  "timestamp": "${timestamp}",
+  "lssn": ${lssn},
+  "hostname": "${hostname}",
+  "mode": "${mode}",
+  "version": "${sv}",
+  "details": ${details_json}
+}
+EOF
 	
-	local kvalue="{\"event_type\":\"${event_type}\",\"timestamp\":\"${timestamp}\",\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"mode\":\"${mode}\",\"version\":\"${sv}\",\"details\":${details_json}}"
-	
-	local kvs_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && kvs_url="${kvs_url}?code=${apiaddrcode}"
-	
-	local text="KVSPut kType kKey kFactor"
-	local jsondata="{\"kType\":\"lssn\",\"kKey\":\"${lssn}\",\"kFactor\":\"giipagent\",\"kValue\":${kvalue}}"
-	
-	# Debug: Log the jsondata before sending
-	echo "[KVS-Debug] Sending jsondata: ${jsondata}" >> $LogFileName 2>/dev/null
-	
-	wget -O /dev/null \
-		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
-		--header="Content-Type: application/x-www-form-urlencoded" \
-		"${kvs_url}" \
-		--no-check-certificate -q 2>&1
-	
-	local exit_code=$?
-	if [ $exit_code -eq 0 ]; then
+	# Call kvsput.sh with giipagent factor
+	if bash "$kvsput_script" "$tmp_json" "giipagent" >> $LogFileName 2>&1; then
 		echo "[KVS-Log] ✅ Saved: ${event_type}" >> $LogFileName 2>/dev/null
+		rm -f "$tmp_json"
+		return 0
 	else
-		echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >> $LogFileName 2>/dev/null
+		echo "[KVS-Log] ⚠️  Failed to save: ${event_type}" >> $LogFileName 2>/dev/null
+		rm -f "$tmp_json"
+		return 1
 	fi
 }
 
