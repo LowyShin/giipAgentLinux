@@ -1712,14 +1712,14 @@ if [ -z "$gateway_mode" ] && [ "${lssn}" != "0" ]; then
 	echo "[$logdt] [Init] DEBUG: lssn=${lssn}, hostname=${hn}" >> $LogFileName
 	
 	# Use giipApiSk2 API
-	local config_url="${apiaddrv2}"
+	config_url="${apiaddrv2}"
 	if [ -n "$apiaddrcode" ]; then
 		config_url="${config_url}?code=${apiaddrcode}"
 	fi
 	
 	# Call pApiLSvrGetConfigbySK
-	local config_text="LSvrGetConfig ${lssn} ${hn}"
-	local config_file="/tmp/giip_config_${lssn}.json"
+	config_text="LSvrGetConfig ${lssn} ${hn}"
+	config_file="/tmp/giip_config_${lssn}.json"
 	
 	echo "[$logdt] [Init] DEBUG: API URL: ${config_url}" >> $LogFileName
 	echo "[$logdt] [Init] DEBUG: Command: ${config_text}" >> $LogFileName
