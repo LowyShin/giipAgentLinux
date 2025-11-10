@@ -877,11 +877,20 @@ process_gateway_servers() {
 		enabled=$(echo "$server_obj" | jq -r '.enabled // 1')
 		
 		# Skip disabled servers
-		[ "$enabled" != "1" ] && continue
+		if [ "$enabled" != "1" ]; then
+			# Save skipped server to KVS (giipagent factor)
+			local skip_details="{\"action\":\"server_skipped\",\"hostname\":\"${hostname}\",\"lssn\":${lssn},\"reason\":\"disabled\"}"
+			save_execution_log "gateway_server_check" "$skip_details"
+			continue
+		fi
 		
 		# Skip if missing required fields
 		if [ -z "$hostname" ] || [ -z "$ssh_host" ] || [ "$lssn" = "0" ]; then
 			echo "[${logdt}] [Gateway] ⚠️  Skipping invalid server config: hostname=$hostname, lssn=$lssn" >> $LogFileName
+			
+			# Save invalid config to KVS (giipagent factor)
+			local invalid_details="{\"action\":\"server_skipped\",\"hostname\":\"${hostname}\",\"lssn\":${lssn},\"reason\":\"invalid_config\"}"
+			save_execution_log "gateway_server_error" "$invalid_details"
 			continue
 		fi
 		
@@ -889,6 +898,10 @@ process_gateway_servers() {
 		
 		logdt=$(date '+%Y%m%d%H%M%S')
 		echo "[${logdt}] [Gateway] Processing: $hostname (LSSN:$lssn, ${ssh_user}@${ssh_host}:${ssh_port})" >> $LogFileName
+		
+		# Save server processing start to KVS (giipagent factor)
+		local process_start_details="{\"action\":\"server_process_start\",\"hostname\":\"${hostname}\",\"lssn\":${lssn},\"ssh_host\":\"${ssh_host}\"}"
+		save_execution_log "gateway_server_check" "$process_start_details"
 		
 		# Get queue
 		local tmpfile="${tmpdir}/script_${lssn}.sh"
@@ -934,6 +947,10 @@ process_gateway_servers() {
 		else
 			echo "[${logdt}] [Gateway]   ⏸️  No queue" >> $LogFileName
 			no_queue_count=$((no_queue_count + 1))
+			
+			# Save no queue status to KVS (giipagent factor)
+			local no_queue_details="{\"action\":\"no_queue\",\"hostname\":\"${hostname}\",\"lssn\":${lssn},\"ssh_host\":\"${ssh_host}\",\"result\":\"no_tasks\"}"
+			save_execution_log "gateway_server_check" "$no_queue_details"
 		fi
 	done
 	
