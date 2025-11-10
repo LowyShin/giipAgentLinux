@@ -1285,12 +1285,16 @@ cntgiip=999  # Force single execution
 			fi
 			
 			# Try to extract RstVal and other fields
+			# Log raw response for debugging
+			echo "[$logdt] [DEBUG] Raw API response:" >> $LogFileName
+			cat "$tmpFileName" | head -20 >> $LogFileName
+			
 			# Extract fields from JSON
 			rstval=$(cat "$tmpFileName" | grep -o '"RstVal"\s*:\s*"[^"]*"' | sed 's/"RstVal"\s*:\s*"//; s/"$//' | head -1)
 			script_body=$(cat "$tmpFileName" | grep -o '"ms_body"\s*:\s*"[^"]*"' | sed 's/"ms_body"\s*:\s*"//; s/"$//' | sed 's/\\n/\n/g')
 			mssn=$(cat "$tmpFileName" | grep -o '"mssn"\s*:\s*[0-9]*' | sed 's/"mssn"\s*:\s*//' | head -1)
 			
-			echo "[$logdt] [DEBUG] JSON detected - RstVal=$rstval, mssn=$mssn, script_body_len=${#script_body}" >> $LogFileName
+			echo "[$logdt] [DEBUG] JSON parsed - RstVal='$rstval', mssn='$mssn', script_body_len=${#script_body}" >> $LogFileName
 			
 			if [ "$rstval" = "404" ]; then
 				# No queue available
@@ -1345,11 +1349,16 @@ cntgiip=999  # Force single execution
 					# Exit instead of continue (no loop)
 				fi
 			else
-				# Other error
-				echo "[$logdt] ⚠️  API error: RstVal=$rstval" >> $LogFileName
+				# Other error or empty rstval
+				echo "[$logdt] ⚠️  API error or unexpected response: RstVal='$rstval'" >> $LogFileName
 				
-				# Save error to KVS
-				error_details="{\"error_type\":\"api_error\",\"error_message\":\"Unexpected API response\",\"error_code\":${rstval:-0},\"context\":\"queue_check\"}"
+				# Save raw response to temp file for analysis
+				RESPONSE_DEBUG="/tmp/giip_api_response_debug_$(date +%Y%m%d_%H%M%S).json"
+				cp "$tmpFileName" "$RESPONSE_DEBUG" 2>/dev/null
+				echo "[$logdt] [DEBUG] Response saved to: $RESPONSE_DEBUG" >> $LogFileName
+				
+				# Save error to KVS with more details
+				error_details="{\"error_type\":\"api_error\",\"error_message\":\"Unexpected API response\",\"error_code\":${rstval:-0},\"context\":\"queue_check\",\"rstval_raw\":\"$rstval\",\"response_file\":\"$RESPONSE_DEBUG\"}"
 				save_execution_log "error" "$error_details"
 				
 				rm -f $tmpFileName
