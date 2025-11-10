@@ -1800,7 +1800,7 @@ if [ "${gateway_mode}" = "1" ]; then
 	wget -O /dev/null --post-data="text=${kvs_text}&token=${sk}&jsondata=$(echo ${kvs_data} | sed 's/ /%20/g')" "${kvs_url}" --no-check-certificate -q 2>&1
 	
 	# Save gateway initialization to KVS (giipagent factor)
-	init_details="{\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"pid\":$$}"
+	init_details="{\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"pid\":$$,\"is_gateway\":1,\"mode\":\"gateway\"}"
 	save_execution_log "startup" "$init_details"
 	
 	# Check and install sshpass
@@ -1959,7 +1959,7 @@ logdt=`date '+%Y%m%d%H%M%S'`
 echo "[$logdt] Starting GIIP Agent V2.0 in NORMAL MODE" >> $LogFileName
 echo "[$logdt] Version: ${sv}, LSSN: ${lssn}, Hostname: ${hn}" >> $LogFileName
 
-startup_details="{\"pid\":$$,\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${lwAPIURL}\"}"
+startup_details="{\"pid\":$$,\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${lwAPIURL}\",\"is_gateway\":${gateway_mode},\"mode\":\"$([ \"$gateway_mode\" = \"1\" ] && echo \"gateway\" || echo \"normal\")\"}"
 save_execution_log "startup" "$startup_details"
 
 # Run once and exit (no loop)
@@ -2198,13 +2198,13 @@ if [ ${cntgiip} -ge 4 ]; then
                 echo "[$logdt]All process was done" >> $LogFileName
                 
                 # Save shutdown to KVS (normal completion)
-                shutdown_details="{\"reason\":\"normal\",\"process_count\":${cntgiip},\"uptime_seconds\":0}"
+                shutdown_details="{\"reason\":\"normal\",\"process_count\":${cntgiip},\"uptime_seconds\":0,\"is_gateway\":${gateway_mode},\"mode\":\"$([ \"$gateway_mode\" = \"1\" ] && echo \"gateway\" || echo \"normal\")\"}"
                 save_execution_log "shutdown" "$shutdown_details"
         else
                 echo "[$logdt]terminate by process count $cntgiip" >> $LogFileName
                 
                 # Save shutdown to KVS (duplicate process)
-                shutdown_details="{\"reason\":\"duplicate_process\",\"process_count\":${cntgiip},\"uptime_seconds\":0}"
+                shutdown_details="{\"reason\":\"duplicate_process\",\"process_count\":${cntgiip},\"uptime_seconds\":0,\"is_gateway\":${gateway_mode},\"mode\":\"$([ \"$gateway_mode\" = \"1\" ] && echo \"gateway\" || echo \"normal\")\"}"
                 save_execution_log "shutdown" "$shutdown_details"
         fi
 	ret=`ps aux | grep giipAgent2.sh | grep -v grep`
