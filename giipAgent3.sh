@@ -115,10 +115,10 @@ if [ "${gateway_mode}" = "1" ]; then
 	. "${LIB_DIR}/gateway.sh"
 	
 	# Initialize Gateway
-	startup_status="{\"status\":\"started\",\"version\":\"${sv}\",\"lssn\":${lssn},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"mode\":\"gateway\"}"
+	startup_status="{\"status\":\"started\",\"version\":\"${sv}\",\"lssn\":${lssn},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"mode\":\"gateway\",\"is_gateway\":1}"
 	save_gateway_status "startup" "$startup_status"
 	
-	init_details="{\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"pid\":$$}"
+	init_details="{\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"pid\":$$,\"is_gateway\":1}"
 	save_execution_log "startup" "$init_details"
 	
 	# Check and install dependencies

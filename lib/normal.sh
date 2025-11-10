@@ -213,7 +213,7 @@ run_normal_mode() {
 	log_message "INFO" "Version: ${sv}, LSSN: ${lssn}, Hostname: ${hostname}"
 	
 	# Save startup to KVS
-	local startup_details="{\"pid\":$$,\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\"}"
+	local startup_details="{\"pid\":$$,\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"is_gateway\":0,\"mode\":\"normal\"}"
 	save_execution_log "startup" "$startup_details"
 	
 	# Temporary files
@@ -243,7 +243,7 @@ run_normal_mode() {
 	fi
 	
 	# Save shutdown to KVS
-	local shutdown_details="{\"reason\":\"normal\",\"process_count\":1,\"uptime_seconds\":0}"
+	local shutdown_details="{\"reason\":\"normal\",\"process_count\":1,\"uptime_seconds\":0,\"is_gateway\":0,\"mode\":\"normal\"}"
 	save_execution_log "shutdown" "$shutdown_details"
 	
 	log_message "INFO" "Normal mode execution completed"
