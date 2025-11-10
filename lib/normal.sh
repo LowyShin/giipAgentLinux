@@ -20,10 +20,11 @@ fetch_queue() {
 	local api_url="${apiaddrv2}"
 	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 	
-	local text="CQEQueueGet ${lssn} ${hostname} ${os} op"
+	local text="CQEQueueGet lssn hostname os op"
+	local jsondata="{\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"os\":\"${os}\",\"op\":\"op\"}"
 	
 	wget -O "$output_file" \
-		--post-data="text=${text}&token=${sk}" \
+		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"$api_url" \
 		--no-check-certificate -q
@@ -94,8 +95,11 @@ parse_json_response() {
 				local api_url="${apiaddrv2}"
 				[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 				
+				local text="CQERepoScript mssn"
+				local jsondata="{\"mssn\":${mssn}}"
+				
 				wget -O "$output_file" \
-					--post-data="text=CQERepoScript ${mssn}&token=${sk}" \
+					--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
 					--header="Content-Type: application/x-www-form-urlencoded" \
 					"$api_url" \
 					--no-check-certificate -q 2>&1
