@@ -102,6 +102,21 @@ log_message "INFO" "Mode: $([ "$gateway_mode" = "1" ] && echo "GATEWAY" || echo 
 log_message "INFO" "========================================"
 
 # ============================================================================
+# Get Version Tracking Info (for startup logging)
+# ============================================================================
+
+# Get Git commit hash (if available)
+export GIT_COMMIT="unknown"
+if command -v git >/dev/null 2>&1 && [ -d "${SCRIPT_DIR}/.git" ]; then
+	GIT_COMMIT=$(git -C "${SCRIPT_DIR}" rev-parse --short HEAD 2>/dev/null || echo "unknown")
+fi
+
+# Get file modification date
+export FILE_MODIFIED=$(stat -c %y "${BASH_SOURCE[0]}" 2>/dev/null || stat -f "%Sm" -t "%Y-%m-%d %H:%M:%S" "${BASH_SOURCE[0]}" 2>/dev/null || echo "unknown")
+
+log_message "INFO" "Git Commit: ${GIT_COMMIT}, File Modified: ${FILE_MODIFIED}"
+
+# ============================================================================
 # Check Dependencies
 # ============================================================================
 
@@ -151,7 +166,7 @@ if [ "${gateway_mode}" = "1" ]; then
 	startup_status="{\"status\":\"started\",\"version\":\"${sv}\",\"lssn\":${lssn},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"mode\":\"gateway\",\"is_gateway\":1}"
 	save_gateway_status "startup" "$startup_status"
 	
-	init_details="{\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"pid\":$$,\"is_gateway\":1}"
+	init_details="{\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"pid\":$$,\"is_gateway\":1,\"git_commit\":\"${GIT_COMMIT}\",\"file_modified\":\"${FILE_MODIFIED}\",\"script_path\":\"${BASH_SOURCE[0]}\"}"
 	save_execution_log "startup" "$init_details"
 	
 	# Check and install dependencies

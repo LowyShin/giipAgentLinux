@@ -213,7 +213,7 @@ run_normal_mode() {
 	log_message "INFO" "Version: ${sv}, LSSN: ${lssn}, Hostname: ${hostname}"
 	
 	# Save startup to KVS
-	local startup_details="{\"pid\":$$,\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"is_gateway\":0,\"mode\":\"normal\"}"
+	local startup_details="{\"pid\":$$,\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"is_gateway\":0,\"mode\":\"normal\",\"git_commit\":\"${GIT_COMMIT}\",\"file_modified\":\"${FILE_MODIFIED}\",\"script_path\":\"${BASH_SOURCE[1]}\"}"
 	save_execution_log "startup" "$startup_details"
 	
 	# Temporary files
