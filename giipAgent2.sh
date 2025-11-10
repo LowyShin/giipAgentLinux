@@ -937,11 +937,11 @@ save_execution_log() {
 	local text="KVSPut kType kKey kFactor"
 	local jsondata="{\"kType\":\"lssn\",\"kKey\":\"${lssn}\",\"kFactor\":\"giipagent\",\"kValue\":${kvalue}}"
 	
-	# URL encode jsondata
-	jsondata_encoded=$(echo "$jsondata" | sed 's/ /%20/g' | sed 's/"/\\"/g')
+	# Debug: Log the jsondata before sending
+	echo "[KVS-Debug] Sending jsondata: ${jsondata}" >> $LogFileName 2>/dev/null
 	
 	wget -O /dev/null \
-		--post-data="text=${text}&token=${sk}&jsondata=${jsondata_encoded}" \
+		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"${kvs_url}" \
 		--no-check-certificate -q 2>&1
@@ -1385,7 +1385,7 @@ cntgiip=999  # Force single execution
 		exit 0
 	else
 		if [ -s ${tmpFileName} ];then
-			n=`cat giipTmpScript.sh | grep 'expect=' | wc -l`
+			n=`cat ${tmpFileName} 2>/dev/null | grep 'expect=' | wc -l`
 			if [ ${n} -ge 1 ]; then
 				# Execute expect script
 				script_start_time=$(date +%s)
