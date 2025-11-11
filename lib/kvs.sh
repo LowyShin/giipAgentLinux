@@ -142,3 +142,15 @@ save_gateway_status() {
 export -f save_execution_log
 export -f kvs_put
 export -f save_gateway_status
+
+# ============================================================================
+# Backward Compatibility Aliases
+# ============================================================================
+
+# Alias for backward compatibility
+# Usage: log_kvs "event_type" "{\"details\":\"json\"}"
+log_kvs() {
+	save_execution_log "$@"
+}
+
+export -f log_kvs
