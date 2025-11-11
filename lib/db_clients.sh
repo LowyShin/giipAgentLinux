@@ -201,7 +201,12 @@ check_mssql_client() {
 	
 	# Install Python pyodbc package
 	echo "[Gateway-MSSQL] Installing pyodbc Python package..."
-	pip3 install pyodbc --quiet
+	
+	# Upgrade pip and setuptools first to avoid build errors
+	python3 -m pip install --upgrade pip setuptools --quiet 2>/dev/null || true
+	
+	# Install pyodbc with compiler flags
+	pip3 install pyodbc --quiet 2>/dev/null
 	
 	# Verify installation
 	if python3 -c "import pyodbc" 2>/dev/null; then

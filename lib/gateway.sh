@@ -337,33 +337,14 @@ check_managed_databases() {
 				check_message="PostgreSQL check placeholder - to be implemented"
 				;;
 			MSSQL)
-				# Auto-install pyodbc if not available
+				# pyodbc should be installed by db_clients.sh
 				if ! python3 -c "import pyodbc" 2>/dev/null; then
-					echo "[Gateway-MSSQL] Installing pyodbc Python package..." >&2
-					
-					# Install system dependencies first
-					if command -v yum >/dev/null 2>&1; then
-						sudo yum install -y unixODBC-devel gcc-c++ 2>/dev/null || true
-					elif command -v apt-get >/dev/null 2>&1; then
-						sudo apt-get update >/dev/null 2>&1 || true
-						sudo apt-get install -y unixodbc-dev g++ 2>/dev/null || true
-					fi
-					
-					# Upgrade pip and setuptools
-					python3 -m pip install --upgrade pip setuptools 2>/dev/null || true
-					
-					# Try to install pyodbc
-					if python3 -m pip install pyodbc 2>/dev/null; then
-						echo "[Gateway-MSSQL] ✅ pyodbc installed successfully" >&2
-					else
-						echo "[Gateway-MSSQL] ⚠️  pyodbc installation failed, skipping MSSQL check" >&2
-						check_status="warning"
-						check_message="pyodbc not available - MSSQL check skipped"
-						continue
-					fi
+					echo "[Gateway-MSSQL] ⚠️  pyodbc not available, skipping MSSQL check for $db_name" >&2
+					check_status="warning"
+					check_message="pyodbc not available - MSSQL check skipped"
+				else
+					check_message="MSSQL check placeholder - to be implemented"
 				fi
-				
-				check_message="MSSQL check placeholder - to be implemented"
 				;;
 			*)
 				check_message="DB type $db_type not supported yet"
