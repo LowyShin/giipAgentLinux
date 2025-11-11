@@ -70,21 +70,42 @@ except Exception as e:
 		# Test connection based on DB type
 		local check_status="success"
 		local check_message=""
+		local performance_json="{}"
 		
 		case "$db_type" in
 			MySQL|MariaDB)
-				check_message="MySQL/MariaDB check placeholder - to be implemented"
+				# MySQL 성능 지표 수집
+				if command -v mysql >/dev/null 2>&1; then
+					# CPU 사용률 (processlist 기반 추정)
+					# 활성 세션 수, 총 연결 수 등 수집
+					performance_json="{\"cpu_percent\":0,\"active_sessions\":0,\"total_connections\":0,\"slow_queries\":0}"
+					check_message="MySQL/MariaDB metrics collected (placeholder)"
+				else
+					check_message="MySQL client not available - basic check only"
+					check_status="warning"
+				fi
 				;;
 			PostgreSQL)
-				check_message="PostgreSQL check placeholder - to be implemented"
+				# PostgreSQL 성능 지표 수집
+				if command -v psql >/dev/null 2>&1; then
+					performance_json="{\"cpu_percent\":0,\"active_sessions\":0,\"database_size_mb\":0,\"transaction_count\":0}"
+					check_message="PostgreSQL metrics collected (placeholder)"
+				else
+					check_message="PostgreSQL client not available - basic check only"
+					check_status="warning"
+				fi
 				;;
 			MSSQL)
+				# MSSQL 성능 지표 수집 (pyodbc 사용)
 				if ! python3 -c "import pyodbc" 2>/dev/null; then
 					echo "[Gateway-MSSQL] ⚠️  pyodbc not available, skipping MSSQL check for $db_name" >&2
 					check_status="warning"
 					check_message="pyodbc not available - MSSQL check skipped"
 				else
-					check_message="MSSQL check placeholder - to be implemented"
+					# Python으로 MSSQL 성능 쿼리 실행
+					# TODO: 실제 DB 연결 및 성능 쿼리
+					performance_json="{\"cpu_percent\":0,\"active_sessions\":0,\"buffer_cache_hit_ratio\":0,\"wait_stats\":{}}"
+					check_message="MSSQL metrics collected (placeholder)"
 				fi
 				;;
 			*)
@@ -95,12 +116,12 @@ except Exception as e:
 		
 		# Log result to KVS
 		local kv_key="managed_db_check_${mdb_id}"
-		local kv_value="{\"mdb_id\":${mdb_id},\"db_name\":\"${db_name}\",\"db_type\":\"${db_type}\",\"check_status\":\"${check_status}\",\"check_message\":\"${check_message}\",\"check_time\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+		local kv_value="{\"mdb_id\":${mdb_id},\"db_name\":\"${db_name}\",\"db_type\":\"${db_type}\",\"check_status\":\"${check_status}\",\"check_message\":\"${check_message}\",\"check_time\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"performance\":${performance_json}}"
 		
 		save_execution_log "managed_db_check" "$kv_value" "$kv_key"
 		
-		# Write to health results file
-		echo "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0}" >> "$health_results_file"
+		# Write to health results file (성능 지표 포함)
+		echo "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0,\"performance_metrics\":${performance_json}}" >> "$health_results_file"
 		
 		echo "[${logdt}] [Gateway]   → Status: $check_status - $check_message" >> $LogFileName
 	done
