@@ -758,7 +758,163 @@ sudo rm -f /var/log/giip-auto-discover.log
 
 ---
 
-## 📚 Additional Resources
+## �️ Utility Scripts
+
+### Performance Monitoring & Diagnostics
+
+GIIP Agent includes several utility scripts for server monitoring and troubleshooting:
+
+#### 1. collect-perfmon.sh
+**Purpose**: Collect basic Linux server performance metrics and save to KVS
+
+**Metrics Collected**:
+- CPU usage percentage
+- Memory usage (total/used/available)
+- Disk usage (root partition)
+- Network stats (RX/TX bytes)
+- Load average (1/5/15 min)
+- Process count (total/running/sleeping)
+- System uptime
+
+**Usage**:
+```bash
+bash collect-perfmon.sh
+
+# Cron (every 5 minutes)
+*/5 * * * * /path/to/giipAgentLinux/collect-perfmon.sh
+```
+
+**KVS Storage**: `kFactor: perfmon`
+
+**Query Data**:
+```powershell
+pwsh query-kvs.ps1 -kType lssn -kKey 71174 -kFactor perfmon -Top 10
+```
+
+---
+
+#### 2. collect-server-diagnostics.sh
+**Purpose**: Comprehensive server diagnostics with health scoring (8 separate metrics)
+
+**Metrics Collected** (saved as separate KVS entries):
+
+| kFactor | Description |
+|---------|-------------|
+| `load_overview` | Load average, CPU usage, uptime |
+| `top_cpu` | Top 5 CPU consuming processes |
+| `top_memory` | Top 5 memory consuming processes |
+| `memory_status` | RAM and swap usage details |
+| `disk_usage` | Root partition usage |
+| `network_status` | Connection states, interface stats |
+| `process_info` | Process counts by state |
+| `health_summary` | **Overall health score (0-100)** |
+
+**Health Scoring System**:
+- Starts at 100 points
+- Deducts for high CPU/Memory/Disk usage
+- Deducts for zombie processes
+- Deducts for high load average
+- **Status**: healthy (80+), warning (60-79), critical (<60)
+
+**Usage**:
+```bash
+bash collect-server-diagnostics.sh
+
+# Cron (every 10 minutes)
+*/10 * * * * /path/to/giipAgentLinux/collect-server-diagnostics.sh
+```
+
+**Query Data**:
+```powershell
+# Check health score
+pwsh query-kvs.ps1 -kType lssn -kKey 71174 -kFactor health_summary -Top 10
+
+# Check top CPU processes
+pwsh query-kvs.ps1 -kType lssn -kKey 71174 -kFactor top_cpu -Top 5
+
+# Check memory status
+pwsh query-kvs.ps1 -kType lssn -kKey 71174 -kFactor memory_status -Top 5
+```
+
+---
+
+#### 3. diagnose-server-load.sh
+**Purpose**: Quick diagnostic tool to identify high server load causes
+
+**Diagnostic Sections**:
+1. System load overview (Load avg, CPU, uptime)
+2. Top 10 CPU consuming processes
+3. Top 10 memory consuming processes
+4. Memory status & swap usage
+5. Disk I/O statistics
+6. Network connections by state
+7. Process count (total/running/zombie)
+8. Multiple script instances detection
+9. Recent system errors from logs
+10. Quick recommendations & alerts
+
+**Usage**:
+```bash
+# View on screen
+bash diagnose-server-load.sh
+
+# Save to file
+bash diagnose-server-load.sh > load_report_$(date +%Y%m%d_%H%M%S).txt
+```
+
+**When to Use**:
+- Server is slow or unresponsive
+- Investigating performance issues
+- Troubleshooting high load
+- Identifying resource bottlenecks
+
+---
+
+#### 4. check-process-flood.sh
+**Purpose**: Detect and auto-remediate process flooding (e.g., postfix, sendmail)
+
+**Monitored Services**:
+- postfix, sendmail
+- apache2, httpd, nginx
+- mysql, mariadb
+- (customizable list)
+
+**Thresholds**:
+- **WARNING**: 50+ processes
+- **CRITICAL**: 100+ processes
+
+**Auto-Remediation** (for CRITICAL):
+1. `systemctl stop <service>`
+2. `pkill <service>` (SIGTERM)
+3. `pkill -9 <service>` (SIGKILL if needed)
+4. `systemctl disable <service>`
+5. `systemctl mask <service>`
+
+**Usage**:
+```bash
+bash check-process-flood.sh
+
+# Cron (every 10 minutes)
+*/10 * * * * /path/to/giipAgentLinux/check-process-flood.sh
+```
+
+**Exit Codes**:
+- `0`: OK - No flooding detected
+- `1`: WARNING - Manual action required
+- `2`: CRITICAL - Auto-remediation performed
+
+**KVS Storage**: `kFactor: process_flood_check`
+
+**Real Case Example**:
+```
+🚨 CRITICAL: postfix has 8537 processes
+🔧 AUTO-REMEDIATION: Starting automatic cleanup...
+✅ SUCCESS: All postfix processes removed
+```
+
+---
+
+## �📚 Additional Resources
 
 - **GIIP Portal**: https://giipasp.azurewebsites.net
 - **Documentation**: [docs/AGENT_INSTALLATION_GUIDE.md](../docs/AGENT_INSTALLATION_GUIDE.md)
