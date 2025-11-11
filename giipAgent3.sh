@@ -75,28 +75,39 @@ wget -O "$config_tmpfile" \
 if [ -f "$config_tmpfile" ]; then
 	# Log API response to KVS for debugging
 	api_response=$(cat "$config_tmpfile")
-	log_kvs "api_lsvrgetconfig_response" "{\"api_url\":\"${api_url}\",\"response\":${api_response}}"
+	kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_response" "{\"api_url\":\"${api_url}\",\"response\":${api_response}}"
 	
 	# Extract is_gateway value from JSON response
-	# Response format: {"RstVal":"200","lssn":71174,"is_gateway":1,...}
-	is_gateway_from_db=$(grep -o '"is_gateway":[0-9]*' "$config_tmpfile" | grep -o '[0-9]*$')
+	# giipapisk response format: {"data":[{"is_gateway":true,"RstVal":"200",...}],...}
+	# Extract from data array first, handle both true/false and 1/0
+	is_gateway_from_db=$(grep -o '"is_gateway":[^,}]*' "$config_tmpfile" | head -1 | sed 's/"is_gateway"://g' | tr -d ' ')
+	
+	# Convert true/false to 1/0
+	case "$is_gateway_from_db" in
+		true|1)
+			is_gateway_from_db=1
+			;;
+		false|0)
+			is_gateway_from_db=0
+			;;
+		*)
+			is_gateway_from_db=""
+			;;
+	esac
 	
 	if [ -n "$is_gateway_from_db" ]; then
 		gateway_mode="$is_gateway_from_db"
 		echo "✅ DB config loaded: is_gateway=${gateway_mode}"
-		log_kvs "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"response\":${api_response}}"
+		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"source\":\"db_api\"}"
 	else
 		echo "⚠️  Failed to parse is_gateway from DB, using default: gateway_mode=${gateway_mode}"
-		log_kvs "api_lsvrgetconfig_parse_failed" "{\"response\":${api_response}}"
-		log_kvs "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"parse_failed\":true,\"response\":${api_response}}"
+		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_parse_failed" "{\"response\":${api_response}}"
 	fi
 	
 	rm -f "$config_tmpfile"
 else
 	echo "⚠️  Failed to fetch server config from DB, using default: gateway_mode=${gateway_mode}"
-	log_kvs "api_lsvrgetconfig_failed" "{\"api_url\":\"${api_url}\",\"error\":\"API call failed or no response file\"}"
-	log_kvs "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"api_failed\":true}"
-	log_kvs "api_lsvrgetconfig_failed" "{\"api_url\":\"${api_url}\",\"error\":\"API call failed\"}"
+	kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_failed" "{\"api_url\":\"${api_url}\",\"error\":\"API call failed or no response file\"}"
 fi
 
 # ============================================================================
