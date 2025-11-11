@@ -1,5 +1,11 @@
 # kvsput.sh API Specification
 
+> **📚 관련 문서:**
+> - [Azure Function Endpoints & Code](../../giipdb/docs/AZURE_FUNCTION_ENDPOINTS.md) - **Function Code 확인 (필수!)**
+> - [Azure Function 인증 가이드](../../giipdb/docs/AZURE_FUNCTION_AUTH_GUIDE.md) - 401 에러 해결
+> - [giipapi 규칙](../../giipfaw/docs/giipapi_rules.md) - API 호출 표준
+> - [giipApiSk2 패턴](../../giipfaw/docs/GIIPAPISK2_API_PATTERN.md) - 호출 패턴 상세
+
 ⚠️ **개발 룰 필독!**: `giipfaw/docs/giipapi_rules.md`
 
 **[필수] 모든 변수값(파라미터)은 반드시 jsondata 필드에 JSON 문자열로 만들어 전달해야 하며, text 필드에는 프로시저명과 파라미터 이름만 포함해야 합니다.**
@@ -42,8 +48,9 @@ bash kvsput.sh /tmp/mydata.json network_discovery
 # API Endpoint (giipApiSk2)
 apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
 
-# Azure Function Code
-apiaddrcode="YOUR_AZURE_FUNCTION_CODE"
+# Azure Function Code (⚠️ 필수! AZURE_FUNCTION_ENDPOINTS.md에서 확인)
+# 참조: giipdb/docs/AZURE_FUNCTION_ENDPOINTS.md
+apiaddrcode="YOUR_AZURE_FUNCTION_CODE_HERE"
 
 # Secret Key (SK) - 인증 토큰
 sk="YOUR_SECRET_KEY"
@@ -57,7 +64,7 @@ lssn="71174"
 | Field | Type | Purpose | Example | Notes |
 |-------|------|---------|---------|-------|
 | `apiaddrv2` | URL | giipApiSk2 엔드포인트 | `https://giipfaw.azurewebsites.net/api/giipApiSk2` | Azure Function URL |
-| `apiaddrcode` | String | Azure Function 접근 코드 | `abc123xyz...` | Query string: `?code=` |
+| `apiaddrcode` | String | Azure Function 접근 코드 | `YOUR_FUNCTION_CODE` | Query string: `?code=` - [확인](../../giipdb/docs/AZURE_FUNCTION_ENDPOINTS.md) |
 | `sk` | String | Secret Key (인증 토큰) | `ffd96879858f...` | SK 기반 인증 |
 | `lssn` | Number | 서버 LSsn (식별자) | `71174` | **반드시 숫자** |
 

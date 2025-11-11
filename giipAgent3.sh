@@ -61,10 +61,13 @@ hn=$(hostname)
 echo "🔍 Fetching server configuration from DB..."
 config_tmpfile="giipTmpConfig.json"
 api_url=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
-config_text="LSvrGetConfig ${lssn} ${hn}"
+
+# ✅ giipapi 규칙: text에는 파라미터명만, jsondata에 실제 값
+config_text="LSvrGetConfig lssn hostname"
+config_jsondata="{\"lssn\":${lssn},\"hostname\":\"${hn}\"}"
 
 wget -O "$config_tmpfile" \
-	--post-data="text=${config_text}&token=${sk}" \
+	--post-data="text=${config_text}&token=${sk}&jsondata=${config_jsondata}" \
 	--header="Content-Type: application/x-www-form-urlencoded" \
 	"${api_url}" \
 	--no-check-certificate -q 2>&1

@@ -399,4 +399,6 @@ pwsh -File .\mgmt\execSQLFile.ps1 -sqlfile ".\SP\pApiManagedDatabaseHealthUpdate
 **버전:** 1.0  
 **관련 문서:** 
 - [database-management.ko.md](../giipv3/public/help/database-management.ko.md)
-- [GATEWAY_QUICK_REFERENCE.md](./GATEWAY_QUICK_REFERENCE.md)
+## 관련 문서
+
+- [GATEWAY_QUICK_REFERENCE.md](../../giipdb/docs/GATEWAY_QUICK_REFERENCE.md)
