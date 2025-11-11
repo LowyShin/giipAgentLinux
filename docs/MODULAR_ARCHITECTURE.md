@@ -576,6 +576,119 @@ grep -i "error\|failed" log/giipAgent3_*.log
 pwsh ../giipdb/mgmt/query-kvs-giipagent.ps1 -Lssn "71174" -Top 20
 ```
 
+### 5. Writing New Shell Scripts (CRITICAL RULES)
+
+**⚠️ Configuration File Path Rule:**
+
+All shell scripts in `giipAgentLinux/` directory **MUST** follow the same config path as `giipAgent3.sh`.
+
+**✅ CORRECT:**
+```bash
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="$SCRIPT_DIR/../giipAgent.cnf"  # ← Parent directory
+
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "❌ Config file not found: $CONFIG_FILE"
+    exit 1
+fi
+
+source "$CONFIG_FILE"
+```
+
+**❌ WRONG:**
+```bash
+# ❌ Don't use different config paths!
+CONFIG_FILE="$SCRIPT_DIR/giipAgentGateway.cnf"  # WRONG
+CONFIG_FILE="./giipAgent.cnf"                   # WRONG (relative path)
+CONFIG_FILE="/etc/giip/config.cnf"              # WRONG (absolute path)
+```
+
+**Why?**
+- `giipAgent3.sh` uses `../giipAgent.cnf` (parent directory)
+- All scripts must use the **same config file** for consistency
+- Config location: `/opt/giipAgent.cnf` or `/home/giip/giipAgent.cnf`
+- Scripts location: `/opt/giipAgentLinux/` or `/home/giip/giipAgentLinux/`
+
+**Example Scripts:**
+- ✅ `test-managed-db-check.sh` - Uses `../giipAgent.cnf`
+- ✅ `giipAgent3.sh` - Uses `../giipAgent.cnf`
+- ✅ `lib/common.sh` - `load_config("../giipAgent.cnf")`
+
+**Loading Library Modules:**
+
+```bash
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/lib"
+
+# Load common functions first
+if [ -f "${LIB_DIR}/common.sh" ]; then
+    . "${LIB_DIR}/common.sh"
+else
+    echo "❌ Error: common.sh not found in ${LIB_DIR}"
+    exit 1
+fi
+
+# Load config using common.sh function
+load_config "../giipAgent.cnf"
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to load configuration"
+    exit 1
+fi
+
+# Now you have: lssn, sk, apiaddrv2, apiaddrcode, etc.
+```
+
+**Template for New Scripts:**
+
+```bash
+#!/bin/bash
+# Script Name: example-script.sh
+# Purpose: Brief description
+# Author: Your Name
+# Date: YYYY-MM-DD
+
+# Initialize paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/lib"
+CONFIG_FILE="$SCRIPT_DIR/../giipAgent.cnf"
+
+# Load library modules (if needed)
+if [ -f "${LIB_DIR}/common.sh" ]; then
+    . "${LIB_DIR}/common.sh"
+    load_config "../giipAgent.cnf" || exit 1
+else
+    # Standalone script (no lib dependency)
+    if [ ! -f "$CONFIG_FILE" ]; then
+        echo "❌ Config file not found: $CONFIG_FILE"
+        exit 1
+    fi
+    source "$CONFIG_FILE"
+fi
+
+# Validate required variables
+if [ -z "$lssn" ] || [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
+    echo "❌ Missing required config: lssn, sk, apiaddrv2"
+    exit 1
+fi
+
+# Your script logic here
+echo "✅ Script initialized successfully"
+echo "   LSSN: $lssn"
+echo "   API: $apiaddrv2"
+```
+
+**Checklist for New Scripts:**
+- [ ] Config path: `../giipAgent.cnf` (parent directory)
+- [ ] Use `SCRIPT_DIR` for relative paths
+- [ ] Validate required variables (lssn, sk, apiaddrv2)
+- [ ] Error handling: exit 1 on failures
+- [ ] Echo clear error messages with ❌ emoji
+- [ ] Use `#!/bin/bash` shebang (not `#!/bin/sh`)
+- [ ] Make executable: `chmod +x script.sh`
+- [ ] Test before commit: `bash -n script.sh` (syntax check)
+
 ---
 
 ## 📝 Summary
