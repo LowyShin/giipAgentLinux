@@ -5,6 +5,16 @@
 # Date: 2025-11-11
 # kFactor: perfmon
 
+# ⏱️ Script timeout: Auto-kill if runs longer than 30 seconds
+(
+    sleep 30
+    kill -9 $$ 2>/dev/null
+) &
+TIMEOUT_PID=$!
+
+# Cleanup timeout process on exit
+trap "kill $TIMEOUT_PID 2>/dev/null" EXIT
+
 # ============================================================================
 # Initialize Script Paths (Following MODULAR_ARCHITECTURE.md Section 5)
 # ============================================================================
@@ -52,9 +62,36 @@ fi
 
 # Function: Collect CPU usage
 collect_cpu_usage() {
-    # Get CPU usage from top (1 second sample)
-    local cpu_idle=$(top -bn2 -d 1 | grep "Cpu(s)" | tail -1 | awk '{print $8}' | cut -d'%' -f1)
-    local cpu_usage=$(echo "100 - $cpu_idle" | bc 2>/dev/null || echo "0")
+    # Get CPU usage from /proc/stat (safer than top)
+    # Read twice with 1 second interval for accurate calculation
+    local cpu1=($(cat /proc/stat | grep '^cpu ' | awk '{print $2, $3, $4, $5, $6, $7, $8}'))
+    sleep 1
+    local cpu2=($(cat /proc/stat | grep '^cpu ' | awk '{print $2, $3, $4, $5, $6, $7, $8}'))
+    
+    # Calculate idle and total time
+    local idle1=${cpu1[3]}
+    local idle2=${cpu2[3]}
+    local total1=0
+    local total2=0
+    
+    for value in "${cpu1[@]}"; do
+        total1=$((total1 + value))
+    done
+    
+    for value in "${cpu2[@]}"; do
+        total2=$((total2 + value))
+    done
+    
+    # Calculate CPU usage percentage
+    local idle_diff=$((idle2 - idle1))
+    local total_diff=$((total2 - total1))
+    
+    if [ $total_diff -eq 0 ]; then
+        echo "0"
+        return
+    fi
+    
+    local cpu_usage=$(echo "scale=2; 100 * ($total_diff - $idle_diff) / $total_diff" | bc 2>/dev/null || echo "0")
     echo "$cpu_usage"
 }
 
