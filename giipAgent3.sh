@@ -73,6 +73,10 @@ wget -O "$config_tmpfile" \
 	--no-check-certificate -q 2>&1
 
 if [ -f "$config_tmpfile" ]; then
+	# Log API response to KVS for debugging
+	api_response=$(cat "$config_tmpfile")
+	log_kvs "api_lsvrgetconfig_response" "{\"api_url\":\"${api_url}\",\"response\":${api_response}}"
+	
 	# Extract is_gateway value from JSON response
 	# Response format: {"RstVal":"200","lssn":71174,"is_gateway":1,...}
 	is_gateway_from_db=$(grep -o '"is_gateway":[0-9]*' "$config_tmpfile" | grep -o '[0-9]*$')
@@ -80,13 +84,16 @@ if [ -f "$config_tmpfile" ]; then
 	if [ -n "$is_gateway_from_db" ]; then
 		gateway_mode="$is_gateway_from_db"
 		echo "✅ DB config loaded: is_gateway=${gateway_mode}"
+		log_kvs "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"response\":${api_response}}"
 	else
 		echo "⚠️  Failed to parse is_gateway from DB, using default: gateway_mode=${gateway_mode}"
+		log_kvs "api_lsvrgetconfig_parse_failed" "{\"response\":${api_response}}"
 	fi
 	
 	rm -f "$config_tmpfile"
 else
 	echo "⚠️  Failed to fetch server config from DB, using default: gateway_mode=${gateway_mode}"
+	log_kvs "api_lsvrgetconfig_failed" "{\"api_url\":\"${api_url}\",\"error\":\"API call failed\"}"
 fi
 
 # ============================================================================
