@@ -1,0 +1,34 @@
+#!/bin/bash
+# Test ManagedDatabaseHealthUpdate API Call
+
+# Load config
+source ../giipAgent.cnf
+
+echo "===== Testing ManagedDatabaseHealthUpdate API ====="
+echo ""
+echo "📂 Config: /home/giip/giipAgent.cnf"
+echo "🔑 SK: ${sk}"
+echo "🔗 API: ${apiaddrv2}"
+echo ""
+
+# Test data
+health_data='[{"mdb_id":3,"status":"success","message":"Test from script","response_time_ms":100}]'
+
+echo "📤 Sending health check data:"
+echo "$health_data"
+echo ""
+
+temp_file=$(mktemp)
+
+wget -O "$temp_file" \
+    --post-data="text=ManagedDatabaseHealthUpdate jsondata&token=${sk}&jsondata=${health_data}" \
+    "${apiaddrv2}?code=${apiaddrcode}"
+
+echo ""
+echo "✅ API Response:"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+cat "$temp_file"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+rm -f "$temp_file"
