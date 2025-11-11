@@ -311,6 +311,10 @@ check_managed_databases() {
 	local db_count=$(cat "$db_list_file" | grep -o '"mdb_id"' | wc -l)
 	echo "[Gateway] 📊 Found $db_count managed database(s)" >&2
 	
+	# Collect health check results
+	local health_results="["
+	local first=true
+	
 	# Parse JSON and check each database
 	cat "$db_list_file" | grep -o '{[^}]*}' | while read -r db_json; do
 		mdb_id=$(echo "$db_json" | grep -o '"mdb_id"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
@@ -358,8 +362,32 @@ check_managed_databases() {
 		
 		save_execution_log "managed_db_check" "$kv_value" "$kv_key"
 		
+		# Collect for batch update
+		if [ "$first" = true ]; then
+			health_results="${health_results}{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0}"
+			first=false
+		else
+			health_results="${health_results},{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0}"
+		fi
+		
 		echo "[${logdt}] [Gateway]   → Status: $check_status - $check_message" >> $LogFileName
 	done
+	
+	health_results="${health_results}]"
+	
+	# Update tManagedDatabase.last_check_dt via API
+	if [ "$health_results" != "[]" ]; then
+		local temp_file=$(mktemp)
+		wget -O "$temp_file" --quiet \
+			--post-data="text=ManagedDatabaseHealthUpdate jsondata&token=${sk}&jsondata=${health_results}" \
+			"${apiaddrv2}?code=${apiaddrcode}" 2>/dev/null
+		
+		if [ -f "$temp_file" ]; then
+			logdt=$(date '+%Y%m%d%H%M%S')
+			echo "[${logdt}] [Gateway] Updated tManagedDatabase.last_check_dt for $db_count database(s)" >> $LogFileName
+			rm -f "$temp_file"
+		fi
+	fi
 	
 	# Clean up
 	rm -f "$db_list_file"
