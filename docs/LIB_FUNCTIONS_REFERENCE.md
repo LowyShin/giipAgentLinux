@@ -20,12 +20,13 @@
 
 ```
 lib/
-├── kvs.sh              # KVS 저장 전용 (단일 책임)
-├── network.sh          # 네트워크 정보 수집
-├── gateway.sh          # Gateway 모드 핵심 로직
-├── db_clients.sh       # DB 클라이언트 설치 및 체크 (단일 책임) ⭐
-├── remote_execution.sh # SSH 원격 명령 실행
-└── utils.sh            # 공통 유틸리티 함수
+├── kvs.sh                      # KVS 저장 전용 (단일 책임)
+├── network.sh                  # 네트워크 정보 수집
+├── gateway.sh                  # Gateway 모드 핵심 로직
+├── check_managed_databases.sh  # tManagedDatabase health check 전용 ⭐ (2025-11-11 추가)
+├── db_clients.sh               # DB 클라이언트 설치 및 체크 (단일 책임) ⭐
+├── remote_execution.sh         # SSH 원격 명령 실행
+└── utils.sh                    # 공통 유틸리티 함수
 ```
 
 ---
@@ -173,6 +174,10 @@ giipAgent3.sh
 
 **책임**: Gateway 서버 목록 조회, 원격 명령 실행, DB 쿼리 관리
 
+**주요 변경사항 (2025-11-11)**:
+- ✅ `check_managed_databases()` 함수를 별도 파일로 분리 (127줄 → 15줄)
+- ✅ `lib/check_managed_databases.sh` 모듈 로드 방식으로 변경
+
 **Export 함수**:
 ```bash
 get_gateway_servers()        # API에서 Gateway 대상 서버 목록 조회
@@ -182,42 +187,181 @@ execute_remote_command()     # SSH 원격 명령 실행 (래퍼)
 get_script_by_mssn()         # 특정 스크립트 조회
 get_remote_queue()           # 원격 실행 큐 조회
 process_gateway_servers()    # Gateway 메인 프로세스
-check_managed_databases()    # tManagedDatabase 자동 체크
+# check_managed_databases()  # ⚠️ 이제 별도 파일(check_managed_databases.sh)로 분리됨!
+```
+
+**모듈 로드 구조 (Line 295-309)**:
+```bash
+# ============================================================================
+# Managed Database Check Functions
+# ============================================================================
+
+# Load managed database check module (separate file for maintainability)
+SCRIPT_DIR_GATEWAY="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+if [ -f "${SCRIPT_DIR_GATEWAY}/check_managed_databases.sh" ]; then
+	. "${SCRIPT_DIR_GATEWAY}/check_managed_databases.sh"
+else
+	echo "⚠️  Warning: check_managed_databases.sh not found" >&2
+	# Provide stub function to prevent errors
+	check_managed_databases() {
+		echo "[Gateway] ⚠️  check_managed_databases module not loaded" >&2
+		return 1
+	}
+fi
 ```
 
 **주의사항**:
 - ⚠️ DB 클라이언트 설치는 `db_clients.sh`에 위임
 - ⚠️ KVS 저장은 `kvs.sh`의 `save_execution_log()` 사용
 - ⚠️ SSH 실행은 `remote_execution.sh` 사용
-
-**예시: check_managed_databases() 함수**
-
-```bash
-check_managed_databases() {
-	# API에서 DB 목록 조회
-	local db_list_file=$(get_managed_databases)
-	
-	# DB 타입별 처리
-	case "$db_type" in
-		MSSQL)
-			# ✅ 설치는 db_clients.sh에서 이미 완료
-			# ✅ 여기서는 체크만
-			if ! python3 -c "import pyodbc" 2>/dev/null; then
-				echo "⚠️ pyodbc not available"  # 경고만
-			else
-				# 실제 DB 연결 테스트
-			fi
-			;;
-	esac
-	
-	# ✅ KVS 저장은 kvs.sh 사용
-	save_execution_log "managed_db_check" "$kv_value" "$kv_key"
-}
-```
+- ⚠️ Managed DB health check는 `check_managed_databases.sh` 참조
 
 ---
 
-### 4️⃣ lib/remote_execution.sh - SSH 원격 실행
+### 3-1️⃣ lib/check_managed_databases.sh - tManagedDatabase Health Check 전용 ⭐
+
+**생성 날짜**: 2025-11-11  
+**이전 위치**: `lib/gateway.sh` 내부 함수 (Line 300-422, 127줄)  
+**분리 이유**: 기능 독립성, 유지보수 편의성, 테스트 용이성
+
+**책임**:
+1. tManagedDatabase API 조회
+2. **Python JSON 파싱** (grep은 중첩 JSON 처리 불가) ⭐
+3. 각 DB의 health check 수행
+4. health_results JSON 빌드 (awk 사용)
+5. API로 last_check_dt 업데이트
+
+**Export 함수**:
+```bash
+check_managed_databases()  # Managed DB health check 메인 함수 (유일)
+```
+
+**핵심 로직 흐름**:
+```bash
+check_managed_databases() {
+	# Step 1: API에서 DB 목록 가져오기
+	wget --post-data="text=GatewayManagedDatabaseList lssn&token=${sk}&jsondata={\"lssn\":${lssn}}" \
+		"${apiaddrv2}?code=${apiaddrcode}"
+	
+	# Step 2: Python으로 JSON 파싱 ⭐ (grep 대신)
+	local db_list=$(python3 -c "
+import json, sys
+try:
+    data = json.load(open('$temp_file'))
+    if 'data' in data and isinstance(data['data'], list):
+        for item in data['data']:
+            print(json.dumps(item))  # 각 DB를 한 줄씩 출력
+except Exception as e:
+    print(f'Error parsing JSON: {e}', file=sys.stderr)
+    sys.exit(1)
+")
+	
+	# Step 3: 각 DB 처리 (while 루프)
+	echo "$db_list" | while IFS= read -r db_json; do
+		# Python으로 필드 추출
+		mdb_id=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('mdb_id', ''))")
+		db_name=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('db_name', ''))")
+		db_type=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('db_type', ''))")
+		
+		# DB 타입별 health check
+		case "$db_type" in
+			MSSQL)
+				# ✅ pyodbc는 db_clients.sh에서 설치됨
+				if python3 -c "import pyodbc" 2>/dev/null; then
+					check_message="MSSQL check placeholder - to be implemented"
+				else
+					check_status="warning"
+					check_message="pyodbc not available - MSSQL check skipped"
+				fi
+				;;
+			MySQL|MariaDB)
+				check_message="MySQL/MariaDB check placeholder - to be implemented"
+				;;
+			PostgreSQL)
+				check_message="PostgreSQL check placeholder - to be implemented"
+				;;
+		esac
+		
+		# 결과를 임시 파일에 저장 (서브쉘 변수 스코프 문제 회피)
+		echo "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0}" >> "$health_results_file"
+		
+		# KVS 로그 저장
+		save_execution_log "managed_db_check" "$kv_value" "$kv_key"
+	done
+	
+	# Step 4: awk로 JSON 배열 빌드 (Bash 서브쉘 문제 완전 회피)
+	local health_results=$(awk 'BEGIN{printf "["} NR>1{printf ","} {printf "%s", $0} END{printf "]"}' "$health_results_file")
+	
+	# Step 5: API로 last_check_dt 업데이트
+	if [ "$health_results" != "[]" ]; then
+		wget --post-data="text=ManagedDatabaseHealthUpdate jsondata&token=${sk}&jsondata=${health_results}" \
+			"${apiaddrv2}?code=${apiaddrcode}"
+	fi
+}
+```
+
+**왜 Python을 사용하는가?**
+
+**문제 (grep 사용 시)**:
+```bash
+# API 응답 구조 (중첩 JSON)
+{
+  "data": [
+    {"mdb_id": 3, "db_name": "giipdb", "db_type": "MSSQL", ...}
+  ],
+  "debug": {
+    "_debug_originalText": "text=GatewayManagedDatabaseList...",
+    "_debug_executedQuery": "exec pApi..."
+  }
+}
+
+# grep -o '{[^}]*}' 시도 (실패)
+db_list=$(cat "$file" | grep -o '{[^}]*}')
+# 결과: {\"lssn\":71174}  ← debug 섹션 일부만 추출됨 (중첩 {} 처리 불가)
+# 문제: data 배열 내부를 못 읽음
+```
+
+**해결 (Python 사용)**:
+```bash
+db_list=$(python3 -c "
+import json
+data = json.load(open('$file'))
+if 'data' in data:
+    for item in data['data']:  # data 배열 정확히 추출
+        print(json.dumps(item))
+")
+# 결과: {"mdb_id": 3, "db_name": "giipdb", ...}  ← 정확한 DB 객체
+```
+
+**호출 경로**:
+```
+giipAgent3.sh
+  → if [ "$is_gateway" = "1" ]
+    → lib/gateway.sh 로드
+      → lib/check_managed_databases.sh 자동 로드 (Line 303)
+        → check_managed_databases() 호출 가능
+```
+
+**의존성**:
+- **Config**: `lssn`, `sk`, `apiaddrv2`, `apiaddrcode` (giipAgent.cnf)
+- **Functions**: `save_execution_log()` (lib/kvs.sh)
+- **Variables**: `LogFileName` (lib/common.sh)
+- **Runtime**: Python 3.x + json 모듈 (표준 라이브러리)
+
+**주의사항**:
+- ⚠️ DB health check 로직은 **이 파일에만** 작성 (중복 금지)
+- ⚠️ pyodbc 설치는 `db_clients.sh`에서 처리 (이 파일에서 설치 시도 금지)
+- ⚠️ JSON 파싱은 **Python 필수 사용** (grep으로 중첩 JSON 파싱 불가능)
+- ⚠️ while 루프 내 변수는 서브쉘 문제 → 임시 파일 + awk 사용
+
+**변경 이력**:
+- 2025-11-11: gateway.sh에서 분리 (127줄 → 독립 모듈)
+- 2025-11-11: grep → Python JSON 파싱으로 변경 (중첩 JSON 처리)
+- 2025-11-11: Bash 서브쉘 문제 해결 (임시 파일 + awk)
+
+---
+
+### 4️⃣ lib/db_clients.sh - DB 클라이언트 설치 및 체크 ⭐
 
 **책임**: SSH 연결 및 원격 명령 실행의 단일 소스
 
