@@ -313,7 +313,7 @@ check_managed_databases() {
 	
 	# Temporary file for health results
 	local health_results_file=$(mktemp)
-	echo "[" > "$health_results_file"
+	# Don't write opening bracket yet - we'll build the entire JSON with awk
 	
 	# Parse JSON and check each database
 	local first=true
@@ -373,17 +373,8 @@ check_managed_databases() {
 		echo "[${logdt}] [Gateway]   → Status: $check_status - $check_message" >> $LogFileName
 	done
 	
-	echo "]" >> "$health_results_file"
-	
-	# Build proper JSON array (remove last comma if any, then add brackets)
-	local health_results=$(awk 'NR==1{printf "["} NR>1 && NR<FNR{printf ","} NR>1{printf "%s", $0} END{printf "]"}' RS='\n' "$health_results_file" | grep -v '^\[[]$')
-	
-	# If grep removed everything, fall back to simple cat
-	if [ -z "$health_results" ]; then
-		health_results=$(cat "$health_results_file")
-		# Remove the opening [ we added, collect all JSON objects, rebuild
-		health_results=$(grep -o '{[^}]*}' "$health_results_file" | awk 'BEGIN{printf "["} NR>1{printf ","} {printf "%s", $0} END{printf "]"}')
-	fi
+	# Build proper JSON array with awk (avoid grep regex issues)
+	local health_results=$(awk 'BEGIN{printf "["} NR>1{printf ","} {printf "%s", $0} END{printf "]"}' "$health_results_file")
 	
 	logdt=$(date '+%Y%m%d%H%M%S')
 	echo "[${logdt}] [Gateway] Health results JSON: $health_results" >> $LogFileName
