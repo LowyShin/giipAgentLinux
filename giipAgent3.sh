@@ -219,6 +219,10 @@ if [ "${gateway_mode}" = "1" ]; then
 	# Process gateway servers (query DB each cycle)
 	process_gateway_servers
 	
+	# Check managed databases (tManagedDatabase)
+	log_message "INFO" "Checking managed databases..."
+	check_managed_databases
+	
 	log_message "INFO" "Gateway cycle completed"
 	
 	# Shutdown log

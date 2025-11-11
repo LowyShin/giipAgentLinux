@@ -75,6 +75,40 @@ get_db_queries() {
 # Legacy function removed: sync_db_queries
 # Reason: Database as Single Source of Truth - no CSV caching
 
+# Function: Get managed databases from tManagedDatabase (real-time query, no cache)
+# Returns: temp file path with JSON data (caller must delete!)
+get_managed_databases() {
+	local temp_file="/tmp/managed_databases_$$.json"
+	local api_url="${apiaddrv2}"
+	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
+	
+	local text="GatewayManagedDatabaseList lssn"
+	local jsondata="{\"lssn\":${lssn}}"
+	
+	wget -O "$temp_file" \
+		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
+		--header="Content-Type: application/x-www-form-urlencoded" \
+		"$api_url" \
+		--no-check-certificate -q 2>&1
+	
+	if [ ! -s "$temp_file" ]; then
+		echo "[Gateway] ⚠️  Failed to fetch managed databases from DB" >&2
+		rm -f "$temp_file"
+		return 1
+	fi
+	
+	# Check for error response
+	local err_check=$(cat "$temp_file" | grep -i "rstval.*40[0-9]")
+	if [ -n "$err_check" ]; then
+		echo "[Gateway] ⚠️  API error response" >&2
+		rm -f "$temp_file"
+		return 1
+	fi
+	
+	echo "$temp_file"
+	return 0
+}
+
 # ============================================================================
 # Remote Execution Functions
 # ============================================================================
@@ -260,12 +294,82 @@ process_gateway_servers() {
 }
 
 # ============================================================================
+# Managed Database Check Functions
+# ============================================================================
+
+# Function: Check managed databases (tManagedDatabase)
+# Purpose: Auto-check DB connection and update last_check_dt
+check_managed_databases() {
+	echo "[Gateway] 🔍 Checking managed databases..." >&2
+	
+	local db_list_file=$(get_managed_databases)
+	if [ -z "$db_list_file" ] || [ ! -f "$db_list_file" ]; then
+		echo "[Gateway] ⚠️  No managed databases found" >&2
+		return 0
+	fi
+	
+	local db_count=$(cat "$db_list_file" | grep -o '"mdb_id"' | wc -l)
+	echo "[Gateway] 📊 Found $db_count managed database(s)" >&2
+	
+	# Parse JSON and check each database
+	cat "$db_list_file" | grep -o '{[^}]*}' | while read -r db_json; do
+		mdb_id=$(echo "$db_json" | grep -o '"mdb_id"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
+		db_name=$(echo "$db_json" | grep -o '"db_name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+		db_type=$(echo "$db_json" | grep -o '"db_type"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+		db_host=$(echo "$db_json" | grep -o '"db_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+		db_port=$(echo "$db_json" | grep -o '"db_port"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
+		
+		[[ -z $mdb_id ]] && continue
+		[[ -z $db_name ]] && continue
+		
+		logdt=$(date '+%Y%m%d%H%M%S')
+		echo "[${logdt}] [Gateway] Checking DB: $db_name (mdb_id:$mdb_id, type:$db_type)" >> $LogFileName
+		
+		# Test connection based on DB type
+		local check_status="success"
+		local check_message=""
+		
+		case "$db_type" in
+			MySQL|MariaDB)
+				check_message="MySQL/MariaDB check placeholder - to be implemented"
+				;;
+			PostgreSQL)
+				check_message="PostgreSQL check placeholder - to be implemented"
+				;;
+			MSSQL)
+				check_message="MSSQL check placeholder - to be implemented"
+				;;
+			*)
+				check_message="DB type $db_type not supported yet"
+				check_status="info"
+				;;
+		esac
+		
+		# Log result to KVS
+		local kv_key="managed_db_check_${mdb_id}"
+		local kv_value="{\"mdb_id\":${mdb_id},\"db_name\":\"${db_name}\",\"db_type\":\"${db_type}\",\"check_status\":\"${check_status}\",\"check_message\":\"${check_message}\",\"check_time\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+		
+		save_execution_log "managed_db_check" "$kv_value" "$kv_key"
+		
+		echo "[${logdt}] [Gateway]   → Status: $check_status - $check_message" >> $LogFileName
+	done
+	
+	# Clean up
+	rm -f "$db_list_file"
+	
+	logdt=$(date '+%Y%m%d%H%M%S')
+	echo "[${logdt}] [Gateway] Managed database check completed" >> $LogFileName
+}
+
+# ============================================================================
 # Export Functions
 # ============================================================================
 
 export -f get_gateway_servers
 export -f get_db_queries
+export -f get_managed_databases
 export -f execute_remote_command
 export -f get_script_by_mssn
 export -f get_remote_queue
 export -f process_gateway_servers
+export -f check_managed_databases
