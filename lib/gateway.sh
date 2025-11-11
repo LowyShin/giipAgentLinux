@@ -9,12 +9,10 @@
 # Server Management Functions
 # ============================================================================
 
-# Function: Sync servers from database
-sync_gateway_servers() {
-	local output_file="${gateway_serverlist}"
-	
-	echo "[Gateway] Fetching server list from GIIP API..."
-	
+# Function: Get remote servers from database (real-time query, no cache)
+# Per GATEWAY_CONFIG_PHILOSOPHY.md: Database as Single Source of Truth
+# Returns: temp file path with JSON data (caller must delete!)
+get_gateway_servers() {
 	local temp_file="/tmp/gateway_servers_$$.json"
 	local api_url="${apiaddrv2}"
 	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
@@ -29,56 +27,29 @@ sync_gateway_servers() {
 		--no-check-certificate -q 2>&1
 	
 	if [ ! -s "$temp_file" ]; then
-		echo "[Gateway] ⚠️  Failed to fetch from API, using existing CSV"
+		echo "[Gateway] ⚠️  Failed to fetch servers from DB" >&2
 		rm -f "$temp_file"
-		return 0
+		return 1
 	fi
 	
 	# Check for error response
 	local err_check=$(cat "$temp_file" | grep -i "rstval.*40[0-9]")
 	if [ -n "$err_check" ]; then
-		echo "[Gateway] ⚠️  API error response, using existing CSV"
+		echo "[Gateway] ⚠️  API error response" >&2
 		rm -f "$temp_file"
-		return 0
+		return 1
 	fi
 	
-	# Create CSV header
-	cat > "$output_file" << EOF
-# Auto-generated from GIIP API at $(date '+%Y-%m-%d %H:%M:%S')
-# Gateway LSSN: ${lssn}
-# DO NOT EDIT - This file is regenerated from Web UI settings
-# hostname,lssn,ssh_host,ssh_user,ssh_port,ssh_key_path,ssh_password,os_info,enabled
-EOF
-	
-	# Parse JSON and create CSV
-	cat "$temp_file" | grep -o '{[^}]*}' | while read -r server_json; do
-		hostname=$(echo "$server_json" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		lssn=$(echo "$server_json" | grep -o '"lssn"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-		ssh_host=$(echo "$server_json" | grep -o '"ssh_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		ssh_user=$(echo "$server_json" | grep -o '"ssh_user"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		ssh_port=$(echo "$server_json" | grep -o '"ssh_port"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-		ssh_key_path=$(echo "$server_json" | grep -o '"ssh_key_path"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		ssh_password=$(echo "$server_json" | grep -o '"ssh_password"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		os_info=$(echo "$server_json" | grep -o '"os_info"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		enabled=$(echo "$server_json" | grep -o '"enabled"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-		
-		if [ -n "$hostname" ] && [ -n "$ssh_host" ]; then
-			echo "${hostname},${lssn},${ssh_host},${ssh_user},${ssh_port},${ssh_key_path},${ssh_password},${os_info},${enabled}" >> "$output_file"
-		fi
-	done
-	
-	rm -f "$temp_file"
-	chmod 600 "$output_file"
-	
-	local server_count=$(grep -v "^#" "$output_file" | grep -v "^$" | wc -l)
-	[ $server_count -gt 0 ] && echo "[Gateway] ✅ Fetched $server_count servers from API"
-	
+	echo "$temp_file"
 	return 0
 }
 
-# Function: Sync DB queries from API
-sync_db_queries() {
-	local output_file="${gateway_db_querylist:-/tmp/gateway_db_queries.csv}"
+# Legacy function removed: sync_gateway_servers
+# Reason: Database as Single Source of Truth - no CSV caching
+
+# Function: Get DB queries from database (real-time query, no cache)
+# Returns: temp file path with JSON data (caller must delete!)
+get_db_queries() {
 	local temp_file="/tmp/gateway_db_queries_$$.json"
 	local api_url="${apiaddrv2}"
 	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
@@ -94,31 +65,15 @@ sync_db_queries() {
 	
 	if [ ! -s "$temp_file" ]; then
 		rm -f "$temp_file"
-		return 0
+		return 1
 	fi
 	
-	cat > "$output_file" << EOF
-# Auto-generated DB queries from GIIP API at $(date '+%Y-%m-%d %H:%M:%S')
-# gmq_sn,target_lssn,target_hostname,db_type,db_host,db_port,db_user,db_password,db_database,db_instance,query_name,query_text,kvs_key_prefix,kvs_value_format,timeout_seconds,should_execute
-EOF
-	
-	cat "$temp_file" | grep -o '{[^}]*}' | while read -r query_json; do
-		gmq_sn=$(echo "$query_json" | grep -o '"gmq_sn"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-		target_lssn=$(echo "$query_json" | grep -o '"target_lssn"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-		db_type=$(echo "$query_json" | grep -o '"db_type"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		db_host=$(echo "$query_json" | grep -o '"db_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		query_text=$(echo "$query_json" | grep -o '"query_text"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		
-		if [ -n "$gmq_sn" ] && [ -n "$target_lssn" ] && [ -n "$db_type" ]; then
-			query_text=$(echo "$query_text" | sed 's/,/\\,/g' | sed 's/"/\\"/g')
-			echo "${gmq_sn},${target_lssn},...,\"${query_text}\",..." >> "$output_file"
-		fi
-	done
-	
-	rm -f "$temp_file"
-	chmod 600 "$output_file"
+	echo "$temp_file"
 	return 0
 }
+
+# Legacy function removed: sync_db_queries
+# Reason: Database as Single Source of Truth - no CSV caching
 
 # ============================================================================
 # Remote Execution Functions
@@ -243,30 +198,37 @@ get_remote_queue() {
 
 # Function: Process gateway servers
 process_gateway_servers() {
-	local serverlist="${gateway_serverlist}"
 	local tmpdir="/tmp/giipAgent_gateway_$$"
-	
 	mkdir -p "$tmpdir"
 	
-	[ ! -f "$serverlist" ] && return 1
+	# Get servers from DB (real-time query, no cache)
+	local server_list_file=$(get_gateway_servers)
+	if [ $? -ne 0 ] || [ ! -f "$server_list_file" ]; then
+		echo "[Gateway] ⚠️  Failed to fetch servers from DB" >&2
+		rm -rf "$tmpdir"
+		return 1
+	fi
 	
 	local logdt=$(date '+%Y%m%d%H%M%S')
 	echo "[${logdt}] [Gateway] Starting server processing cycle..." >> $LogFileName
 	
-	while IFS=',' read -r hostname lssn ssh_host ssh_user ssh_port ssh_key ssh_password os_info enabled; do
-		[[ $hostname =~ ^#.*$ ]] && continue
+	# Parse JSON and process each server
+	cat "$server_list_file" | grep -o '{[^}]*}' | while read -r server_json; do
+		hostname=$(echo "$server_json" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+		lssn=$(echo "$server_json" | grep -o '"lssn"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
+		ssh_host=$(echo "$server_json" | grep -o '"ssh_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+		ssh_user=$(echo "$server_json" | grep -o '"ssh_user"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+		ssh_port=$(echo "$server_json" | grep -o '"ssh_port"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
+		ssh_key_path=$(echo "$server_json" | grep -o '"ssh_key_path"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+		ssh_password=$(echo "$server_json" | grep -o '"ssh_password"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+		os_info=$(echo "$server_json" | grep -o '"os_info"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+		enabled=$(echo "$server_json" | grep -o '"enabled"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
+		
+		# Skip disabled servers
 		[[ -z $hostname ]] && continue
 		[[ $enabled == "0" ]] && continue
 		
-		hostname=$(echo $hostname | xargs)
-		lssn=$(echo $lssn | xargs)
-		ssh_host=$(echo $ssh_host | xargs)
-		ssh_user=$(echo $ssh_user | xargs)
-		ssh_port=$(echo $ssh_port | xargs)
-		ssh_key=$(echo $ssh_key | xargs)
-		ssh_password=$(echo $ssh_password | xargs)
-		os_info=$(echo $os_info | xargs)
-		
+		# Set defaults
 		[ -z "$ssh_port" ] && ssh_port="22"
 		[ -z "$ssh_user" ] && ssh_user="root"
 		[ -z "$os_info" ] && os_info="Linux"
@@ -284,12 +246,15 @@ process_gateway_servers() {
 				continue
 			fi
 			
-			execute_remote_command "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key" "$ssh_password" "$tmpfile" >> $LogFileName
+			execute_remote_command "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$tmpfile" >> $LogFileName
 			rm -f "$tmpfile"
 		fi
-	done < "$serverlist"
+	done
 	
+	# Clean up
+	rm -f "$server_list_file"
 	rm -rf "$tmpdir"
+	
 	logdt=$(date '+%Y%m%d%H%M%S')
 	echo "[${logdt}] [Gateway] Cycle completed" >> $LogFileName
 }

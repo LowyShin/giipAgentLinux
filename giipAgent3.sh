@@ -197,44 +197,28 @@ if [ "${gateway_mode}" = "1" ]; then
 	check_sshpass || error_handler "Failed to setup sshpass" 1
 	check_db_clients
 	
-	# Initial sync from API
-	log_message "INFO" "Fetching initial server list from Web UI..."
-	sync_gateway_servers
-	sync_db_queries
-	
-	# Count servers
-	server_count=0
-	if [ -f "${gateway_serverlist}" ]; then
-		server_count=$(grep -v "^#" "${gateway_serverlist}" | grep -v "^$" | wc -l)
-		log_message "INFO" "Found ${server_count} servers to manage"
+	# Verify DB connectivity (first time)
+	log_message "INFO" "Verifying DB connectivity..."
+	server_list_file=$(get_gateway_servers)
+	if [ $? -eq 0 ] && [ -f "$server_list_file" ]; then
+		server_count=$(grep -o '{[^}]*}' "$server_list_file" | wc -l)
+		log_message "INFO" "Found ${server_count} servers in DB"
+		rm -f "$server_list_file"
+	else
+		log_message "WARNING" "Could not fetch servers from DB (will retry each cycle)"
+		server_count=0
 	fi
 	
 	# Save initialization complete
-	init_complete_details="{\"server_sync_status\":\"success\",\"server_count\":${server_count}}"
+	init_complete_details="{\"db_connectivity\":\"verified\",\"server_count\":${server_count}}"
 	save_execution_log "gateway_init" "$init_complete_details"
 	
 	# Gateway main loop
-	last_sync_time=$(date +%s)
 	cntgiip=1
 	
 	while [ ${cntgiip} -le 3 ]; do
-		# Check if we need to re-sync
-		if [ "${gateway_sync_interval}" != "0" ]; then
-			current_time=$(date +%s)
-			time_diff=$((current_time - last_sync_time))
-			
-			if [ $time_diff -ge ${gateway_sync_interval} ]; then
-				log_message "INFO" "Auto-refreshing server list..."
-				sync_gateway_servers
-				sync_db_queries
-				last_sync_time=$current_time
-			fi
-		fi
-		
-		# Process gateway servers
-		if [ -f "${gateway_serverlist}" ]; then
-			process_gateway_servers
-		fi
+		# Process gateway servers (query DB each cycle)
+		process_gateway_servers
 		
 		# Sleep before next cycle
 		log_message "INFO" "Sleeping ${giipagentdelay} seconds..."

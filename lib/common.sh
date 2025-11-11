@@ -33,6 +33,11 @@ load_config() {
 		gateway_heartbeat_interval="300"  # Default: 5 minutes
 	fi
 	
+	# Note: gateway_serverlist and gateway_db_querylist are NOT used
+	# Per GATEWAY_CONFIG_PHILOSOPHY.md: Database as Single Source of Truth
+	# - NO CSV files (always query DB directly)
+	# - Use temp files only, delete immediately after processing
+	
 	# Validate required variables
 	if [ -z "${lssn}" ] || [ -z "${sk}" ] || [ -z "${apiaddrv2}" ]; then
 		echo "❌ Error: Missing required configuration (lssn, sk, apiaddrv2)"
