@@ -2,18 +2,37 @@
 # Test script for check_managed_databases.sh
 # Purpose: Manually test managed database health check functionality
 
-# Load configuration
+# Initialize paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/lib"
 CONFIG_FILE="$SCRIPT_DIR/../giipAgent.cnf"
 
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "❌ Config file not found: $CONFIG_FILE"
-    echo "Please create giipAgent.cnf in parent directory"
+# Load common.sh first (for load_config)
+if [ ! -f "${LIB_DIR}/common.sh" ]; then
+    echo "❌ Library not found: ${LIB_DIR}/common.sh"
     exit 1
 fi
 
-# Load config variables
-source "$CONFIG_FILE"
+source "${LIB_DIR}/common.sh"
+
+# Load configuration
+load_config "../giipAgent.cnf"
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to load configuration"
+    exit 1
+fi
+
+# Load kvs.sh (for save_execution_log)
+if [ ! -f "${LIB_DIR}/kvs.sh" ]; then
+    echo "❌ Library not found: ${LIB_DIR}/kvs.sh"
+    exit 1
+fi
+
+source "${LIB_DIR}/kvs.sh"
+
+# Set LogFileName variable (required by check_managed_databases.sh)
+export LogFileName="log/test-managed-db-check_$(date +%Y%m%d).log"
+mkdir -p log
 
 # Validate required variables
 if [ -z "$lssn" ] || [ -z "$sk" ] || [ -z "$apiaddrv2" ] || [ -z "$apiaddrcode" ]; then
@@ -32,6 +51,7 @@ echo "Config:"
 echo "  LSSN: $lssn"
 echo "  API: $apiaddrv2"
 echo "  Script Dir: $SCRIPT_DIR"
+echo "  Log File: $LogFileName"
 echo "========================================="
 
 # Load the check_managed_databases function
@@ -53,6 +73,19 @@ EXIT_CODE=$?
 
 echo ""
 echo "========================================="
+echo "📊 Test Results Summary"
+echo "========================================="
+
+# Show log file contents
+if [ -f "$LogFileName" ]; then
+    echo ""
+    echo "📄 Log File Contents:"
+    echo "----------------------------------------"
+    cat "$LogFileName"
+    echo "----------------------------------------"
+fi
+
+echo ""
 if [ $EXIT_CODE -eq 0 ]; then
     echo "✅ Test completed successfully"
 else
