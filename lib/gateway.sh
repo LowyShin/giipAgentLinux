@@ -297,115 +297,19 @@ process_gateway_servers() {
 # Managed Database Check Functions
 # ============================================================================
 
-# Function: Check managed databases (tManagedDatabase)
-# Purpose: Auto-check DB connection and update last_check_dt
-check_managed_databases() {
-	echo "[Gateway] 🔍 Checking managed databases..." >&2
-	
-	local db_list_file=$(get_managed_databases)
-	if [ -z "$db_list_file" ] || [ ! -f "$db_list_file" ]; then
-		echo "[Gateway] ⚠️  No managed databases found" >&2
-		return 0
-	fi
-	
-	local db_count=$(cat "$db_list_file" | grep -o '"mdb_id"' | wc -l)
-	echo "[Gateway] 📊 Found $db_count managed database(s)" >&2
-	
-	# Temporary file for health results
-	local health_results_file=$(mktemp)
-	# Don't write opening bracket yet - we'll build the entire JSON with awk
-	
-	# Parse JSON and check each database
-	local first=true
-	local db_list=$(cat "$db_list_file" | grep -o '{[^}]*}')
-	
-	echo "$db_list" | while IFS= read -r db_json; do
-		[[ -z "$db_json" ]] && continue
-		
-		mdb_id=$(echo "$db_json" | grep -o '"mdb_id"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-		db_name=$(echo "$db_json" | grep -o '"db_name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		db_type=$(echo "$db_json" | grep -o '"db_type"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		db_host=$(echo "$db_json" | grep -o '"db_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		db_port=$(echo "$db_json" | grep -o '"db_port"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-		
-		[[ -z $mdb_id ]] && continue
-		[[ -z $db_name ]] && continue
-		
-		logdt=$(date '+%Y%m%d%H%M%S')
-		echo "[${logdt}] [Gateway] Checking DB: $db_name (mdb_id:$mdb_id, type:$db_type)" >> $LogFileName
-		
-		# Test connection based on DB type
-		local check_status="success"
-		local check_message=""
-		
-		case "$db_type" in
-			MySQL|MariaDB)
-				check_message="MySQL/MariaDB check placeholder - to be implemented"
-				;;
-			PostgreSQL)
-				check_message="PostgreSQL check placeholder - to be implemented"
-				;;
-			MSSQL)
-				# pyodbc should be installed by db_clients.sh
-				if ! python3 -c "import pyodbc" 2>/dev/null; then
-					echo "[Gateway-MSSQL] ⚠️  pyodbc not available, skipping MSSQL check for $db_name" >&2
-					check_status="warning"
-					check_message="pyodbc not available - MSSQL check skipped"
-				else
-					check_message="MSSQL check placeholder - to be implemented"
-				fi
-				;;
-			*)
-				check_message="DB type $db_type not supported yet"
-				check_status="info"
-				;;
-		esac
-		
-		# Log result to KVS
-		local kv_key="managed_db_check_${mdb_id}"
-		local kv_value="{\"mdb_id\":${mdb_id},\"db_name\":\"${db_name}\",\"db_type\":\"${db_type}\",\"check_status\":\"${check_status}\",\"check_message\":\"${check_message}\",\"check_time\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
-		
-		save_execution_log "managed_db_check" "$kv_value" "$kv_key"
-		
-		# Write to health results file (direct append, simpler than checking first)
-		echo "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0}" >> "$health_results_file"
-		
-		echo "[${logdt}] [Gateway]   → Status: $check_status - $check_message" >> $LogFileName
-	done
-	
-	# Build proper JSON array with awk (avoid grep regex issues)
-	local health_results=$(awk 'BEGIN{printf "["} NR>1{printf ","} {printf "%s", $0} END{printf "]"}' "$health_results_file")
-	
-	logdt=$(date '+%Y%m%d%H%M%S')
-	echo "[${logdt}] [Gateway] Health results JSON: $health_results" >> $LogFileName
-	
-	# Update tManagedDatabase.last_check_dt via API
-	if [ "$health_results" != "[]" ] && [ "$health_results" != "[
-]" ]; then
-		echo "[Gateway] 📤 Updating tManagedDatabase.last_check_dt via API..." >&2
-		local temp_file=$(mktemp)
-		wget -O "$temp_file" --quiet \
-			--post-data="text=ManagedDatabaseHealthUpdate jsondata&token=${sk}&jsondata=${health_results}" \
-			"${apiaddrv2}?code=${apiaddrcode}" 2>/dev/null
-		
-		if [ -f "$temp_file" ]; then
-			logdt=$(date '+%Y%m%d%H%M%S')
-			echo "[${logdt}] [Gateway] API Response: $(cat "$temp_file")" >> $LogFileName
-			echo "[${logdt}] [Gateway] Updated tManagedDatabase.last_check_dt for $db_count database(s)" >> $LogFileName
-			rm -f "$temp_file"
-		fi
-	else
-		echo "[Gateway] ⚠️  Skipping API update - health_results is empty" >&2
-		logdt=$(date '+%Y%m%d%H%M%S')
-		echo "[${logdt}] [Gateway] Skipped API update - health_results='$health_results'" >> $LogFileName
-	fi
-	
-	# Clean up
-	rm -f "$db_list_file" "$health_results_file"
-	
-	logdt=$(date '+%Y%m%d%H%M%S')
-	echo "[${logdt}] [Gateway] Managed database check completed" >> $LogFileName
-}
+# Load managed database check module (separate file for maintainability)
+# This module handles tManagedDatabase health checks and last_check_dt updates
+SCRIPT_DIR_GATEWAY="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+if [ -f "${SCRIPT_DIR_GATEWAY}/check_managed_databases.sh" ]; then
+	. "${SCRIPT_DIR_GATEWAY}/check_managed_databases.sh"
+else
+	echo "⚠️  Warning: check_managed_databases.sh not found" >&2
+	# Provide stub function to prevent errors
+	check_managed_databases() {
+		echo "[Gateway] ⚠️  check_managed_databases module not loaded" >&2
+		return 1
+	}
+fi
 
 # ============================================================================
 # Export Functions
