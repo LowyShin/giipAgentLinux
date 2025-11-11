@@ -4,11 +4,11 @@
 
 # Load configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/giipAgentGateway.cnf"
+CONFIG_FILE="$SCRIPT_DIR/../giipAgent.cnf"
 
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "❌ Config file not found: $CONFIG_FILE"
-    echo "Please create giipAgentGateway.cnf first"
+    echo "Please create giipAgent.cnf in parent directory"
     exit 1
 fi
 
