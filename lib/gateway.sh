@@ -311,12 +311,13 @@ check_managed_databases() {
 	local db_count=$(cat "$db_list_file" | grep -o '"mdb_id"' | wc -l)
 	echo "[Gateway] 📊 Found $db_count managed database(s)" >&2
 	
-	# Collect health check results
-	local health_results="["
-	local first=true
+	# Temporary file for health results
+	local health_results_file=$(mktemp)
+	echo "[" > "$health_results_file"
 	
 	# Parse JSON and check each database
-	cat "$db_list_file" | grep -o '{[^}]*}' | while read -r db_json; do
+	local first=true
+	while read -r db_json; do
 		mdb_id=$(echo "$db_json" | grep -o '"mdb_id"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
 		db_name=$(echo "$db_json" | grep -o '"db_name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
 		db_type=$(echo "$db_json" | grep -o '"db_type"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
@@ -362,18 +363,21 @@ check_managed_databases() {
 		
 		save_execution_log "managed_db_check" "$kv_value" "$kv_key"
 		
-		# Collect for batch update
+		# Append to health results file
 		if [ "$first" = true ]; then
-			health_results="${health_results}{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0}"
+			echo -n "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0}" >> "$health_results_file"
 			first=false
 		else
-			health_results="${health_results},{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0}"
+			echo -n ",{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0}" >> "$health_results_file"
 		fi
 		
 		echo "[${logdt}] [Gateway]   → Status: $check_status - $check_message" >> $LogFileName
-	done
+	done < <(cat "$db_list_file" | grep -o '{[^}]*}')
 	
-	health_results="${health_results}]"
+	echo "]" >> "$health_results_file"
+	
+	# Read health results
+	local health_results=$(cat "$health_results_file")
 	
 	# Update tManagedDatabase.last_check_dt via API
 	if [ "$health_results" != "[]" ]; then
@@ -390,7 +394,7 @@ check_managed_databases() {
 	fi
 	
 	# Clean up
-	rm -f "$db_list_file"
+	rm -f "$db_list_file" "$health_results_file"
 	
 	logdt=$(date '+%Y%m%d%H%M%S')
 	echo "[${logdt}] [Gateway] Managed database check completed" >> $LogFileName
