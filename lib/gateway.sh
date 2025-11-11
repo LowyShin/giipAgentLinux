@@ -379,8 +379,13 @@ check_managed_databases() {
 	# Read health results
 	local health_results=$(cat "$health_results_file")
 	
+	logdt=$(date '+%Y%m%d%H%M%S')
+	echo "[${logdt}] [Gateway] Health results JSON: $health_results" >> $LogFileName
+	
 	# Update tManagedDatabase.last_check_dt via API
-	if [ "$health_results" != "[]" ]; then
+	if [ "$health_results" != "[]" ] && [ "$health_results" != "[
+]" ]; then
+		echo "[Gateway] 📤 Updating tManagedDatabase.last_check_dt via API..." >&2
 		local temp_file=$(mktemp)
 		wget -O "$temp_file" --quiet \
 			--post-data="text=ManagedDatabaseHealthUpdate jsondata&token=${sk}&jsondata=${health_results}" \
@@ -388,9 +393,14 @@ check_managed_databases() {
 		
 		if [ -f "$temp_file" ]; then
 			logdt=$(date '+%Y%m%d%H%M%S')
+			echo "[${logdt}] [Gateway] API Response: $(cat "$temp_file")" >> $LogFileName
 			echo "[${logdt}] [Gateway] Updated tManagedDatabase.last_check_dt for $db_count database(s)" >> $LogFileName
 			rm -f "$temp_file"
 		fi
+	else
+		echo "[Gateway] ⚠️  Skipping API update - health_results is empty" >&2
+		logdt=$(date '+%Y%m%d%H%M%S')
+		echo "[${logdt}] [Gateway] Skipped API update - health_results='$health_results'" >> $LogFileName
 	fi
 	
 	# Clean up
