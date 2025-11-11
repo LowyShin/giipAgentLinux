@@ -57,11 +57,23 @@ cat "$temp_file"
 echo ""
 echo "----------------------------------------"
 
-# Parse JSON
+# Parse JSON - Extract "data" array using Python
 echo ""
-echo "Step 3: Parsing JSON objects..."
-db_list=$(cat "$temp_file" | grep -E -o '\{[^}]*\}')
-echo "Parsed JSON objects:"
+echo "Step 3: Parsing JSON with Python..."
+
+db_list=$(python3 -c "
+import json, sys
+try:
+    data = json.load(open('$temp_file'))
+    if 'data' in data and isinstance(data['data'], list):
+        for item in data['data']:
+            print(json.dumps(item))
+except Exception as e:
+    print(f'Error: {e}', file=sys.stderr)
+    sys.exit(1)
+")
+
+echo "Parsed database objects:"
 echo "$db_list"
 echo ""
 
@@ -77,8 +89,9 @@ health_results_file=$(mktemp)
 echo "$db_list" | while IFS= read -r db_json; do
     [[ -z "$db_json" ]] && continue
     
-    mdb_id=$(echo "$db_json" | grep -E -o '"mdb_id"[[:space:]]*:[[:space:]]*[0-9]+' | grep -E -o '[0-9]+')
-    db_name=$(echo "$db_json" | grep -E -o '"db_name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+    # Use Python to parse JSON properly
+    mdb_id=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('mdb_id', ''))")
+    db_name=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('db_name', ''))")
     
     echo "  Processing: mdb_id=$mdb_id, db_name=$db_name"
     
