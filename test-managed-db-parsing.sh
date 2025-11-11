@@ -2,9 +2,27 @@
 # Test script: Parse managed database list and build health_results JSON
 # Purpose: Isolate the JSON parsing logic to debug health_results empty issue
 
-# Load configuration
-source giipAgent.cnf
-source lib/kvs.sh
+# ============================================================================
+# Initialize Script Paths (same as giipAgent3.sh)
+# ============================================================================
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+LIB_DIR="${SCRIPT_DIR}/lib"
+
+# Load common functions (to get load_config)
+if [ -f "${LIB_DIR}/common.sh" ]; then
+	. "${LIB_DIR}/common.sh"
+else
+	echo "❌ Error: common.sh not found in ${LIB_DIR}"
+	exit 1
+fi
+
+# Load configuration (same path as giipAgent3.sh)
+load_config "../giipAgent.cnf"
+if [ $? -ne 0 ]; then
+	echo "❌ Failed to load configuration"
+	exit 1
+fi
 
 echo "========================================="
 echo "Test: Managed Database JSON Parsing"
@@ -13,10 +31,18 @@ echo "========================================="
 # Get managed database list
 echo ""
 echo "Step 1: Fetching managed database list..."
+echo "Using lssn: $lssn"
 temp_file=$(mktemp)
+
+# Use correct API format with jsondata
+text="GatewayManagedDatabaseList lssn"
+jsondata="{\"lssn\":${lssn}}"
+
 wget -O "$temp_file" --quiet \
-    --post-data="text=GatewayManagedDatabaseList&token=${sk}" \
-    "${apiaddrv2}?code=${apiaddrcode}" 2>/dev/null
+    --post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
+    --header="Content-Type: application/x-www-form-urlencoded" \
+    "${apiaddrv2}?code=${apiaddrcode}" \
+    --no-check-certificate 2>&1
 
 if [ ! -f "$temp_file" ]; then
     echo "❌ Failed to fetch DB list"
