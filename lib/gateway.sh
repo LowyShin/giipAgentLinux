@@ -317,7 +317,11 @@ check_managed_databases() {
 	
 	# Parse JSON and check each database
 	local first=true
-	while read -r db_json; do
+	local db_list=$(cat "$db_list_file" | grep -o '{[^}]*}')
+	
+	echo "$db_list" | while IFS= read -r db_json; do
+		[[ -z "$db_json" ]] && continue
+		
 		mdb_id=$(echo "$db_json" | grep -o '"mdb_id"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
 		db_name=$(echo "$db_json" | grep -o '"db_name"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
 		db_type=$(echo "$db_json" | grep -o '"db_type"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
@@ -363,21 +367,23 @@ check_managed_databases() {
 		
 		save_execution_log "managed_db_check" "$kv_value" "$kv_key"
 		
-		# Append to health results file
-		if [ "$first" = true ]; then
-			echo -n "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0}" >> "$health_results_file"
-			first=false
-		else
-			echo -n ",{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0}" >> "$health_results_file"
-		fi
+		# Write to health results file (direct append, simpler than checking first)
+		echo "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":0}" >> "$health_results_file"
 		
 		echo "[${logdt}] [Gateway]   → Status: $check_status - $check_message" >> $LogFileName
-	done < <(cat "$db_list_file" | grep -o '{[^}]*}')
+	done
 	
 	echo "]" >> "$health_results_file"
 	
-	# Read health results
-	local health_results=$(cat "$health_results_file")
+	# Build proper JSON array (remove last comma if any, then add brackets)
+	local health_results=$(awk 'NR==1{printf "["} NR>1 && NR<FNR{printf ","} NR>1{printf "%s", $0} END{printf "]"}' RS='\n' "$health_results_file" | grep -v '^\[[]$')
+	
+	# If grep removed everything, fall back to simple cat
+	if [ -z "$health_results" ]; then
+		health_results=$(cat "$health_results_file")
+		# Remove the opening [ we added, collect all JSON objects, rebuild
+		health_results=$(grep -o '{[^}]*}' "$health_results_file" | awk 'BEGIN{printf "["} NR>1{printf ","} {printf "%s", $0} END{printf "]"}')
+	fi
 	
 	logdt=$(date '+%Y%m%d%H%M%S')
 	echo "[${logdt}] [Gateway] Health results JSON: $health_results" >> $LogFileName
