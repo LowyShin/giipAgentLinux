@@ -213,22 +213,17 @@ if [ "${gateway_mode}" = "1" ]; then
 	init_complete_details="{\"db_connectivity\":\"verified\",\"server_count\":${server_count}}"
 	save_execution_log "gateway_init" "$init_complete_details"
 	
-	# Gateway main loop
-	cntgiip=1
+	# Gateway main loop (run once per execution, cron will re-run)
+	log_message "INFO" "Starting Gateway cycle..."
 	
-	while [ ${cntgiip} -le 3 ]; do
-		# Process gateway servers (query DB each cycle)
-		process_gateway_servers
-		
-		# Sleep before next cycle
-		log_message "INFO" "Sleeping ${giipagentdelay} seconds..."
-		sleep $giipagentdelay
-		
-		# Re-check process count
-		cntgiip=$(ps aux | grep giipAgent3.sh | grep -v grep | wc -l)
-	done
+	# Process gateway servers (query DB each cycle)
+	process_gateway_servers
 	
-	log_message "INFO" "Gateway mode terminated"
+	log_message "INFO" "Gateway cycle completed"
+	
+	# Shutdown log
+	save_execution_log "shutdown" "{\"mode\":\"gateway\",\"status\":\"normal_exit\"}"
+
 	
 else
 	# ========================================================================

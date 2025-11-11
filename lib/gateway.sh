@@ -263,8 +263,8 @@ process_gateway_servers() {
 # Export Functions
 # ============================================================================
 
-export -f sync_gateway_servers
-export -f sync_db_queries
+export -f get_gateway_servers
+export -f get_db_queries
 export -f execute_remote_command
 export -f get_script_by_mssn
 export -f get_remote_queue
