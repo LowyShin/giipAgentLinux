@@ -88,11 +88,14 @@ if [ -f "$config_tmpfile" ]; then
 	else
 		echo "⚠️  Failed to parse is_gateway from DB, using default: gateway_mode=${gateway_mode}"
 		log_kvs "api_lsvrgetconfig_parse_failed" "{\"response\":${api_response}}"
+		log_kvs "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"parse_failed\":true,\"response\":${api_response}}"
 	fi
 	
 	rm -f "$config_tmpfile"
 else
 	echo "⚠️  Failed to fetch server config from DB, using default: gateway_mode=${gateway_mode}"
+	log_kvs "api_lsvrgetconfig_failed" "{\"api_url\":\"${api_url}\",\"error\":\"API call failed or no response file\"}"
+	log_kvs "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"api_failed\":true}"
 	log_kvs "api_lsvrgetconfig_failed" "{\"api_url\":\"${api_url}\",\"error\":\"API call failed\"}"
 fi
 
