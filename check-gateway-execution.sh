@@ -4,9 +4,29 @@
 echo "===== Gateway 실행 로그 확인 ====="
 echo ""
 
-# 최근 로그 파일 찾기
-LOGDIR="/home/giip/giipAgent/logs"
-if [ -d "$LOGDIR" ]; then
+# 현재 디렉토리 확인
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+echo "📂 스크립트 위치: $SCRIPT_DIR"
+
+# 설정 파일 위치 (giipAgent3.sh와 동일한 로직)
+CNF_FILE="${SCRIPT_DIR}/../giipAgent.cnf"
+if [ ! -f "$CNF_FILE" ]; then
+    CNF_FILE="${SCRIPT_DIR}/giipAgent.cnf"
+fi
+
+echo "📂 설정 파일: $CNF_FILE"
+echo ""
+
+# 로그 디렉토리 확인 (여러 위치 시도)
+LOGDIR=""
+for dir in "${SCRIPT_DIR}/../logs" "${SCRIPT_DIR}/logs" "/home/giip/giipAgent/logs" "$HOME/giipAgent/logs"; do
+    if [ -d "$dir" ]; then
+        LOGDIR="$dir"
+        break
+    fi
+done
+
+if [ -n "$LOGDIR" ]; then
     echo "📂 로그 디렉토리: $LOGDIR"
     echo ""
     
@@ -17,14 +37,14 @@ if [ -d "$LOGDIR" ]; then
         echo "📄 최근 로그 파일: $LATEST_LOG"
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        echo "최근 20줄:"
+        echo "최근 30줄:"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        tail -20 "$LATEST_LOG"
+        tail -30 "$LATEST_LOG"
     else
         echo "⚠️ 로그 파일을 찾을 수 없습니다"
     fi
 else
-    echo "⚠️ 로그 디렉토리가 없습니다: $LOGDIR"
+    echo "⚠️ 로그 디렉토리를 찾을 수 없습니다"
 fi
 
 echo ""
@@ -35,8 +55,8 @@ echo ""
 TEMP_FILE="/tmp/gateway_test_$$.json"
 
 # giipAgent.cnf에서 설정 읽기
-if [ -f "/home/giip/giipAgent/giipAgent.cnf" ]; then
-    source /home/giip/giipAgent/giipAgent.cnf
+if [ -f "$CNF_FILE" ]; then
+    source "$CNF_FILE"
     
     echo "🔍 API 호출 중..."
     echo "LSSN: $lssn"
@@ -90,7 +110,7 @@ if [ -f "/home/giip/giipAgent/giipAgent.cnf" ]; then
         rm -f "$TEMP_FILE"
     fi
 else
-    echo "❌ 설정 파일을 찾을 수 없습니다: /home/giip/giipAgent/giipAgent.cnf"
+    echo "❌ 설정 파일을 찾을 수 없습니다: $CNF_FILE"
 fi
 
 echo ""
