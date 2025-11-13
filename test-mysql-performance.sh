@@ -130,11 +130,11 @@ export MYSQL_PWD="$DB_PASSWORD"
 
 # DB_DATABASE가 비어있으면 -D 옵션 제외
 if [ -n "$DB_DATABASE" ]; then
-    echo "[DEBUG] Running: mysql -h \"$DB_HOST\" -P \"$DB_PORT\" -u \"$DB_USER\" -p\${MYSQL_PWD} -D \"$DB_DATABASE\" -e \"SELECT 1 AS test\""
-    CONN_TEST=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p${MYSQL_PWD} -D "$DB_DATABASE" -e "SELECT 1 AS test" 2>&1)
+    echo "[DEBUG] Running: mysql -h \"$DB_HOST\" -P \"$DB_PORT\" -u \"$DB_USER\" -p\"\${MYSQL_PWD}\" -D \"$DB_DATABASE\" -e \"SELECT 1 AS test\""
+    CONN_TEST=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -D "$DB_DATABASE" -e "SELECT 1 AS test" 2>&1)
 else
-    echo "[DEBUG] Running: mysql -h \"$DB_HOST\" -P \"$DB_PORT\" -u \"$DB_USER\" -p\${MYSQL_PWD} -e \"SELECT 1 AS test\""
-    CONN_TEST=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p${MYSQL_PWD} -e "SELECT 1 AS test" 2>&1)
+    echo "[DEBUG] Running: mysql -h \"$DB_HOST\" -P \"$DB_PORT\" -u \"$DB_USER\" -p\"\${MYSQL_PWD}\" -e \"SELECT 1 AS test\""
+    CONN_TEST=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -e "SELECT 1 AS test" 2>&1)
 fi
 
 CONN_EXIT=$?
@@ -162,7 +162,7 @@ export MYSQL_PWD="$DB_PASSWORD"
 
 # DB_DATABASE가 비어있으면 -D 옵션 제외
 if [ -n "$DB_DATABASE" ]; then
-    PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p${MYSQL_PWD} -D "$DB_DATABASE" -N -e "
+    PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -D "$DB_DATABASE" -N -e "
 	SELECT 
 		CONCAT('{',
 			'\"threads_connected\":', VARIABLE_VALUE, ',',
@@ -175,7 +175,7 @@ if [ -n "$DB_DATABASE" ]; then
 	WHERE VARIABLE_NAME='Threads_connected'
 " 2>&1)
 else
-    PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p${MYSQL_PWD} -N -e "
+    PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -N -e "
 	SELECT 
 		CONCAT('{',
 			'\"threads_connected\":', VARIABLE_VALUE, ',',
@@ -236,13 +236,13 @@ export MYSQL_PWD="$DB_PASSWORD"
 
 for metric in "${METRICS[@]}"; do
     if [ -n "$DB_DATABASE" ]; then
-        VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p${MYSQL_PWD} -D "$DB_DATABASE" -N -e "
+        VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -D "$DB_DATABASE" -N -e "
             SELECT VARIABLE_VALUE 
             FROM information_schema.GLOBAL_STATUS 
             WHERE VARIABLE_NAME='$metric'
         " 2>/dev/null)
     else
-        VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p${MYSQL_PWD} -N -e "
+        VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -N -e "
             SELECT VARIABLE_VALUE 
             FROM information_schema.GLOBAL_STATUS 
             WHERE VARIABLE_NAME='$metric'

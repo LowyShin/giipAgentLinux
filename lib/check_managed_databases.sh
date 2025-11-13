@@ -144,7 +144,7 @@ print(' '.join(sorted(db_types)))
 					export MYSQL_PWD="$db_password"
 					
 					# 실제 연결 테스트 (timeout 5초)
-					local mysql_result=$(timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -p${MYSQL_PWD} -D "$db_database" -e "SELECT 1 AS test" 2>&1)
+					local mysql_result=$(timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -p"${MYSQL_PWD}" -D "$db_database" -e "SELECT 1 AS test" 2>&1)
 					local mysql_exit=$?
 					
 					if [ $mysql_exit -eq 0 ]; then
@@ -154,7 +154,7 @@ print(' '.join(sorted(db_types)))
 						echo "[${logdt}] [Gateway]   ✅ MySQL connection OK" >> $LogFileName
 						
 						# 성능 메트릭 수집
-						local perf_data=$(timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -p${MYSQL_PWD} -D "$db_database" -N -e "
+						local perf_data=$(timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -p"${MYSQL_PWD}" -D "$db_database" -N -e "
 							SELECT 
 								CONCAT('{',
 									'\"threads_connected\":', VARIABLE_VALUE, ',',
