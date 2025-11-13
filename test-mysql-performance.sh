@@ -155,34 +155,19 @@ echo "[DEBUG] Running performance query..."
 
 export MYSQL_PWD="$DB_PASSWORD"
 
-# DB_DATABASE가 비어있으면 -D 옵션 제외
-if [ -n "$DB_DATABASE" ]; then
-    PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -D "$DB_DATABASE" -N -e "
+# MySQL 8.0+ uses performance_schema.global_status instead of information_schema.GLOBAL_STATUS
+PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -N -e "
 	SELECT 
 		CONCAT('{',
 			'\"threads_connected\":', VARIABLE_VALUE, ',',
-			'\"threads_running\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Threads_running'), ',',
-			'\"questions\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Questions'), ',',
-			'\"slow_queries\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Slow_queries'), ',',
-			'\"uptime\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Uptime'),
+			'\"threads_running\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Threads_running'), ',',
+			'\"questions\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Questions'), ',',
+			'\"slow_queries\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Slow_queries'), ',',
+			'\"uptime\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Uptime'),
 		'}')
-	FROM information_schema.GLOBAL_STATUS 
+	FROM performance_schema.global_status
 	WHERE VARIABLE_NAME='Threads_connected'
 " 2>&1)
-else
-    PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -N -e "
-	SELECT 
-		CONCAT('{',
-			'\"threads_connected\":', VARIABLE_VALUE, ',',
-			'\"threads_running\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Threads_running'), ',',
-			'\"questions\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Questions'), ',',
-			'\"slow_queries\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Slow_queries'), ',',
-			'\"uptime\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Uptime'),
-		'}')
-	FROM information_schema.GLOBAL_STATUS 
-	WHERE VARIABLE_NAME='Threads_connected'
-" 2>&1)
-fi
 
 PERF_EXIT=$?
 unset MYSQL_PWD
@@ -230,19 +215,11 @@ METRICS=("Threads_connected" "Threads_running" "Questions" "Slow_queries" "Uptim
 export MYSQL_PWD="$DB_PASSWORD"
 
 for metric in "${METRICS[@]}"; do
-    if [ -n "$DB_DATABASE" ]; then
-        VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -D "$DB_DATABASE" -N -e "
-            SELECT VARIABLE_VALUE 
-            FROM information_schema.GLOBAL_STATUS 
-            WHERE VARIABLE_NAME='$metric'
-        " 2>/dev/null)
-    else
-        VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -N -e "
-            SELECT VARIABLE_VALUE 
-            FROM information_schema.GLOBAL_STATUS 
-            WHERE VARIABLE_NAME='$metric'
-        " 2>/dev/null)
-    fi
+    VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -N -e "
+        SELECT VARIABLE_VALUE 
+        FROM performance_schema.global_status
+        WHERE VARIABLE_NAME='$metric'
+    " 2>/dev/null)
     
     if [ -n "$VALUE" ]; then
         echo "   ✅ $metric: $VALUE"
