@@ -51,8 +51,9 @@ save_execution_log() {
 	
 	echo "[KVS-Debug] jsondata='${jsondata}'" >&2
 	
-	# URL-encode jsondata to prevent & and other special characters from breaking POST data
-	local encoded_jsondata=$(python3 -c "import sys; from urllib.parse import quote; print(quote(sys.argv[1]))" "$jsondata")
+	# URL-encode using jq (more reliable than Python for JSON)
+	# jq will also validate the JSON structure
+	local encoded_jsondata=$(echo "$jsondata" | jq -sRr '@uri')
 	
 	echo "[KVS-Debug] encoded_jsondata='${encoded_jsondata}'" >&2
 	
