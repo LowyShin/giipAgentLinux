@@ -156,7 +156,7 @@ echo "[DEBUG] Running performance query..."
 
 # DB_DATABASE가 비어있으면 -D 옵션 제외
 if [ -n "$DB_DATABASE" ]; then
-    PERF_DATA=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -D"$DB_DATABASE" -N -e "
+    PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -D "$DB_DATABASE" -N -e "
 	SELECT 
 		CONCAT('{',
 			'\"threads_connected\":', VARIABLE_VALUE, ',',
@@ -169,7 +169,7 @@ if [ -n "$DB_DATABASE" ]; then
 	WHERE VARIABLE_NAME='Threads_connected'
 " 2>&1)
 else
-    PERF_DATA=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -N -e "
+    PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -N -e "
 	SELECT 
 		CONCAT('{',
 			'\"threads_connected\":', VARIABLE_VALUE, ',',
@@ -227,13 +227,13 @@ METRICS=("Threads_connected" "Threads_running" "Questions" "Slow_queries" "Uptim
 
 for metric in "${METRICS[@]}"; do
     if [ -n "$DB_DATABASE" ]; then
-        VALUE=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -D"$DB_DATABASE" -N -e "
+        VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -D "$DB_DATABASE" -N -e "
             SELECT VARIABLE_VALUE 
             FROM information_schema.GLOBAL_STATUS 
             WHERE VARIABLE_NAME='$metric'
         " 2>/dev/null)
     else
-        VALUE=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -N -e "
+        VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -N -e "
             SELECT VARIABLE_VALUE 
             FROM information_schema.GLOBAL_STATUS 
             WHERE VARIABLE_NAME='$metric'
