@@ -5,6 +5,35 @@
 # Purpose: Install and check database clients for Gateway mode
 
 # ============================================================================
+# Sudo Check Functions
+# ============================================================================
+
+# Check if user has sudo privileges
+has_sudo() {
+	if [ "$EUID" -eq 0 ]; then
+		# Running as root
+		return 0
+	fi
+	
+	if sudo -n true 2>/dev/null; then
+		# Has passwordless sudo
+		return 0
+	fi
+	
+	# No sudo access
+	return 1
+}
+
+# Run command with sudo if available, otherwise try without
+run_with_sudo() {
+	if has_sudo; then
+		sudo "$@"
+	else
+		"$@"
+	fi
+}
+
+# ============================================================================
 # SSH/Remote Access Functions
 # ============================================================================
 
@@ -15,21 +44,27 @@ check_sshpass() {
 		return 0
 	fi
 	
+	if ! has_sudo; then
+		echo "[Gateway] ⚠️  sshpass not found and no sudo access"
+		echo "[Gateway] Please install manually: apt-get install sshpass (Debian/Ubuntu) or yum install sshpass (RHEL/CentOS)"
+		return 1
+	fi
+	
 	echo "[Gateway] sshpass not found, installing automatically..."
 	
 	if [ -f /etc/debian_version ]; then
 		# Debian/Ubuntu
 		echo "[Gateway] Detected Debian/Ubuntu"
-		apt-get update -qq
-		apt-get install -y sshpass
+		run_with_sudo apt-get update -qq
+		run_with_sudo apt-get install -y sshpass
 	elif [ -f /etc/redhat-release ]; then
 		# CentOS/RHEL
 		echo "[Gateway] Detected CentOS/RHEL"
 		if ! rpm -q epel-release &>/dev/null; then
 			echo "[Gateway] Installing EPEL repository..."
-			yum install -y epel-release
+			run_with_sudo yum install -y epel-release
 		fi
-		yum install -y sshpass
+		run_with_sudo yum install -y sshpass
 	else
 		echo "[Gateway] Error: Unsupported OS for auto-install"
 		echo "[Gateway] Please install sshpass manually"
@@ -55,12 +90,18 @@ check_python_environment() {
 	
 	# Check Python3
 	if ! command -v python3 &> /dev/null; then
+		if ! has_sudo; then
+			echo "[Gateway-Python] ⚠️  Python3 not found and no sudo access"
+			echo "[Gateway-Python] Please install manually: apt-get install python3 python3-pip"
+			return 1
+		fi
+		
 		echo "[Gateway-Python] Python3 not found, installing..."
 		if [ -f /etc/debian_version ]; then
-			sudo apt-get update -qq
-			sudo apt-get install -y python3 python3-pip
+			run_with_sudo apt-get update -qq
+			run_with_sudo apt-get install -y python3 python3-pip
 		elif [ -f /etc/redhat-release ]; then
-			sudo yum install -y python3 python3-pip
+			run_with_sudo yum install -y python3 python3-pip
 		else
 			echo "[Gateway-Python] ❌ Unsupported OS, please install Python3 manually"
 			return 1
@@ -69,11 +110,17 @@ check_python_environment() {
 	
 	# Check pip3
 	if ! command -v pip3 &> /dev/null; then
+		if ! has_sudo; then
+			echo "[Gateway-Python] ⚠️  pip3 not found and no sudo access"
+			echo "[Gateway-Python] Please install manually: apt-get install python3-pip"
+			return 1
+		fi
+		
 		echo "[Gateway-Python] pip3 not found, installing..."
 		if [ -f /etc/debian_version ]; then
-			sudo apt-get install -y python3-pip
+			run_with_sudo apt-get install -y python3-pip
 		elif [ -f /etc/redhat-release ]; then
-			sudo yum install -y python3-pip
+			run_with_sudo yum install -y python3-pip
 		fi
 	fi
 	
@@ -99,17 +146,23 @@ check_mysql_client() {
 		return 0
 	fi
 	
+	if ! has_sudo; then
+		echo "[Gateway-MySQL] ⚠️  mysql client not found and no sudo access"
+		echo "[Gateway-MySQL] Please install manually: apt-get install mysql-client (Debian/Ubuntu) or yum install mysql (RHEL/CentOS)"
+		return 1
+	fi
+	
 	echo "[Gateway-MySQL] mysql client not found, installing automatically..."
 	
 	if [ -f /etc/debian_version ]; then
 		# Debian/Ubuntu
 		echo "[Gateway-MySQL] Detected Debian/Ubuntu"
-		apt-get update -qq
-		apt-get install -y mysql-client
+		run_with_sudo apt-get update -qq
+		run_with_sudo apt-get install -y mysql-client
 	elif [ -f /etc/redhat-release ]; then
 		# CentOS/RHEL
 		echo "[Gateway-MySQL] Detected CentOS/RHEL"
-		yum install -y mysql
+		run_with_sudo yum install -y mysql
 	else
 		echo "[Gateway-MySQL] Error: Unsupported OS for auto-install"
 		echo "[Gateway-MySQL] Please install mysql-client manually"
@@ -136,17 +189,23 @@ check_psql_client() {
 		return 0
 	fi
 	
+	if ! has_sudo; then
+		echo "[Gateway-PostgreSQL] ⚠️  psql client not found and no sudo access"
+		echo "[Gateway-PostgreSQL] Please install manually: apt-get install postgresql-client (Debian/Ubuntu) or yum install postgresql (RHEL/CentOS)"
+		return 1
+	fi
+	
 	echo "[Gateway-PostgreSQL] psql client not found, installing automatically..."
 	
 	if [ -f /etc/debian_version ]; then
 		# Debian/Ubuntu
 		echo "[Gateway-PostgreSQL] Detected Debian/Ubuntu"
-		apt-get update -qq
-		apt-get install -y postgresql-client
+		run_with_sudo apt-get update -qq
+		run_with_sudo apt-get install -y postgresql-client
 	elif [ -f /etc/redhat-release ]; then
 		# CentOS/RHEL
 		echo "[Gateway-PostgreSQL] Detected CentOS/RHEL"
-		yum install -y postgresql
+		run_with_sudo yum install -y postgresql
 	else
 		echo "[Gateway-PostgreSQL] Error: Unsupported OS for auto-install"
 		return 1
@@ -178,25 +237,40 @@ check_mssql_client() {
 		return 0
 	fi
 	
+	if ! has_sudo; then
+		echo "[Gateway-MSSQL] ⚠️  pyodbc not found and no sudo access"
+		echo "[Gateway-MSSQL] Please install manually:"
+		echo "[Gateway-MSSQL]   1. Install ODBC driver: https://docs.microsoft.com/en-us/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server"
+		echo "[Gateway-MSSQL]   2. pip3 install --user pyodbc"
+		# Try user-level install
+		echo "[Gateway-MSSQL] Attempting user-level pyodbc install..."
+		pip3 install --user pyodbc --quiet 2>/dev/null
+		if python3 -c "import pyodbc" 2>/dev/null; then
+			echo "[Gateway-MSSQL] ✅ pyodbc installed in user directory"
+			return 0
+		fi
+		return 1
+	fi
+	
 	echo "[Gateway-MSSQL] pyodbc not found, installing..."
 	
 	# Install ODBC driver first
 	if [ -f /etc/debian_version ]; then
 		echo "[Gateway-MSSQL] Installing Microsoft ODBC Driver for SQL Server (Ubuntu)..."
 		# Add Microsoft repository
-		curl -s https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add - 2>/dev/null
+		curl -s https://packages.microsoft.com/keys/microsoft.asc | run_with_sudo apt-key add - 2>/dev/null
 		local ubuntu_version=$(lsb_release -rs)
 		curl -s https://packages.microsoft.com/config/ubuntu/${ubuntu_version}/prod.list | \
-			sudo tee /etc/apt/sources.list.d/msprod.list > /dev/null
+			run_with_sudo tee /etc/apt/sources.list.d/msprod.list > /dev/null
 		
-		sudo apt-get update -qq
-		sudo ACCEPT_EULA=Y apt-get install -y msodbcsql17 unixodbc-dev 2>/dev/null
+		run_with_sudo apt-get update -qq
+		run_with_sudo sh -c "ACCEPT_EULA=Y apt-get install -y msodbcsql17 unixodbc-dev" 2>/dev/null
 		
 	elif [ -f /etc/redhat-release ]; then
 		echo "[Gateway-MSSQL] Installing Microsoft ODBC Driver for SQL Server (CentOS/RHEL)..."
-		sudo curl -s https://packages.microsoft.com/config/rhel/8/prod.repo | \
-			sudo tee /etc/yum.repos.d/msprod.repo > /dev/null
-		sudo ACCEPT_EULA=Y yum install -y msodbcsql17 unixODBC-devel 2>/dev/null
+		curl -s https://packages.microsoft.com/config/rhel/8/prod.repo | \
+			run_with_sudo tee /etc/yum.repos.d/msprod.repo > /dev/null
+		run_with_sudo sh -c "ACCEPT_EULA=Y yum install -y msodbcsql17 unixODBC-devel" 2>/dev/null
 	fi
 	
 	# Install Python pyodbc package

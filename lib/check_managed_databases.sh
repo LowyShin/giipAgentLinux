@@ -95,6 +95,24 @@ except Exception as e:
 						check_message="Connection successful"
 						logdt=$(date '+%Y%m%d%H%M%S')
 						echo "[${logdt}] [Gateway]   ✅ MySQL connection OK" >> $LogFileName
+						
+						# 성능 메트릭 수집
+						local perf_data=$(timeout 5 mysql -h"$db_host" -P"$db_port" -u"$db_user" -p"$db_password" -D"$db_database" -N -e "
+							SELECT 
+								CONCAT('{',
+									'\"threads_connected\":', VARIABLE_VALUE, ',',
+									'\"threads_running\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Threads_running'), ',',
+									'\"questions\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Questions'), ',',
+									'\"slow_queries\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Slow_queries'), ',',
+									'\"uptime\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Uptime'),
+								'}')
+							FROM information_schema.GLOBAL_STATUS 
+							WHERE VARIABLE_NAME='Threads_connected'
+						" 2>/dev/null)
+						
+						if [ -n "$perf_data" ] && [[ "$perf_data" == "{"* ]]; then
+							performance_json="$perf_data"
+						fi
 					elif [ $mysql_exit -eq 124 ]; then
 						check_status="error"
 						check_message="Connection timeout (5s)"
@@ -126,6 +144,21 @@ except Exception as e:
 						check_message="Connection successful"
 						logdt=$(date '+%Y%m%d%H%M%S')
 						echo "[${logdt}] [Gateway]   ✅ PostgreSQL connection OK" >> $LogFileName
+						
+						# 성능 메트릭 수집
+						local perf_data=$(PGPASSWORD="$db_password" timeout 5 psql -h "$db_host" -p "$db_port" -U "$db_user" -d "$db_database" -t -A -c "
+							SELECT json_build_object(
+								'connections', (SELECT count(*) FROM pg_stat_activity),
+								'active_connections', (SELECT count(*) FROM pg_stat_activity WHERE state = 'active'),
+								'idle_connections', (SELECT count(*) FROM pg_stat_activity WHERE state = 'idle'),
+								'database_size_mb', (SELECT pg_database_size(current_database()) / 1024 / 1024),
+								'uptime_seconds', (SELECT EXTRACT(EPOCH FROM (now() - pg_postmaster_start_time())))
+							)::text;
+						" 2>/dev/null)
+						
+						if [ -n "$perf_data" ] && [[ "$perf_data" == "{"* ]]; then
+							performance_json="$perf_data"
+						fi
 					elif [ $psql_exit -eq 124 ]; then
 						check_status="error"
 						check_message="Connection timeout (5s)"
@@ -156,6 +189,22 @@ except Exception as e:
 						check_message="Connection successful"
 						logdt=$(date '+%Y%m%d%H%M%S')
 						echo "[${logdt}] [Gateway]   ✅ MSSQL connection OK" >> $LogFileName
+						
+						# 성능 메트릭 수집
+						local mssql_stats=$(timeout 5 sqlcmd -S "$db_host,$db_port" -U "$db_user" -P "$db_password" -d "$db_database" -h -1 -Q "
+							SET NOCOUNT ON;
+							SELECT 
+								CONCAT('{',
+									'\"user_connections\":', (SELECT cntr_value FROM sys.dm_os_performance_counters WHERE counter_name = 'User Connections'), ',',
+									'\"batch_requests\":', (SELECT cntr_value FROM sys.dm_os_performance_counters WHERE object_name LIKE '%SQL Statistics%' AND counter_name = 'Batch Requests/sec'), ',',
+									'\"page_life_expectancy\":', (SELECT cntr_value FROM sys.dm_os_performance_counters WHERE counter_name = 'Page life expectancy'), ',',
+									'\"buffer_cache_hit_ratio\":', (SELECT cntr_value FROM sys.dm_os_performance_counters WHERE counter_name = 'Buffer cache hit ratio'),
+								'}')
+						" 2>/dev/null | grep "^{" | tr -d '\r\n ')
+						
+						if [ -n "$mssql_stats" ] && [[ "$mssql_stats" == "{"* ]]; then
+							performance_json="$mssql_stats"
+						fi
 					elif [ $mssql_exit -eq 124 ]; then
 						check_status="error"
 						check_message="Connection timeout (5s)"
@@ -191,6 +240,23 @@ except Exception as e:
 						check_message="Connection successful (PONG)"
 						logdt=$(date '+%Y%m%d%H%M%S')
 						echo "[${logdt}] [Gateway]   ✅ Redis connection OK" >> $LogFileName
+						
+						# 성능 메트릭 수집 (INFO stats)
+						local redis_info
+						if [ -n "$db_password" ]; then
+							redis_info=$(timeout 5 redis-cli -h "$db_host" -p "$db_port" -a "$db_password" INFO stats 2>/dev/null)
+						else
+							redis_info=$(timeout 5 redis-cli -h "$db_host" -p "$db_port" INFO stats 2>/dev/null)
+						fi
+						
+						if [ -n "$redis_info" ]; then
+							local connected_clients=$(echo "$redis_info" | grep "^connected_clients:" | cut -d: -f2 | tr -d '\r')
+							local total_commands=$(echo "$redis_info" | grep "^total_commands_processed:" | cut -d: -f2 | tr -d '\r')
+							local keyspace_hits=$(echo "$redis_info" | grep "^keyspace_hits:" | cut -d: -f2 | tr -d '\r')
+							local keyspace_misses=$(echo "$redis_info" | grep "^keyspace_misses:" | cut -d: -f2 | tr -d '\r')
+							
+							performance_json="{\"connected_clients\":${connected_clients:-0},\"total_commands\":${total_commands:-0},\"keyspace_hits\":${keyspace_hits:-0},\"keyspace_misses\":${keyspace_misses:-0}}"
+						fi
 					elif [ $redis_exit -eq 124 ]; then
 						check_status="error"
 						check_message="Connection timeout (5s)"
@@ -224,6 +290,26 @@ except Exception as e:
 						check_message="Connection successful"
 						logdt=$(date '+%Y%m%d%H%M%S')
 						echo "[${logdt}] [Gateway]   ✅ MongoDB connection OK" >> $LogFileName
+						
+						# 성능 메트릭 수집
+						local mongo_stats=$(timeout 5 "$mongo_cmd" "$mongo_uri" --quiet --eval "
+							var stats = db.serverStatus();
+							print(JSON.stringify({
+								connections: stats.connections.current,
+								active_connections: stats.connections.active || 0,
+								network_bytes_in: stats.network.bytesIn,
+								network_bytes_out: stats.network.bytesOut,
+								opcounters_query: stats.opcounters.query,
+								opcounters_insert: stats.opcounters.insert,
+								opcounters_update: stats.opcounters.update,
+								opcounters_delete: stats.opcounters.delete,
+								uptime: stats.uptime
+							}));
+						" 2>/dev/null)
+						
+						if [ -n "$mongo_stats" ] && [[ "$mongo_stats" == "{"* ]]; then
+							performance_json="$mongo_stats"
+						fi
 					elif [ $mongo_exit -eq 124 ]; then
 						check_status="error"
 						check_message="Connection timeout (5s)"
