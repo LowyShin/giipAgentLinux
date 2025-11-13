@@ -51,14 +51,13 @@ save_execution_log() {
 	
 	echo "[KVS-Debug] jsondata='${jsondata}'" >&2
 	
-	# URL-encode using jq (more reliable than Python for JSON)
-	# Use printf to remove the trailing newline from jq output
+	# Build POST data with proper URL encoding for each parameter
+	# wget --post-data does NOT automatically encode values, so we must encode jsondata
+	local encoded_text=$(printf '%s' "$text" | jq -sRr '@uri')
+	local encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri')
 	local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
 	
-	echo "[KVS-Debug] encoded_jsondata='${encoded_jsondata}'" >&2
-	
-	# Build POST data
-	local post_data="text=${text}&token=${sk}&jsondata=${encoded_jsondata}"
+	local post_data="text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}"
 	
 	# Debug: Save POST data to file for inspection
 	echo "$post_data" > /tmp/kvs_post_data.txt
@@ -135,11 +134,16 @@ kvs_put() {
 	local text="KVSPut kType kKey kFactor"
 	local jsondata="{\"kType\":\"${ktype}\",\"kKey\":\"${kkey}\",\"kFactor\":\"${kfactor}\",\"kValue\":${kvalue_json}}"
 	
+	# URL-encode all POST parameters (wget --post-data does NOT auto-encode)
+	local encoded_text=$(printf '%s' "$text" | jq -sRr '@uri')
+	local encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri')
+	local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
+	
 	# Call API with response capture for debugging
 	local response_file=$(mktemp)
 	local stderr_file=$(mktemp)
 	wget -O "$response_file" \
-		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
+		--post-data="text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"${kvs_url}" \
 		--no-check-certificate \
