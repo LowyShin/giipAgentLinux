@@ -47,7 +47,15 @@ save_execution_log() {
 	local text="KVSPut kType kKey kFactor"
 	
 	# ✅ jsondata contains actual values
-	local jsondata="{\"kType\":\"lssn\",\"kKey\":\"${lssn}\",\"kFactor\":\"giipagent\",\"kValue\":${kvalue}}"
+	# Use Python to properly construct JSON (avoids quote escaping issues)
+	local jsondata=$(python3 -c "import json; print(json.dumps({
+		'kType': 'lssn',
+		'kKey': '${lssn}',
+		'kFactor': 'giipagent',
+		'kValue': json.loads('''${kvalue}''')
+	}))")
+	
+	echo "[KVS-Debug] jsondata='${jsondata}'" >&2
 	
 	# Call API (using giipApiSk2 with token parameter)
 	# Note: wget --post-data automatically URL-encodes the data
