@@ -52,8 +52,8 @@ save_execution_log() {
 	echo "[KVS-Debug] jsondata='${jsondata}'" >&2
 	
 	# URL-encode using jq (more reliable than Python for JSON)
-	# jq will also validate the JSON structure
-	local encoded_jsondata=$(echo "$jsondata" | jq -sRr '@uri')
+	# Use printf to remove the trailing newline from jq output
+	local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
 	
 	echo "[KVS-Debug] encoded_jsondata='${encoded_jsondata}'" >&2
 	
