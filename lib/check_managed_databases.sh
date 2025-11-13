@@ -140,11 +140,9 @@ print(' '.join(sorted(db_types)))
 					logdt=$(date '+%Y%m%d%H%M%S')
 					echo "[${logdt}] [Gateway]   ⚠️  MySQL client not found" >> $LogFileName
 				else
-					# 패스워드를 환경변수로 설정 (특수문자 처리)
-					export MYSQL_PWD="$db_password"
-					
 					# 실제 연결 테스트 (timeout 5초)
-					local mysql_result=$(timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -D "$db_database" -e "SELECT 1 AS test" 2>&1)
+					# MYSQL_PWD를 command 앞에 설정하여 subshell에도 전달
+					local mysql_result=$(MYSQL_PWD="$db_password" timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -D "$db_database" -e "SELECT 1 AS test" 2>&1)
 					local mysql_exit=$?
 					
 					if [ $mysql_exit -eq 0 ]; then
@@ -154,7 +152,7 @@ print(' '.join(sorted(db_types)))
 						echo "[${logdt}] [Gateway]   ✅ MySQL connection OK" >> $LogFileName
 						
 						# 성능 메트릭 수집
-						local perf_data=$(timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -D "$db_database" -N -e "
+						local perf_data=$(MYSQL_PWD="$db_password" timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -D "$db_database" -N -e "
 							SELECT 
 								CONCAT('{',
 									'\"threads_connected\":', VARIABLE_VALUE, ',',
@@ -182,8 +180,6 @@ print(' '.join(sorted(db_types)))
 						logdt=$(date '+%Y%m%d%H%M%S')
 						echo "[${logdt}] [Gateway]   ❌ MySQL error: $check_message" >> $LogFileName
 					fi
-					
-					unset MYSQL_PWD  # 보안: 사용 후 즉시 제거
 				fi
 				;;
 			PostgreSQL)
