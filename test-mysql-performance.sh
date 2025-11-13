@@ -127,8 +127,10 @@ START_TIME=$(date +%s%3N)
 
 # DB_DATABASE가 비어있으면 -D 옵션 제외
 if [ -n "$DB_DATABASE" ]; then
+    echo "[DEBUG] Running: mysql -h\"$DB_HOST\" -P\"$DB_PORT\" -u\"$DB_USER\" -p\"****\" -D\"$DB_DATABASE\" -e \"SELECT 1 AS test\""
     CONN_TEST=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -D"$DB_DATABASE" -e "SELECT 1 AS test" 2>&1)
 else
+    echo "[DEBUG] Running: mysql -h\"$DB_HOST\" -P\"$DB_PORT\" -u\"$DB_USER\" -p\"****\" -e \"SELECT 1 AS test\""
     CONN_TEST=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1 AS test" 2>&1)
 fi
 
