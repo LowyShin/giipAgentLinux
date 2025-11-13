@@ -77,6 +77,8 @@ if [ -z "$DB_HOST" ]; then
     echo "🌐 Fetching DB info from API (config: ${CONFIG_FILE:-../giipAgent.cnf})..."
     DB_INFO=$(get_db_info_from_api "${CONFIG_FILE:-../giipAgent.cnf}")
     
+    echo "[DEBUG] Raw DB_INFO: '$DB_INFO'"
+    
     if [[ "$DB_INFO" == ERROR:* ]]; then
         echo "❌ Failed to get DB info from API: $DB_INFO"
         echo ""
@@ -87,6 +89,16 @@ if [ -z "$DB_HOST" ]; then
     
     # 파싱
     IFS='|' read -r DB_HOST DB_PORT DB_USER DB_PASSWORD DB_DATABASE DB_NAME DB_TYPE <<< "$DB_INFO"
+    
+    echo "[DEBUG] After parsing:"
+    echo "[DEBUG]   DB_HOST='$DB_HOST'"
+    echo "[DEBUG]   DB_PORT='$DB_PORT'"
+    echo "[DEBUG]   DB_USER='$DB_USER'"
+    echo "[DEBUG]   DB_PASSWORD='$DB_PASSWORD'"
+    echo "[DEBUG]   DB_DATABASE='$DB_DATABASE'"
+    echo "[DEBUG]   DB_NAME='$DB_NAME'"
+    echo "[DEBUG]   DB_TYPE='$DB_TYPE'"
+    echo ""
     
     echo "✅ Got DB info from API:"
     echo "   Name: $DB_NAME"
@@ -127,6 +139,11 @@ START_TIME=$(date +%s%3N)
 
 # Set MYSQL_PWD environment variable
 export MYSQL_PWD="$DB_PASSWORD"
+
+# DEBUG: Check if MYSQL_PWD is set correctly
+echo "[DEBUG] MYSQL_PWD length: ${#MYSQL_PWD}"
+echo "[DEBUG] MYSQL_PWD value: ${MYSQL_PWD}"
+echo "[DEBUG] DB_PASSWORD value: ${DB_PASSWORD}"
 
 # DB_DATABASE가 비어있으면 -D 옵션 제외
 if [ -n "$DB_DATABASE" ]; then
