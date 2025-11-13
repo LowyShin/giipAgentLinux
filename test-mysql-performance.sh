@@ -2,6 +2,18 @@
 
 # MySQL 성능 메트릭 수집 테스트 스크립트
 # 용도: check_managed_databases.sh의 MySQL 성능 수집 부분만 단독 테스트
+# 
+# API 명세: docs/GATEWAY_API_SPECIFICATION.md
+# 관련 함수: lib/check_managed_databases.sh
+#
+# 사용법:
+#   1. API에서 자동 가져오기 (권장):
+#      bash test-mysql-performance.sh
+#
+#   2. 수동 설정:
+#      DB_HOST=호스트 DB_PORT=포트 DB_USER=유저 \
+#      DB_PASSWORD=암호 DB_DATABASE=DB명 \
+#      bash test-mysql-performance.sh
 
 echo "======================================"
 echo "MySQL Performance Metrics Test"
@@ -13,42 +25,52 @@ get_db_info_from_api() {
     local config_file="${1:-../giipAgent.cnf}"
     
     if [ ! -f "$config_file" ]; then
-        echo "❌ Config file not found: $config_file"
+        echo "ERROR: Config file not found: $config_file" >&2
         return 1
     fi
     
     # giipAgent.cnf에서 설정 읽기
     source "$config_file"
     
-    echo "🔍 Fetching managed database info from API..."
+    echo "🔍 Fetching managed database info from API..." >&2
+    
+    local temp_file=$(mktemp)
+    local text="GatewayManagedDatabaseList lssn"
+    local jsondata="{\"lssn\":${lssn}}"
     
     # API 호출
-    local api_response=$(curl -s -X POST "$APIURI" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        --data-urlencode "text=pApiGatewayManagedDatabaseListForAgentbySK" \
-        --data-urlencode "token=$SK" \
-        --data-urlencode "jsondata={\"lssn\":$LSSN}")
+    wget -O "$temp_file" --quiet \
+        --post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
+        --header="Content-Type: application/x-www-form-urlencoded" \
+        "${apiaddrv2}?code=${apiaddrcode}" \
+        --no-check-certificate 2>&1
     
-    if [ -z "$api_response" ]; then
-        echo "❌ API response is empty"
+    if [ ! -s "$temp_file" ]; then
+        echo "ERROR: Failed to fetch from API" >&2
+        rm -f "$temp_file"
         return 1
     fi
     
     # JSON 파싱하여 첫 번째 DB 정보 추출
-    echo "$api_response" | python3 -c "
+    python3 -c "
 import json, sys
 try:
-    data = json.load(sys.stdin)
-    if 'managed_databases' in data and len(data['managed_databases']) > 0:
-        db = data['managed_databases'][0]
-        print(f\"{db['db_host']}|{db['db_port']}|{db['db_user']}|{db['db_password']}|{db['db_database']}|{db['db_name']}|{db['db_type']}\")
+    with open('$temp_file') as f:
+        data = json.load(f)
+    
+    if 'data' in data and isinstance(data['data'], list) and len(data['data']) > 0:
+        db = data['data'][0]
+        print(f\"{db.get('mdb_host','')}|{db.get('mdb_port','')}|{db.get('mdb_user','')}|{db.get('mdb_password','')}|{db.get('mdb_database','')}|{db.get('mdb_name','')}|{db.get('mdb_type','')}\")
     else:
-        print('ERROR: No managed databases found')
+        print('ERROR: No managed databases in response', file=sys.stderr)
         sys.exit(1)
 except Exception as e:
-    print(f'ERROR: {e}')
+    print(f'ERROR: {e}', file=sys.stderr)
     sys.exit(1)
 "
+    local exit_code=$?
+    rm -f "$temp_file"
+    return $exit_code
 }
 
 # DB 정보 가져오기
