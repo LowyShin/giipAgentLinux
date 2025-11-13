@@ -57,13 +57,21 @@ save_execution_log() {
 	
 	echo "[KVS-Debug] encoded_jsondata='${encoded_jsondata}'" >&2
 	
+	# Build POST data
+	local post_data="text=${text}&token=${sk}&jsondata=${encoded_jsondata}"
+	
+	# Debug: Save POST data to file for inspection
+	echo "$post_data" > /tmp/kvs_post_data.txt
+	echo "[KVS-Debug] POST data length: ${#post_data}" >&2
+	echo "[KVS-Debug] POST data saved to /tmp/kvs_post_data.txt" >&2
+	
 	# Call API (using giipApiSk2 with token parameter)
 	# Note: jsondata is URL-encoded to prevent special characters from breaking POST data
 	# Save response to temp file for debugging
 	local response_file=$(mktemp)
 	local stderr_file=$(mktemp)
 	wget -O "$response_file" \
-		--post-data="text=${text}&token=${sk}&jsondata=${encoded_jsondata}" \
+		--post-data="$post_data" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"${kvs_url}" \
 		--no-check-certificate \
