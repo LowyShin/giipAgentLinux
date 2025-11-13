@@ -2,7 +2,8 @@
 # Test KVS API with exact same parameters as giipAgent
 
 # Load config
-source giipAgent.cnf
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/../giipAgent.cnf"
 
 echo "=== KVS API Test ===" 
 echo "API: $apiaddrv2"
