@@ -48,7 +48,9 @@ save_execution_log() {
 	local jsondata_encoded=$(echo "$jsondata" | sed 's/ /%20/g')
 	
 	# Call API (using giipApiSk2 with token parameter)
-	wget -O /dev/null \
+	# Save response to temp file for debugging
+	local response_file=$(mktemp)
+	wget -O "$response_file" \
 		--post-data="text=${text}&token=${sk}&jsondata=${jsondata_encoded}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"${kvs_url}" \
@@ -60,14 +62,20 @@ save_execution_log() {
 		if [ -n "$LogFileName" ]; then
 			echo "[KVS-Log] ✅ Saved: ${event_type}" >> "$LogFileName"
 		fi
+		rm -f "$response_file"
 	else
+		# Log error with API response
+		local api_response=$(cat "$response_file" 2>/dev/null | head -c 200)
 		echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >&2
+		echo "[KVS-Log] ⚠️  API Response: ${api_response}" >&2
 		if [ -n "$LogFileName" ]; then
 			echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >> "$LogFileName"
+			echo "[KVS-Log] ⚠️  API Response: ${api_response}" >> "$LogFileName"
 		fi
+		rm -f "$response_file"
 		
 		# Log error to database
-		log_error "KVS logging failed: ${event_type}" "KVSError" "save_execution_log at lib/kvs.sh, exit_code=${exit_code}"
+		log_error "KVS logging failed: ${event_type}" "KVSError" "save_execution_log at lib/kvs.sh, exit_code=${exit_code}, response=${api_response}"
 	fi
 	
 	return $exit_code
@@ -96,14 +104,22 @@ kvs_put() {
 	local text="KVSPut kType kKey kFactor"
 	local jsondata="{\"kType\":\"${ktype}\",\"kKey\":\"${kkey}\",\"kFactor\":\"${kfactor}\",\"kValue\":${kvalue_json}}"
 	
-	# Call API
-	wget -O /dev/null \
+	# Call API with response capture for debugging
+	local response_file=$(mktemp)
+	wget -O "$response_file" \
 		--post-data="text=${text}&token=${sk}&jsondata=$(echo ${jsondata} | sed 's/ /%20/g')" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"${kvs_url}" \
 		--no-check-certificate -q 2>&1
 	
-	return $?
+	local exit_code=$?
+	if [ $exit_code -ne 0 ]; then
+		local api_response=$(cat "$response_file" 2>/dev/null | head -c 200)
+		echo "[KVS-Put] ⚠️  Failed (exit_code=${exit_code}): ${api_response}" >&2
+	fi
+	rm -f "$response_file"
+	
+	return $exit_code
 }
 
 # Function: Save Gateway status to KVS (backward compatibility)

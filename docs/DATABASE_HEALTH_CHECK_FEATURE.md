@@ -10,11 +10,11 @@
 
 ### 1. 새로운 함수 추가
 
-**파일:** `giipAgentLinux/giipAgent2.sh`
+**파일:** `giipAgentLinux/lib/check_managed_databases.sh` (모듈화됨)
+
+**호출 위치:** `giipAgentLinux/giipAgent3.sh` Line 224
 
 **함수:** `check_managed_databases()`
-
-**위치:** Line 967~ (Gateway Mode Functions 섹션)
 
 **기능:**
 1. **DB 목록 조회**: `pApiManagedDatabaseListForAgentbySk` SP 호출
@@ -90,20 +90,13 @@
 
 ### 4. Gateway 메인 루프 수정
 
-**파일:** `giipAgentLinux/giipAgent2.sh`  
-**Line:** ~1896
+**파일:** `giipAgentLinux/giipAgent3.sh`  
+**Line:** ~224
 
 **변경:**
 ```bash
-# 이전
-while [ ${cntgiip} -le 3 ]; do
-    collect_gateway_server_status
-    process_gateway_servers
-    sleep ${giipagentdelay}
-done
-
-# 이후
-while [ ${cntgiip} -le 3 ]; do
+# Gateway 모드 메인 루프
+while true; do
     collect_gateway_server_status  # 1. 원격 서버 상태 수집
     process_gateway_servers        # 2. 원격 서버 큐 처리
     check_managed_databases        # 3. DB Health Check (신규!)

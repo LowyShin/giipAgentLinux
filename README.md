@@ -28,8 +28,7 @@
 - **[Modular Architecture Guide](docs/MODULAR_ARCHITECTURE.md)** - 리팩토링된 구조 설명 (v3.0) 🆕
 - [Auto-Discovery Architecture](docs/AUTO_DISCOVERY_ARCHITECTURE.md) - 파일 구조와 실행 흐름 상세 설명
 - [Service Package Filter](docs/SERVICE_PACKAGE_FILTER.md) - 소프트웨어 필터링 규칙
-- **[giipAgent2.sh Specification](docs/GIIPAGENT2_SPECIFICATION.md)** - giipAgent2.sh 실행 조건, 동작 흐름, KVS 저장 로직 완전 문서화
-- **[giipAgent2.sh Specification](docs/GIIPAGENT2_SPECIFICATION.md)** - giipAgent2.sh 실행 조건, 동작 흐름, KVS 저장 로직 완전 문서화 🆕
+- **[giipAgent3.sh Specification](docs/GIIPAGENT3_SPECIFICATION.md)** - giipAgent3.sh 실행 조건, 동작 흐름, KVS 저장 로직 완전 문서화 🆕
 
 ### Gateway & Remote Control
 - **[⚠️ Gateway Configuration Philosophy](docs/GATEWAY_CONFIG_PHILOSOPHY.md)** - **필독! DB as Single Source of Truth** 🔥
@@ -439,11 +438,11 @@ Test auto-discovery script:
 
 ---
 
-## 📊 Execution Tracking (NEW in v2.0)
+## 📊 Execution Tracking (v3.0)
 
 ### Overview
 
-giipAgent2.sh automatically logs all execution activities to KVS (Key-Value Storage) with factor **"giipagent"** for complete audit trail and troubleshooting.
+giipAgent3.sh automatically logs all execution activities to KVS (Key-Value Storage) with factor **"giipagent"** for complete audit trail and troubleshooting.
 
 **Tracked Events**:
 - Agent startup/shutdown
@@ -532,7 +531,7 @@ WHERE kFactor = 'giipagent'
 ORDER BY kRegdt DESC
 ```
 
-For complete specification, see [docs/GIIPAGENT2_SPECIFICATION.md](docs/GIIPAGENT2_SPECIFICATION.md).
+For complete specification, see [docs/GIIPAGENT3_SPECIFICATION.md](docs/GIIPAGENT3_SPECIFICATION.md).
 
 ---
 

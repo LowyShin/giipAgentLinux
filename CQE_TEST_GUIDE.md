@@ -2,7 +2,7 @@
 
 ## 개요
 - **테스트 일시**: 2025-01-04
-- **목적**: giipAgent.sh/giipAgent2.sh의 CQE 큐 가져오기 기능 검증
+- **목적**: giipAgent.sh/giipAgent3.sh의 CQE 큐 가져오기 기능 검증
 - **핵심 테이블**: `tMgmtQue` (관리 작업 큐)
 - **핵심 SP**: `pApiCQEQueueGetbySK`
 
@@ -56,7 +56,7 @@ https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=xxx&lssn=71240&hn
 - **응답**: Plain text (스크립트 본문)
 - **상태**: ✅ 정상 작동 중
 
-### 신 버전 (giipAgent2.sh)
+### 신 버전 (giipAgent3.sh)
 ```bash
 # POST 방식
 wget -O "$output_file" \
@@ -82,9 +82,9 @@ POST: text=CQEQueueGet 71240 testserver Ubuntu op&token=xxx
     }]
   }
   ```
-- **상태**: ⚠️ 수정 필요 (JSON 파싱 로직 추가됨)
+- **상태**: ✅ JSON 파싱 로직 구현 완료
 
-## 변경 사항 (giipAgent2.sh)
+## 변경 사항 (giipAgent3.sh)
 
 ### 1. get_remote_queue() 함수
 **변경 전** (URL 파라미터 방식):
@@ -119,7 +119,7 @@ fi
 
 ### 3. 로그 파일명
 - **구버전**: `giipAgent_$Today.log`
-- **신버전**: `giipAgent2_$Today.log`
+- **신버전**: `giipAgent3_$Today.log`
 
 ## 테스트 방법
 
@@ -163,15 +163,15 @@ ORDER BY msl.lastdate DESC
 
 ### 방법 3: 실제 Agent 실행 테스트
 ```bash
-# giipAgent2.sh 실행 (테스트 모드)
+# giipAgent3.sh 실행 (테스트 모드)
 cd giipAgentLinux
-chmod +x giipAgent2.sh
+chmod +x giipAgent3.sh
 
 # 한 번만 실행하고 종료
-./giipAgent2.sh
+./giipAgent3.sh
 
 # 로그 확인
-tail -f log/giipAgent2_$(date +%Y%m%d).log
+tail -f log/giipAgent3_$(date +%Y%m%d).log
 ```
 
 ## 문제 해결
@@ -273,7 +273,7 @@ Response received (New API)
 - [ ] test-cqe-queue.sh 실행 → Old API 정상
 - [ ] test-cqe-queue.sh 실행 → New API 정상
 - [ ] Web UI에서 테스트 스크립트 생성
-- [ ] giipAgent2.sh 실행 → 큐 가져오기 성공
+- [ ] giipAgent3.sh 실행 → 큐 가져오기 성공
 - [ ] 스크립트 실행 확인 (로그)
 - [ ] send_flag = 1 업데이트 확인 (DB)
 
@@ -303,31 +303,31 @@ WHERE send_flag = 1
 ### 로그 모니터링
 ```bash
 # 실시간 로그 확인
-tail -f giipAgentLinux/log/giipAgent2_$(date +%Y%m%d).log
+tail -f giipAgentLinux/log/giipAgent3_$(date +%Y%m%d).log
 
 # 오늘 실행된 큐 개수
-grep "Downloaded queue" giipAgentLinux/log/giipAgent2_$(date +%Y%m%d).log | wc -l
+grep "Downloaded queue" giipAgentLinux/log/giipAgent3_$(date +%Y%m%d).log | wc -l
 
 # 오류 확인
-grep -i "error\|fail\|❌" giipAgentLinux/log/giipAgent2_$(date +%Y%m%d).log
+grep -i "error\|fail\|❌" giipAgentLinux/log/giipAgent3_$(date +%Y%m%d).log
 ```
 
 ## 결론
 
 ### 현재 상태
 - ✅ **giipAgent.sh** (구버전): ASP Classic API 사용, 정상 작동
-- ⚠️ **giipAgent2.sh** (신버전): PowerShell API로 전환, JSON 파싱 로직 추가됨
+- ✅ **giipAgent3.sh** (신버전): PowerShell API로 전환, JSON 파싱 로직 추가됨
 - ✅ **DB 구조**: tMgmtQue, pApiCQEQueueGetbySK 준비 완료
 
 ### 다음 단계
 1. `test-cqe-queue.sh` 실행하여 양쪽 API 테스트
 2. 테스트 스크립트를 Web UI에서 생성
-3. giipAgent2.sh로 실제 실행 테스트
+3. giipAgent3.sh로 실제 실행 테스트
 4. 문제 발생 시 위 "문제 해결" 섹션 참고
 
 ### 참고 파일
-- **Agent 스크립트**: `giipAgentLinux/giipAgent2.sh`
+- **Agent 스크립트**: `giipAgentLinux/giipAgent3.sh`
 - **테스트 스크립트**: `giipAgentLinux/test-cqe-queue.sh`
 - **SP 파일**: `giipdb/SP/pApiCQEQueueGetbySK.sql`
 - **테이블 정의**: `giipdb/Tables/tMgmtQue.sql`
-- **로그 위치**: `giipAgentLinux/log/giipAgent2_YYYYMMDD.log`
+- **로그 위치**: `giipAgentLinux/log/giipAgent3_YYYYMMDD.log`

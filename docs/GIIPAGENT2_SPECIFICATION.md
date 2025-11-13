@@ -1,5 +1,7 @@
 # giipAgent2.sh 사양서
 
+> ⚠️ **Legacy Documentation (v2.0)** - 이 문서는 giipAgent2.sh 사양입니다. 현재는 **giipAgent3.sh**를 사용합니다. 최신 문서는 [GIIPAGENT3_SPECIFICATION.md](GIIPAGENT3_SPECIFICATION.md)를 참고하세요.
+
 **Last Updated**: 2025-11-08  
 **Version**: 2.00  
 **Author**: GIIP Development Team

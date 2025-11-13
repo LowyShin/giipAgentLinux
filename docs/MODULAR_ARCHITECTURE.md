@@ -309,18 +309,12 @@ bash giipAgent3.sh
 
 ### For Existing Installations
 
-**Option 1: Keep Using giipAgent2.sh (Recommended for stability)**
+> ⚠️ **Note**: giipAgent2.sh has been deprecated and removed. All installations must use giipAgent3.sh.
 
-```bash
-# No changes needed
-# giipAgent2.sh continues to work
-```
-
-**Option 2: Migrate to giipAgent3.sh (For new features)**
+**Migration to giipAgent3.sh**
 
 ```bash
 # Backup current setup
-cp giipAgent2.sh giipAgent2.sh.backup
 cp giipAgent.cnf giipAgent.cnf.backup
 
 # Pull latest changes
@@ -337,14 +331,13 @@ crontab -e
 
 ### Rollback Plan
 
-```bash
-# If issues occur, rollback to v2.0
-crontab -e
-# Change back to: */5 * * * * /opt/giipAgentLinux/giipAgent2.sh
+> ⚠️ **Note**: v2.0 (giipAgent2.sh) is no longer available. Contact the development team if you encounter critical issues.
 
-# Or restore backup
-cp giipAgent2.sh.backup giipAgent2.sh
+```bash
+# Restore configuration backup
 cp giipAgent.cnf.backup giipAgent.cnf
+
+# Report issues to the development team
 ```
 
 ---
@@ -533,10 +526,10 @@ bash -x giipAgent3.sh 2>&1 | tee debug.log
 
 ## 🎯 Best Practices
 
-### 1. Use Appropriate Version
+### 1. Use giipAgent3.sh
 
-- **Production servers (stable)**: Use `giipAgent2.sh`
-- **New deployments (modern)**: Use `giipAgent3.sh`
+- **All deployments**: Use `giipAgent3.sh` (v2.0 is deprecated)
+- **Production servers**: Migrated to `giipAgent3.sh`
 - **Testing/Development**: Use `giipAgent3.sh`
 
 ### 2. Always Test Before Deploy
@@ -700,20 +693,21 @@ echo "   API: $apiaddrv2"
 - ✅ **Readable** - Clear separation of concerns
 - ✅ **Extensible** - Easy to add new features
 
-**Migration Path**:
-- **Low Risk**: Keep using giipAgent2.sh
-- **Medium Risk**: Test giipAgent3.sh on non-critical servers
-- **Production Ready**: After successful testing period
+**Migration Status**:
+- ✅ **v2.0 (giipAgent2.sh)**: Deprecated and removed
+- ✅ **v3.0 (giipAgent3.sh)**: Current stable version
+- ✅ **All servers**: Migrated to giipAgent3.sh
 
-**Next Steps**:
+**Deployment Checklist**:
 1. Run test suite: `bash test-agent-refactored.sh`
 2. Test on dev server: `bash giipAgent3.sh`
 3. Monitor logs for 1 day
-4. Deploy to production
+4. Update cron job to giipAgent3.sh
 
 ---
 
 **Questions or Issues?**
 - GitHub: https://github.com/LowyShin/giipAgentLinux/issues
 - Documentation: [README.md](../README.md)
-- Specification: [GIIPAGENT2_SPECIFICATION.md](GIIPAGENT2_SPECIFICATION.md)
+- Specification: [GIIPAGENT3_SPECIFICATION.md](GIIPAGENT3_SPECIFICATION.md)
+- Legacy: [GIIPAGENT2_SPECIFICATION.md](GIIPAGENT2_SPECIFICATION.md) (v2.0)

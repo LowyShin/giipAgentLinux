@@ -160,7 +160,7 @@ ALTER PROCEDURE pApiLSvrGetConfigbySK ...
 -- giipv3/src/app/[locale]/lsvrdetail/page.tsx
 
 -- 4. Agent 코드 수정 (API 값 사용)
--- giipAgentLinux/giipAgent2.sh
+-- giipAgentLinux/giipAgent3.sh
 ```
 
 ---
@@ -270,7 +270,7 @@ alert_threshold int                 -- ✅ 알림 임계값
 - **설정 철학**: `docs/GATEWAY_CONFIG_PHILOSOPHY.md`
 - **DB 스키마**: `giipdb/Tables/tLSvr.sql`
 - **API 문서**: `giipdb/SP/pApiLSvrGetConfigbySK.sql`
-- **Agent 코드**: `giipAgentLinux/giipAgent2.sh`
+- **Agent 코드**: `giipAgentLinux/giipAgent3.sh`
 
 ---
 

@@ -67,7 +67,7 @@ gateway_ssh_password varbinary    -- SSH 비밀번호 (암호화)
              │ API 조회
              ▼
 ┌─────────────────────────────────────────────────────┐
-│ 3. Agent 시작 (giipAgent2.sh)                       │
+│ 3. Agent 시작 (giipAgent3.sh)                       │
 │    - pApiLSvrGetConfigbySK 호출                     │
 │    - is_gateway 값으로 모드 자동 결정               │
 └────────────┬────────────────────────────────────────┘
@@ -226,7 +226,7 @@ WHERE gateway_lssn = 71240;
 
 - **API 문서**: `giipdb/SP/pApiLSvrGetConfigbySK.sql`
 - **서버 목록 API**: `giipdb/SP/pApiGatewayRemoteServerListForAgentbySK.sql`
-- **Agent 구현**: `giipAgentLinux/giipAgent2.sh` (Line 1240-1300)
+- **Agent 구현**: `giipAgentLinux/giipAgent3.sh` (Gateway 모드 통합)
 - **테이블 스키마**: `giipdb/Tables/tLSvr.sql`
 
 ---

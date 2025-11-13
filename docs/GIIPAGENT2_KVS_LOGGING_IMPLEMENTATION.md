@@ -1,5 +1,7 @@
 # giipAgent2.sh 실행 내역 KVS 저장 기능 구현
 
+> ⚠️ **Legacy Documentation (v2.0)** - 이 문서는 giipAgent2.sh 구현 기록입니다. 현재는 **giipAgent3.sh**를 사용합니다.
+
 **날짜**: 2025-11-08  
 **작업자**: AI Assistant  
 **목적**: giipAgent2.sh 실행 시 모든 활동을 KVS의 "giipagent" factor에 저장하여 실행 내역 추적 및 디버깅 지원
