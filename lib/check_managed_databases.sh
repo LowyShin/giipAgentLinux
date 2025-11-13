@@ -49,6 +49,60 @@ except Exception as e:
 	local db_count=$(echo "$db_list" | grep -c '"mdb_id"')
 	echo "[Gateway] 📊 Found $db_count managed database(s)" >&2
 	
+	# 1. 먼저 필요한 DB 타입들을 수집
+	local db_types=$(echo "$db_list" | python3 -c "
+import json, sys
+db_types = set()
+for line in sys.stdin:
+    if line.strip():
+        try:
+            data = json.loads(line)
+            db_type = data.get('db_type', '')
+            if db_type:
+                db_types.add(db_type)
+        except:
+            pass
+print(' '.join(sorted(db_types)))
+")
+	
+	echo "[Gateway] 📋 Required DB types: $db_types" >&2
+	
+	# 2. 필요한 DB 클라이언트만 체크 및 설치
+	for db_type in $db_types; do
+		case "$db_type" in
+			MySQL|MariaDB)
+				if ! command -v mysql >/dev/null 2>&1; then
+					echo "[Gateway] Installing MySQL client..." >&2
+					check_mysql_client
+				fi
+				;;
+			PostgreSQL)
+				if ! command -v psql >/dev/null 2>&1; then
+					echo "[Gateway] Installing PostgreSQL client..." >&2
+					check_psql_client
+				fi
+				;;
+			MSSQL)
+				if ! command -v sqlcmd >/dev/null 2>&1; then
+					echo "[Gateway] Installing MSSQL client..." >&2
+					check_mssql_client
+				fi
+				;;
+			Redis)
+				if ! command -v redis-cli >/dev/null 2>&1; then
+					echo "[Gateway] Installing Redis client..." >&2
+					check_redis_client
+				fi
+				;;
+			MongoDB)
+				if ! command -v mongosh >/dev/null 2>&1 && ! command -v mongo >/dev/null 2>&1; then
+					echo "[Gateway] Installing MongoDB client..." >&2
+					check_mongo_client
+				fi
+				;;
+		esac
+	done
+	
 	# Build health_results
 	local health_results_file=$(mktemp)
 	

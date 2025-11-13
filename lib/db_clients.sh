@@ -293,6 +293,103 @@ check_mssql_client() {
 }
 
 # ============================================================================
+# Redis Functions
+# ============================================================================
+
+# Function: Check and install Redis client
+check_redis_client() {
+	if command -v redis-cli &> /dev/null; then
+		echo "[Gateway-Redis] redis-cli is already installed"
+		return 0
+	fi
+	
+	if ! has_sudo; then
+		echo "[Gateway-Redis] ⚠️  redis-cli not found and no sudo access"
+		echo "[Gateway-Redis] Please install manually: apt-get install redis-tools (Debian/Ubuntu) or yum install redis (RHEL/CentOS)"
+		return 1
+	fi
+	
+	echo "[Gateway-Redis] redis-cli not found, installing automatically..."
+	
+	if [ -f /etc/debian_version ]; then
+		# Debian/Ubuntu
+		echo "[Gateway-Redis] Detected Debian/Ubuntu"
+		run_with_sudo apt-get update -qq
+		run_with_sudo apt-get install -y redis-tools
+	elif [ -f /etc/redhat-release ]; then
+		# CentOS/RHEL
+		echo "[Gateway-Redis] Detected CentOS/RHEL"
+		run_with_sudo yum install -y redis
+	else
+		echo "[Gateway-Redis] Error: Unsupported OS for auto-install"
+		echo "[Gateway-Redis] Please install redis-cli manually"
+		return 1
+	fi
+	
+	if command -v redis-cli &> /dev/null; then
+		echo "[Gateway-Redis] ✅ redis-cli installed successfully"
+		return 0
+	else
+		echo "[Gateway-Redis] ❌ Failed to install redis-cli"
+		return 1
+	fi
+}
+
+# ============================================================================
+# MongoDB Functions
+# ============================================================================
+
+# Function: Check and install MongoDB client
+check_mongo_client() {
+	if command -v mongosh &> /dev/null || command -v mongo &> /dev/null; then
+		echo "[Gateway-MongoDB] MongoDB client is already installed"
+		return 0
+	fi
+	
+	if ! has_sudo; then
+		echo "[Gateway-MongoDB] ⚠️  MongoDB client not found and no sudo access"
+		echo "[Gateway-MongoDB] Please install manually: https://www.mongodb.com/try/download/shell"
+		return 1
+	fi
+	
+	echo "[Gateway-MongoDB] MongoDB client not found, installing mongosh..."
+	
+	if [ -f /etc/debian_version ]; then
+		# Debian/Ubuntu - Install mongosh from MongoDB repo
+		echo "[Gateway-MongoDB] Detected Debian/Ubuntu"
+		curl -fsSL https://www.mongodb.org/static/pgp/server-6.0.asc | run_with_sudo apt-key add - 2>/dev/null
+		echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/6.0 multiverse" | \
+			run_with_sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list > /dev/null
+		run_with_sudo apt-get update -qq
+		run_with_sudo apt-get install -y mongodb-mongosh 2>/dev/null
+		
+	elif [ -f /etc/redhat-release ]; then
+		# CentOS/RHEL - Install mongosh
+		echo "[Gateway-MongoDB] Detected CentOS/RHEL"
+		cat <<EOF | run_with_sudo tee /etc/yum.repos.d/mongodb-org-6.0.repo > /dev/null
+[mongodb-org-6.0]
+name=MongoDB Repository
+baseurl=https://repo.mongodb.org/yum/redhat/\$releasever/mongodb-org/6.0/x86_64/
+gpgcheck=1
+enabled=1
+gpgkey=https://www.mongodb.org/static/pgp/server-6.0.asc
+EOF
+		run_with_sudo yum install -y mongodb-mongosh 2>/dev/null
+	else
+		echo "[Gateway-MongoDB] Error: Unsupported OS for auto-install"
+		return 1
+	fi
+	
+	if command -v mongosh &> /dev/null || command -v mongo &> /dev/null; then
+		echo "[Gateway-MongoDB] ✅ MongoDB client installed successfully"
+		return 0
+	else
+		echo "[Gateway-MongoDB] ⚠️  MongoDB client installation may have failed"
+		return 1
+	fi
+}
+
+# ============================================================================
 # Oracle Functions
 # ============================================================================
 
@@ -372,10 +469,14 @@ check_db_clients() {
 # Export Functions
 # ============================================================================
 
+export -f has_sudo
+export -f run_with_sudo
 export -f check_sshpass
 export -f check_python_environment
 export -f check_mysql_client
 export -f check_psql_client
 export -f check_mssql_client
+export -f check_redis_client
+export -f check_mongo_client
 export -f check_oracle_client
 export -f check_db_clients
