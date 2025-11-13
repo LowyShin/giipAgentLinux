@@ -47,23 +47,22 @@ save_execution_log() {
 	local text="KVSPut kType kKey kFactor"
 	
 	# ✅ jsondata contains actual values
-	# Use Python to properly construct JSON (avoids quote escaping issues)
-	local jsondata=$(python3 -c "import json; print(json.dumps({
-		'kType': 'lssn',
-		'kKey': '${lssn}',
-		'kFactor': 'giipagent',
-		'kValue': json.loads('''${kvalue}''')
-	}))")
+	local jsondata="{\"kType\":\"lssn\",\"kKey\":\"${lssn}\",\"kFactor\":\"giipagent\",\"kValue\":${kvalue}}"
 	
 	echo "[KVS-Debug] jsondata='${jsondata}'" >&2
 	
+	# URL-encode jsondata to prevent & and other special characters from breaking POST data
+	local encoded_jsondata=$(python3 -c "import sys; from urllib.parse import quote; print(quote(sys.argv[1]))" "$jsondata")
+	
+	echo "[KVS-Debug] encoded_jsondata='${encoded_jsondata}'" >&2
+	
 	# Call API (using giipApiSk2 with token parameter)
-	# Note: wget --post-data automatically URL-encodes the data
+	# Note: jsondata is URL-encoded to prevent special characters from breaking POST data
 	# Save response to temp file for debugging
 	local response_file=$(mktemp)
 	local stderr_file=$(mktemp)
 	wget -O "$response_file" \
-		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
+		--post-data="text=${text}&token=${sk}&jsondata=${encoded_jsondata}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"${kvs_url}" \
 		--no-check-certificate \
