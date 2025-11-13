@@ -34,6 +34,11 @@ save_execution_log() {
 	# Build kValue JSON (details_json is already JSON, don't escape)
 	local kvalue="{\"event_type\":\"${event_type}\",\"timestamp\":\"${timestamp}\",\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"mode\":\"${mode}\",\"version\":\"${sv}\",\"details\":${details_json}}"
 	
+	# Debug: Print the JSON before sending
+	echo "[KVS-Debug] event_type='${event_type}'" >&2
+	echo "[KVS-Debug] details_json='${details_json}'" >&2
+	echo "[KVS-Debug] kvalue='${kvalue}'" >&2
+	
 	# Build API URL
 	local kvs_url="${apiaddrv2}"
 	[ -n "$apiaddrcode" ] && kvs_url="${kvs_url}?code=${apiaddrcode}"
