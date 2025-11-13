@@ -56,8 +56,17 @@ get_db_info_from_api() {
 import json, sys
 try:
     data = json.load(open('$temp_file'))
+    
+    # DEBUG: Print full response
+    print(f'[DEBUG] Full API response: {json.dumps(data, indent=2)}', file=sys.stderr)
+    
     if 'data' in data and isinstance(data['data'], list) and len(data['data']) > 0:
         db = data['data'][0]
+        
+        # DEBUG: Print first DB entry
+        print(f'[DEBUG] First DB entry keys: {list(db.keys())}', file=sys.stderr)
+        print(f'[DEBUG] First DB entry: {json.dumps(db, indent=2)}', file=sys.stderr)
+        
         # db_* 필드명 사용 (API 응답 그대로)
         print(f\"{db.get('db_host','')}|{db.get('db_port','')}|{db.get('db_user','')}|{db.get('db_password','')}|{db.get('db_database','')}|{db.get('db_name','')}|{db.get('db_type','')}\")
     else:
