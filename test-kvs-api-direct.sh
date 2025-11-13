@@ -24,13 +24,26 @@ encoded_text=$(printf '%s' "KVSPut kType kKey kFactor" | jq -sRr '@uri')
 encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri')
 encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
 
+# Build POST data
+post_data="text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}"
+
+echo "=== POST Data (URL-encoded) ===" 
+echo "$post_data" | tee /tmp/kvs_post_data_encoded.txt
+echo ""
+
+echo "=== POST Data (Decoded for verification) ===" 
+echo "text: KVSPut kType kKey kFactor"
+echo "token: $sk"
+echo "jsondata: $jsondata"
+echo ""
+
 # Build URL
 url="${apiaddrv2}?code=${apiaddrcode}"
 
 echo "=== Sending Request ===" 
 curl -v -X POST "$url" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
+  -d "$post_data" \
   2>&1 | tee /tmp/kvs_test_output.txt
 
 echo ""
