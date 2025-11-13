@@ -1,7 +1,13 @@
 #!/bin/bash
 # Check Managed Databases Module
-# Purpose: Query tManagedDatabase, perform health checks, update last_check_dt
+# Purpose: Query tManagedDatabase, perform health checks, collect DPA data, update last_check_dt
 # Called by: gateway.sh when is_gateway=1
+
+# Load DPA modules
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/dpa_mysql.sh"
+source "${SCRIPT_DIR}/dpa_mssql.sh"
+source "${SCRIPT_DIR}/dpa_postgresql.sh"
 
 # Function: Check managed databases and update health status
 # Requires: lssn, sk, apiaddrv2, apiaddrcode (from config)
@@ -142,6 +148,7 @@ for line in sys.stdin:
 		local check_status="unknown"
 		local check_message="Not tested"
 		local performance_json="{}"
+		local slow_queries_json="[]"
 		local start_time=$(date +%s%3N)  # milliseconds
 		
 		case "$db_type" in
@@ -182,6 +189,23 @@ for line in sys.stdin:
 						
 						if [ -n "$perf_data" ] && [[ "$perf_data" == "{"* ]]; then
 							performance_json="$perf_data"
+						fi
+						
+						# DPA 느린 쿼리 수집 (NEW)
+						logdt=$(date '+%Y%m%d%H%M%S')
+						echo "[${logdt}] [Gateway]   🔍 Collecting MySQL DPA data..." >> $LogFileName
+						slow_queries_json=$(collect_mysql_dpa "$db_host" "$db_port" "$db_user" "$db_password" "$db_database" 50)
+						local slow_count=$(echo "$slow_queries_json" | python3 -c "import json, sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
+						
+						# ALWAYS save DPA data to KVS (kFactor=sqlnetinv) - regardless of slow query count
+						save_dpa_data "$db_name" "$slow_queries_json"
+						
+						if [ "$slow_count" -gt 0 ]; then
+							logdt=$(date '+%Y%m%d%H%M%S')
+							echo "[${logdt}] [Gateway]   ⚠️  Found $slow_count slow queries (>50s)" >> $LogFileName
+						else
+							logdt=$(date '+%Y%m%d%H%M%S')
+							echo "[${logdt}] [Gateway]   ✓ No slow queries detected" >> $LogFileName
 						fi
 					elif [ $mysql_exit -eq 124 ]; then
 						check_status="error"
@@ -232,6 +256,23 @@ for line in sys.stdin:
 						if [ -n "$perf_data" ] && [[ "$perf_data" == "{"* ]]; then
 							performance_json="$perf_data"
 						fi
+						
+						# DPA 느린 쿼리 수집 (NEW)
+						logdt=$(date '+%Y%m%d%H%M%S')
+						echo "[${logdt}] [Gateway]   🔍 Collecting PostgreSQL DPA data..." >> $LogFileName
+						slow_queries_json=$(collect_postgresql_dpa "$db_host" "$db_port" "$db_user" "$db_password" "$db_database" 50)
+						local slow_count=$(echo "$slow_queries_json" | python3 -c "import json, sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
+						
+						# ALWAYS save DPA data to KVS (kFactor=sqlnetinv) - regardless of slow query count
+						save_dpa_data "$db_name" "$slow_queries_json"
+						
+						if [ "$slow_count" -gt 0 ]; then
+							logdt=$(date '+%Y%m%d%H%M%S')
+							echo "[${logdt}] [Gateway]   ⚠️  Found $slow_count slow queries (>50s)" >> $LogFileName
+						else
+							logdt=$(date '+%Y%m%d%H%M%S')
+							echo "[${logdt}] [Gateway]   ✓ No slow queries detected" >> $LogFileName
+						fi
 					elif [ $psql_exit -eq 124 ]; then
 						check_status="error"
 						check_message="Connection timeout (5s)"
@@ -277,6 +318,23 @@ for line in sys.stdin:
 						
 						if [ -n "$mssql_stats" ] && [[ "$mssql_stats" == "{"* ]]; then
 							performance_json="$mssql_stats"
+						fi
+						
+						# DPA 느린 쿼리 수집 (NEW)
+						logdt=$(date '+%Y%m%d%H%M%S')
+						echo "[${logdt}] [Gateway]   🔍 Collecting MSSQL DPA data..." >> $LogFileName
+						slow_queries_json=$(collect_mssql_dpa "$db_host" "$db_port" "$db_user" "$db_password" "$db_database" 50000)
+						local slow_count=$(echo "$slow_queries_json" | python3 -c "import json, sys; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
+						
+						# ALWAYS save DPA data to KVS (kFactor=sqlnetinv) - regardless of slow query count
+						save_dpa_data "$db_name" "$slow_queries_json"
+						
+						if [ "$slow_count" -gt 0 ]; then
+							logdt=$(date '+%Y%m%d%H%M%S')
+							echo "[${logdt}] [Gateway]   ⚠️  Found $slow_count slow queries (>50s)" >> $LogFileName
+						else
+							logdt=$(date '+%Y%m%d%H%M%S')
+							echo "[${logdt}] [Gateway]   ✓ No slow queries detected" >> $LogFileName
 						fi
 					elif [ $mssql_exit -eq 124 ]; then
 						check_status="error"
@@ -407,11 +465,8 @@ for line in sys.stdin:
 		# Calculate response time
 		local end_time=$(date +%s%3N)
 		local response_time=$((end_time - start_time))
-		# Calculate response time
-		local end_time=$(date +%s%3N)
-		local response_time=$((end_time - start_time))
 		
-		# Log result to KVS
+		# Log result to KVS (managed_db_check: health + performance only, NO slow_queries)
 		local kv_key="managed_db_check_${mdb_id}"
 		local kv_value="{\"mdb_id\":${mdb_id},\"db_name\":\"${db_name}\",\"db_type\":\"${db_type}\",\"check_status\":\"${check_status}\",\"check_message\":\"${check_message}\",\"check_time\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"response_time_ms\":${response_time},\"performance\":${performance_json}}"
 		

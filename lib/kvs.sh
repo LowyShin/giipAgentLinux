@@ -191,6 +191,52 @@ save_gateway_status() {
 	return $?
 }
 
+# Function: Save DPA (Database Performance Analysis) data to KVS
+# Usage: save_dpa_data "db_name" '{"slow_queries":[...]}'
+# kFactor: sqlnetinv (compatible with existing dpa-put-*.sh scripts)
+save_dpa_data() {
+	local db_name=$1
+	local dpa_json=$2
+	
+	# Validate required variables
+	if [ -z "$lssn" ] || [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
+		echo "[DPA] ⚠️  Missing required variables (lssn, sk, apiaddrv2)" >&2
+		return 1
+	fi
+	
+	if [ -z "$db_name" ] || [ -z "$dpa_json" ]; then
+		echo "[DPA] ⚠️  Missing db_name or dpa_json" >&2
+		return 1
+	fi
+	
+	# Build timestamp and hostname info
+	local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+	local hostname=$(hostname)
+	
+	# Build kValue JSON with DPA data
+	local kvalue="{\"collected_at\":\"${timestamp}\",\"collector_host\":\"${hostname}\",\"lssn\":${lssn},\"db_name\":\"${db_name}\",\"dpa_data\":${dpa_json}}"
+	
+	echo "[DPA] Saving DPA data for ${db_name} to KVS (kFactor=sqlnetinv)..." >&2
+	
+	# Use kvs_put function with sqlnetinv kFactor
+	kvs_put "lssn" "${lssn}" "sqlnetinv" "${kvalue}"
+	
+	local exit_code=$?
+	if [ $exit_code -eq 0 ]; then
+		echo "[DPA] ✅ Saved DPA data for ${db_name}" >&2
+		if [ -n "$LogFileName" ]; then
+			echo "[DPA] ✅ Saved DPA data for ${db_name}" >> "$LogFileName"
+		fi
+	else
+		echo "[DPA] ⚠️  Failed to save DPA data for ${db_name}" >&2
+		if [ -n "$LogFileName" ]; then
+			echo "[DPA] ⚠️  Failed to save DPA data for ${db_name}" >> "$LogFileName"
+		fi
+	fi
+	
+	return $exit_code
+}
+
 # ============================================================================
 # Export Functions
 # ============================================================================
@@ -198,6 +244,7 @@ save_gateway_status() {
 export -f save_execution_log
 export -f kvs_put
 export -f save_gateway_status
+export -f save_dpa_data
 
 # ============================================================================
 # Backward Compatibility Aliases
