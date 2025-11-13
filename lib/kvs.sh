@@ -44,15 +44,13 @@ save_execution_log() {
 	# ✅ jsondata contains actual values
 	local jsondata="{\"kType\":\"lssn\",\"kKey\":\"${lssn}\",\"kFactor\":\"giipagent\",\"kValue\":${kvalue}}"
 	
-	# URL encode jsondata for POST (only encode spaces)
-	local jsondata_encoded=$(echo "$jsondata" | sed 's/ /%20/g')
-	
 	# Call API (using giipApiSk2 with token parameter)
+	# Note: wget --post-data automatically URL-encodes the data
 	# Save response to temp file for debugging
 	local response_file=$(mktemp)
 	local stderr_file=$(mktemp)
 	wget -O "$response_file" \
-		--post-data="text=${text}&token=${sk}&jsondata=${jsondata_encoded}" \
+		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"${kvs_url}" \
 		--no-check-certificate \
@@ -74,11 +72,12 @@ save_execution_log() {
 		echo "[KVS-Log] ⚠️  HTTP Status: ${http_status}" >&2
 		echo "[KVS-Log] ⚠️  API Response: ${api_response}" >&2
 		echo "[KVS-Log] ⚠️  Request URL: ${kvs_url}" >&2
-		echo "[KVS-Log] ⚠️  Request data: text=${text}&token=***&jsondata=${jsondata_encoded:0:100}..." >&2
+		echo "[KVS-Log] ⚠️  Request jsondata: ${jsondata:0:150}..." >&2
 		if [ -n "$LogFileName" ]; then
 			echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >> "$LogFileName"
 			echo "[KVS-Log] ⚠️  HTTP Status: ${http_status}" >> "$LogFileName"
 			echo "[KVS-Log] ⚠️  API Response: ${api_response}" >> "$LogFileName"
+			echo "[KVS-Log] ⚠️  Request jsondata: ${jsondata:0:150}..." >> "$LogFileName"
 		fi
 		rm -f "$response_file" "$stderr_file"
 		
@@ -116,7 +115,7 @@ kvs_put() {
 	local response_file=$(mktemp)
 	local stderr_file=$(mktemp)
 	wget -O "$response_file" \
-		--post-data="text=${text}&token=${sk}&jsondata=$(echo ${jsondata} | sed 's/ /%20/g')" \
+		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"${kvs_url}" \
 		--no-check-certificate \
