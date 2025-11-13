@@ -172,10 +172,8 @@ PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL
 PERF_EXIT=$?
 unset MYSQL_PWD
 
-echo "[DEBUG] Query exit code: $PERF_EXIT"
-echo "[DEBUG] Raw output:"
-echo "$PERF_DATA"
-echo ""
+# MySQL 경고 메시지 제거 (JSON만 추출)
+PERF_DATA=$(echo "$PERF_DATA" | grep '^{')
 
 if [ $PERF_EXIT -eq 0 ]; then
     if [ -n "$PERF_DATA" ] && [[ "$PERF_DATA" == "{"* ]]; then
@@ -196,9 +194,8 @@ for key, value in data.items():
 "
         fi
     else
-        echo "⚠️  Query succeeded but output format unexpected"
-        echo "Expected: JSON starting with '{'"
-        echo "Got: $PERF_DATA"
+        echo "⚠️  Query succeeded but no valid JSON found"
+        echo "Error: $PERF_DATA"
     fi
 else
     echo "❌ Performance query failed (exit code: $PERF_EXIT)"

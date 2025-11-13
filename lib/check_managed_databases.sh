@@ -67,6 +67,19 @@ print(' '.join(sorted(db_types)))
 	
 	echo "[Gateway] 📋 Required DB types: $db_types" >&2
 	
+	# DEBUG: DB 타입별 상세 확인
+	echo "[Gateway] 🔍 DEBUG: Analyzing DB list..." >&2
+	echo "$db_list" | python3 -c "
+import json, sys
+for line in sys.stdin:
+    if line.strip():
+        try:
+            data = json.loads(line)
+            print(f\"  - {data.get('db_name', 'unknown')}: {data.get('db_type', 'unknown')}\", file=sys.stderr)
+        except:
+            pass
+"
+	
 	# 2. 필요한 DB 클라이언트만 체크 및 설치
 	for db_type in $db_types; do
 		case "$db_type" in
@@ -78,8 +91,8 @@ print(' '.join(sorted(db_types)))
 				;;
 			PostgreSQL)
 				if ! command -v psql >/dev/null 2>&1; then
-					echo "[Gateway] Installing PostgreSQL client..." >&2
-					check_psql_client
+					echo "[Gateway] PostgreSQL client not found, skipping installation (CentOS 7 EOL)" >&2
+					# check_psql_client  # Disabled: CentOS 7 mirrors unavailable
 				fi
 				;;
 			MSSQL)
@@ -165,7 +178,7 @@ print(' '.join(sorted(db_types)))
 								'}')
 							FROM performance_schema.global_status
 							WHERE VARIABLE_NAME='Threads_connected'
-						" 2>/dev/null)
+						" 2>&1 | grep '^{')
 						
 						if [ -n "$perf_data" ] && [[ "$perf_data" == "{"* ]]; then
 							performance_json="$perf_data"
