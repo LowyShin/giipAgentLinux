@@ -50,11 +50,14 @@ save_execution_log() {
 	# Call API (using giipApiSk2 with token parameter)
 	# Save response to temp file for debugging
 	local response_file=$(mktemp)
+	local stderr_file=$(mktemp)
 	wget -O "$response_file" \
 		--post-data="text=${text}&token=${sk}&jsondata=${jsondata_encoded}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"${kvs_url}" \
-		--no-check-certificate -q 2>&1
+		--no-check-certificate \
+		--server-response \
+		-v 2>"$stderr_file"
 	
 	local exit_code=$?
 	if [ $exit_code -eq 0 ]; then
@@ -62,20 +65,25 @@ save_execution_log() {
 		if [ -n "$LogFileName" ]; then
 			echo "[KVS-Log] ✅ Saved: ${event_type}" >> "$LogFileName"
 		fi
-		rm -f "$response_file"
+		rm -f "$response_file" "$stderr_file"
 	else
-		# Log error with API response
+		# Log error with API response and HTTP details
 		local api_response=$(cat "$response_file" 2>/dev/null | head -c 200)
+		local http_status=$(grep "HTTP/" "$stderr_file" 2>/dev/null | tail -1)
 		echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >&2
+		echo "[KVS-Log] ⚠️  HTTP Status: ${http_status}" >&2
 		echo "[KVS-Log] ⚠️  API Response: ${api_response}" >&2
+		echo "[KVS-Log] ⚠️  Request URL: ${kvs_url}" >&2
+		echo "[KVS-Log] ⚠️  Request data: text=${text}&token=***&jsondata=${jsondata_encoded:0:100}..." >&2
 		if [ -n "$LogFileName" ]; then
 			echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >> "$LogFileName"
+			echo "[KVS-Log] ⚠️  HTTP Status: ${http_status}" >> "$LogFileName"
 			echo "[KVS-Log] ⚠️  API Response: ${api_response}" >> "$LogFileName"
 		fi
-		rm -f "$response_file"
+		rm -f "$response_file" "$stderr_file"
 		
 		# Log error to database
-		log_error "KVS logging failed: ${event_type}" "KVSError" "save_execution_log at lib/kvs.sh, exit_code=${exit_code}, response=${api_response}"
+		log_error "KVS logging failed: ${event_type}" "KVSError" "save_execution_log at lib/kvs.sh, exit_code=${exit_code}, http_status=${http_status}, response=${api_response}"
 	fi
 	
 	return $exit_code
@@ -106,18 +114,23 @@ kvs_put() {
 	
 	# Call API with response capture for debugging
 	local response_file=$(mktemp)
+	local stderr_file=$(mktemp)
 	wget -O "$response_file" \
 		--post-data="text=${text}&token=${sk}&jsondata=$(echo ${jsondata} | sed 's/ /%20/g')" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"${kvs_url}" \
-		--no-check-certificate -q 2>&1
+		--no-check-certificate \
+		--server-response \
+		-v 2>"$stderr_file"
 	
 	local exit_code=$?
 	if [ $exit_code -ne 0 ]; then
 		local api_response=$(cat "$response_file" 2>/dev/null | head -c 200)
+		local http_status=$(grep "HTTP/" "$stderr_file" 2>/dev/null | tail -1)
 		echo "[KVS-Put] ⚠️  Failed (exit_code=${exit_code}): ${api_response}" >&2
+		echo "[KVS-Put] ⚠️  HTTP Status: ${http_status}" >&2
 	fi
-	rm -f "$response_file"
+	rm -f "$response_file" "$stderr_file"
 	
 	return $exit_code
 }
