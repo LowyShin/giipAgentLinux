@@ -125,16 +125,20 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 START_TIME=$(date +%s%3N)
 
+# Set MYSQL_PWD environment variable
+export MYSQL_PWD="$DB_PASSWORD"
+
 # DB_DATABASE가 비어있으면 -D 옵션 제외
 if [ -n "$DB_DATABASE" ]; then
-    echo "[DEBUG] Running: mysql -h \"$DB_HOST\" -P \"$DB_PORT\" -u \"$DB_USER\" -p\"****\" -D \"$DB_DATABASE\" -e \"SELECT 1 AS test\""
-    CONN_TEST=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -D "$DB_DATABASE" -e "SELECT 1 AS test" 2>&1)
+    echo "[DEBUG] Running: mysql -h \"$DB_HOST\" -P \"$DB_PORT\" -u \"$DB_USER\" -p\${MYSQL_PWD} -D \"$DB_DATABASE\" -e \"SELECT 1 AS test\""
+    CONN_TEST=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p${MYSQL_PWD} -D "$DB_DATABASE" -e "SELECT 1 AS test" 2>&1)
 else
-    echo "[DEBUG] Running: mysql -h \"$DB_HOST\" -P \"$DB_PORT\" -u \"$DB_USER\" -p\"****\" -e \"SELECT 1 AS test\""
-    CONN_TEST=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1 AS test" 2>&1)
+    echo "[DEBUG] Running: mysql -h \"$DB_HOST\" -P \"$DB_PORT\" -u \"$DB_USER\" -p\${MYSQL_PWD} -e \"SELECT 1 AS test\""
+    CONN_TEST=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p${MYSQL_PWD} -e "SELECT 1 AS test" 2>&1)
 fi
 
 CONN_EXIT=$?
+unset MYSQL_PWD
 END_TIME=$(date +%s%3N)
 RESPONSE_TIME=$((END_TIME - START_TIME))
 
@@ -154,9 +158,11 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 echo "[DEBUG] Running performance query..."
 
+export MYSQL_PWD="$DB_PASSWORD"
+
 # DB_DATABASE가 비어있으면 -D 옵션 제외
 if [ -n "$DB_DATABASE" ]; then
-    PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -D "$DB_DATABASE" -N -e "
+    PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p${MYSQL_PWD} -D "$DB_DATABASE" -N -e "
 	SELECT 
 		CONCAT('{',
 			'\"threads_connected\":', VARIABLE_VALUE, ',',
@@ -169,7 +175,7 @@ if [ -n "$DB_DATABASE" ]; then
 	WHERE VARIABLE_NAME='Threads_connected'
 " 2>&1)
 else
-    PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -N -e "
+    PERF_DATA=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p${MYSQL_PWD} -N -e "
 	SELECT 
 		CONCAT('{',
 			'\"threads_connected\":', VARIABLE_VALUE, ',',
@@ -184,6 +190,7 @@ else
 fi
 
 PERF_EXIT=$?
+unset MYSQL_PWD
 
 echo "[DEBUG] Query exit code: $PERF_EXIT"
 echo "[DEBUG] Raw output:"
@@ -225,15 +232,17 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 METRICS=("Threads_connected" "Threads_running" "Questions" "Slow_queries" "Uptime")
 
+export MYSQL_PWD="$DB_PASSWORD"
+
 for metric in "${METRICS[@]}"; do
     if [ -n "$DB_DATABASE" ]; then
-        VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -D "$DB_DATABASE" -N -e "
+        VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p${MYSQL_PWD} -D "$DB_DATABASE" -N -e "
             SELECT VARIABLE_VALUE 
             FROM information_schema.GLOBAL_STATUS 
             WHERE VARIABLE_NAME='$metric'
         " 2>/dev/null)
     else
-        VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" -N -e "
+        VALUE=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p${MYSQL_PWD} -N -e "
             SELECT VARIABLE_VALUE 
             FROM information_schema.GLOBAL_STATUS 
             WHERE VARIABLE_NAME='$metric'
@@ -246,6 +255,8 @@ for metric in "${METRICS[@]}"; do
         echo "   ❌ $metric: Failed to retrieve"
     fi
 done
+
+unset MYSQL_PWD
 
 echo ""
 echo "======================================"
