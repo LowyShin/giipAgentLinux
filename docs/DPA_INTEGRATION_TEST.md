@@ -501,6 +501,161 @@ http://localhost:3000/en/sql3d?kType=database&kKey=5&kFactor=sqlnetinv
 
 ---
 
+## 전체 워크플로우 (End-to-End) - ✅ 구현 완료 (2025-11-13)
+
+### 1. Shell Script 실행 (Gateway 서버)
+
+```bash
+# infraops01 서버 접속
+ssh user@infraops01
+
+# DPA 스크립트 실행
+cd /opt/giipAgentLinux
+sudo bash giipscripts/dpa-managed-databases.sh
+
+# 로그 확인
+tail -f /var/log/giip/dpa_managed_$(date +%Y%m%d).log
+```
+
+**예상 로그 출력**:
+```
+[2025-11-13 20:30:00] ==========================================
+[2025-11-13 20:30:00] Managed Database Monitoring Started
+[2025-11-13 20:30:00] Hostname: infraops01.istyle.local
+[2025-11-13 20:30:00] ==========================================
+[2025-11-13 20:30:01] ✓ Fetched 3 database(s)
+[2025-11-13 20:30:02] Processing [1/3]: p-cnsldb01m (MySQL) @ p-cnsldb01m:3306
+[2025-11-13 20:30:02]   Health: success (95 ms) - Connected
+[2025-11-13 20:30:02]   Collecting DPA data...
+[2025-11-13 20:30:03]   📊 Saving DPA data for p-cnsldb01m (mdb_id: 4) to KVS...
+[2025-11-13 20:30:04]   ✅ DPA data saved to KVS (kType=database, kKey=4, kFactor=sqlnetinv)
+[2025-11-13 20:30:04]   ⚠️  Found 3 slow queries
+[2025-11-13 20:30:05] ✓ Health check results updated
+[2025-11-13 20:30:05] ==========================================
+[2025-11-13 20:30:05] Managed Database Monitoring Completed
+[2025-11-13 20:30:05]   - Health checks: Updated in tManagedDatabase
+[2025-11-13 20:30:05]   - DPA data: Saved per-database (kType=database, kFactor=sqlnetinv)
+[2025-11-13 20:30:05] ==========================================
+```
+
+### 2. KVS 데이터 확인 (Windows)
+
+```powershell
+cd c:\Users\lowys\Downloads\projects\giipprj\giipdb
+
+# 특정 DB의 최신 DPA 데이터 조회
+pwsh .\mgmt\query-kvs.ps1 -KType database -KKey 4 -KFactor sqlnetinv -Top 1
+```
+
+**예상 출력**:
+```json
+{
+  "collected_at": "2025-11-13T20:30:00",
+  "collector_host": "infraops01.istyle.local",
+  "mdb_id": 4,
+  "db_name": "p-cnsldb01m",
+  "db_type": "MySQL",
+  "db_host": "p-cnsldb01m:3306",
+  "dpa_data": [
+    {
+      "host_name": "app-server01:45678",
+      "login_name": "dbuser",
+      "status": "executing",
+      "cpu_time": 75,
+      "query_text": "SELECT * FROM large_table..."
+    }
+  ]
+}
+```
+
+### 3. SQL3D 페이지에서 조회 및 3D 표시
+
+#### 방법 A: Select Database 버튼 사용 (추천)
+
+1. **SQL3D 페이지 접근**:
+   ```
+   http://localhost:3000/en/sql3d
+   ```
+
+2. **"📊 Select Database" 버튼 클릭**
+
+3. **Managed Database 목록에서 선택**:
+   - 리스트에서 원하는 DB 클릭
+   - 자동으로 kType=database, kKey=mdb_id, kFactor=sqlnetinv 설정됨
+
+4. **자동으로 3D 그래프 표시**
+
+#### 방법 B: 수동 파라미터 입력
+
+1. **SQL3D 페이지 접근**
+
+2. **파라미터 입력**:
+   - kType: `database`
+   - kKey: `4` (database-management 페이지의 #4)
+   - kFactor: `sqlnetinv`
+
+3. **Draw 버튼 클릭**
+
+4. **3D 그래프 확인**:
+   - 중앙: Database 노드 (db_name)
+   - 주변: 각 host_name 노드들
+   - 크기: 느린 쿼리 수 (sessions)
+   - 색상: CPU 시간 (cpu_time)
+
+5. **호스트 노드 클릭**:
+   - 우측 패널에 해당 호스트의 느린 쿼리 목록 표시
+   - 쿼리 상세 정보 확인
+
+### 4. database-management 페이지에서 mdb_id 확인
+
+```
+http://localhost:3000/en/database-management
+```
+
+- 각 DB 카드 제목 옆에 `#4`, `#5`, `#6` 등 고유 번호 표시
+- 이 번호가 SQL3D의 kKey 값
+
+---
+
+## 구현 완료 체크리스트
+
+### ✅ Shell Script (dpa-managed-databases.sh)
+- [x] kType='database', kKey=mdb_id 사용
+- [x] 각 DB별 개별 KVSPut 호출
+- [x] mdb_id, db_name, db_type, db_host 필드 포함
+- [x] dpa_data 배열 (빈 배열 포함) 항상 저장
+- [x] Health Check 업데이트 유지
+- [x] 로그 메시지 명확화
+
+### ✅ SQL3D 페이지 (page.tsx)
+- [x] parseResponse 함수에 kType='database' 처리 추가
+- [x] dpa_data 배열을 host_name별로 그룹화
+- [x] sessions, cpu_time 집계
+- [x] 기존 kType='lssn' 방식과 병행 지원
+- [x] "Select Database" 버튼 추가
+- [x] Database 선택 모달 구현
+- [x] ManagedDatabaseList API 호출
+- [x] 선택 시 자동 kType, kKey, kFactor 설정
+
+### ✅ database-management 페이지
+- [x] mdb_id 표시 (#4, #5 등)
+- [x] DatabaseCard 컴포넌트에 ID 배지 추가
+
+### ✅ 문서화 (DPA_INTEGRATION_TEST.md)
+- [x] kType='database' 저장 구조 문서화
+- [x] Shell script 구현 방법
+- [x] KVS 조회 방법
+- [x] SQL3D 사용 방법
+- [x] 전체 워크플로우
+- [x] 테스트 시나리오
+
+### ✅ 표준 프롬프트 통합
+- [x] STANDARD_WORK_PROMPT.md에 DPA 문서 링크
+- [x] giipAgentLinux/README.md에 DPA 섹션 추가
+- [x] DEVELOPMENT_RULES_INDEX.md에 DPA 참조 추가
+
+---
+
 ## 향후 개선 사항
 
 1. **임계값 설정 가능화**
@@ -515,9 +670,13 @@ http://localhost:3000/en/sql3d?kType=database&kKey=5&kFactor=sqlnetinv
 4. **Redis/MongoDB DPA**
    - 현재는 health check만, 향후 slow operation 수집
 
-5. **database-management 페이지에서 SQL3D 연동**
-   - 각 DB 카드에 "View DPA" 버튼 추가
-   - 클릭 시 해당 mdb_id로 SQL3D 페이지 열기
+5. **database-management 페이지에서 SQL3D 직접 연동**
+   - 각 DB 카드에 "View DPA in 3D" 버튼 추가
+   - 클릭 시 해당 mdb_id로 SQL3D 페이지 자동 열기
+
+6. **MySQL/PostgreSQL DPA 수집 추가**
+   - 현재는 MSSQL만 지원
+   - MySQL, PostgreSQL collect 함수 활성화 필요
 
 ---
 
