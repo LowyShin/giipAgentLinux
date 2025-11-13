@@ -195,7 +195,7 @@ if [ "${gateway_mode}" = "1" ]; then
 	
 	# Check and install dependencies
 	check_sshpass || error_handler "Failed to setup sshpass" 1
-	check_db_clients
+	# Note: DB clients are checked/installed only when needed in check_managed_databases()
 	
 	# Verify DB connectivity (first time)
 	log_message "INFO" "Verifying DB connectivity..."
