@@ -101,7 +101,11 @@ echo ""
 echo "📋 Connection Info:"
 echo "   Host: $DB_HOST:$DB_PORT"
 echo "   User: $DB_USER"
-echo "   Database: $DB_DATABASE"
+if [ -n "$DB_DATABASE" ]; then
+    echo "   Database: $DB_DATABASE"
+else
+    echo "   Database: (none - will connect without -D option)"
+fi
 echo "   Password: ****** (hidden)"
 echo ""
 
@@ -120,7 +124,14 @@ echo "Step 1: Basic Connection Test"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 START_TIME=$(date +%s%3N)
-CONN_TEST=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -D"$DB_DATABASE" -e "SELECT 1 AS test" 2>&1)
+
+# DB_DATABASE가 비어있으면 -D 옵션 제외
+if [ -n "$DB_DATABASE" ]; then
+    CONN_TEST=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -D"$DB_DATABASE" -e "SELECT 1 AS test" 2>&1)
+else
+    CONN_TEST=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1 AS test" 2>&1)
+fi
+
 CONN_EXIT=$?
 END_TIME=$(date +%s%3N)
 RESPONSE_TIME=$((END_TIME - START_TIME))
@@ -141,7 +152,9 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 echo "[DEBUG] Running performance query..."
 
-PERF_DATA=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -D"$DB_DATABASE" -N -e "
+# DB_DATABASE가 비어있으면 -D 옵션 제외
+if [ -n "$DB_DATABASE" ]; then
+    PERF_DATA=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -D"$DB_DATABASE" -N -e "
 	SELECT 
 		CONCAT('{',
 			'\"threads_connected\":', VARIABLE_VALUE, ',',
@@ -153,6 +166,20 @@ PERF_DATA=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWO
 	FROM information_schema.GLOBAL_STATUS 
 	WHERE VARIABLE_NAME='Threads_connected'
 " 2>&1)
+else
+    PERF_DATA=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -N -e "
+	SELECT 
+		CONCAT('{',
+			'\"threads_connected\":', VARIABLE_VALUE, ',',
+			'\"threads_running\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Threads_running'), ',',
+			'\"questions\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Questions'), ',',
+			'\"slow_queries\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Slow_queries'), ',',
+			'\"uptime\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Uptime'),
+		'}')
+	FROM information_schema.GLOBAL_STATUS 
+	WHERE VARIABLE_NAME='Threads_connected'
+" 2>&1)
+fi
 
 PERF_EXIT=$?
 
@@ -197,11 +224,19 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 METRICS=("Threads_connected" "Threads_running" "Questions" "Slow_queries" "Uptime")
 
 for metric in "${METRICS[@]}"; do
-    VALUE=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -D"$DB_DATABASE" -N -e "
-        SELECT VARIABLE_VALUE 
-        FROM information_schema.GLOBAL_STATUS 
-        WHERE VARIABLE_NAME='$metric'
-    " 2>/dev/null)
+    if [ -n "$DB_DATABASE" ]; then
+        VALUE=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -D"$DB_DATABASE" -N -e "
+            SELECT VARIABLE_VALUE 
+            FROM information_schema.GLOBAL_STATUS 
+            WHERE VARIABLE_NAME='$metric'
+        " 2>/dev/null)
+    else
+        VALUE=$(timeout 5 mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -N -e "
+            SELECT VARIABLE_VALUE 
+            FROM information_schema.GLOBAL_STATUS 
+            WHERE VARIABLE_NAME='$metric'
+        " 2>/dev/null)
+    fi
     
     if [ -n "$VALUE" ]; then
         echo "   ✅ $metric: $VALUE"
