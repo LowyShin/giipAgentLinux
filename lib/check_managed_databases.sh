@@ -55,7 +55,7 @@ except Exception as e:
 	local db_count=$(echo "$db_list" | grep -c '"mdb_id"')
 	echo "[Gateway] 📊 Found $db_count managed database(s)" >&2
 	
-	# 1. 먼저 필요한 DB 타입들을 수집
+	# Collect required DB types
 	local db_types=$(echo "$db_list" | python3 -c "
 import json, sys
 db_types = set()
@@ -71,22 +71,7 @@ for line in sys.stdin:
 print(' '.join(sorted(db_types)))
 ")
 	
-	echo "[Gateway] 📋 Required DB types: $db_types" >&2
-	
-	# DEBUG: DB 타입별 상세 확인
-	echo "[Gateway] 🔍 DEBUG: Analyzing DB list..." >&2
-	echo "$db_list" | python3 -c "
-import json, sys
-for line in sys.stdin:
-    if line.strip():
-        try:
-            data = json.loads(line)
-            print(f\"  - {data.get('db_name', 'unknown')}: {data.get('db_type', 'unknown')}\", file=sys.stderr)
-        except:
-            pass
-"
-	
-	# 2. 필요한 DB 클라이언트만 체크 및 설치
+	# Check and install required DB clients
 	for db_type in $db_types; do
 		case "$db_type" in
 			MySQL|MariaDB)

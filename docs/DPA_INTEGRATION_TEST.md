@@ -1,4 +1,16 @@
-# DPA (Database Performance Analysis) 통합 완료
+# DPA (Database Performance Analysis) 시스템 문서
+
+## 🚨 명명 규칙 (TABLE_COLUMN_NAMING_RULES.md 준수)
+
+**DPA 데이터 저장 시 필드명**:
+- `kType='database'`: Database 타입 DPA 데이터임을 명시
+- `kKey=mdb_id`: tManagedDatabase의 Primary Key (mdb_id) 사용
+  - ⚠️ 향후 `mdbSn`으로 변경 예정 (명명 규칙 준수)
+- `kFactor='sqlnetinv'`: SQL Network Inventory (DPA 데이터)
+
+**중요**: `kType='lssn'`이 아닌 `kType='database'`를 사용하여 데이터베이스별 DPA 관리
+
+---
 
 ## ⚠️ 중요 사양
 
@@ -6,14 +18,16 @@
 
 **필수 규칙**:
 1. **DPA 데이터는 항상 저장**: 느린 쿼리가 있든 없든 **매 실행마다** KVS에 저장
-2. **kFactor**: `sqlnetinv` (기존 독립 DPA 스크립트와 동일)
-3. **느린 쿼리가 없을 경우**: 빈 배열 `[]`을 저장
-4. **저장 시점**: DB 연결 성공 후 DPA 수집 직후
+2. **kType**: `database` (tManagedDatabase 기준)
+3. **kKey**: `mdb_id` (tManagedDatabase.mdb_id - 각 DB의 고유 번호)
+4. **kFactor**: `sqlnetinv` (기존 독립 DPA 스크립트와 동일)
+5. **느린 쿼리가 없을 경우**: 빈 배열 `[]`을 저장
+6. **저장 시점**: DB 연결 성공 후 DPA 수집 직후
 
 ### 데이터 분리
 
-- **kFactor="giipagent"**: Health Check + Performance 메트릭
-- **kFactor="sqlnetinv"**: DPA 느린 쿼리 데이터 (항상 저장)
+- **kFactor="giipagent"**: Health Check + Performance 메트릭 (kType=lssn 사용)
+- **kFactor="sqlnetinv"**: DPA 느린 쿼리 데이터 (kType=database 사용, 항상 저장)
 
 ---
 
@@ -92,23 +106,46 @@
 }
 ```
 
-### 2. DPA 느린 쿼리 데이터 (kFactor=sqlnetinv)
+### 2. DPA 느린 쿼리 데이터 (kFactor=sqlnetinv) - ✅ 수정 완료 (2025-11-13)
 
 **⚠️ 중요**: **항상 저장됨** (느린 쿼리 유무와 관계없이 매 실행마다)
 
 **저장 조건**: DB 연결 성공 시 (항상)
 
-**kType**: `lssn`
-**kKey**: `{lssn}`
-**kFactor**: `sqlnetinv`
+**🚨 KVS 저장 파라미터** (명명 규칙 준수):
+- **kType**: `database` (tManagedDatabase 기준) ✅
+- **kKey**: `mdb_id` 값 (예: `4`, `5`, `6` - tManagedDatabase.mdb_id) ✅
+- **kFactor**: `sqlnetinv` ✅
+
+**Shell Script 구현** (dpa-managed-databases.sh):
+```bash
+# 각 DB loop 내에서 즉시 KVSPut 호출
+kType='database'
+kKey=$mdb_id  # 예: 4, 5, 6
+kFactor='sqlnetinv'
+
+# API 호출
+text="KVSPut database $mdb_id sqlnetinv"
+jsondata='{
+  "collected_at": "2025-11-13T20:30:00",
+  "collector_host": "infraops01",
+  "mdb_id": 4,
+  "db_name": "p-cnsldb01m",
+  "db_type": "MySQL",
+  "db_host": "p-cnsldb01m:3306",
+  "dpa_data": [...]
+}'
+```
 
 **kValue** (느린 쿼리가 **있을 때**):
 ```json
 {
   "collected_at": "2025-11-13 20:30:00",
   "collector_host": "infraops01.istyle.local",
-  "lssn": 71240,
+  "mdb_id": 4,
   "db_name": "p-cnsldb01m",
+  "db_type": "MySQL",
+  "db_host": "p-cnsldb01m:3306",
   "dpa_data": [
     {
       "host_name": "app-server01:45678",
@@ -131,13 +168,18 @@
 {
   "collected_at": "2025-11-13 20:30:00",
   "collector_host": "infraops01.istyle.local",
-  "lssn": 71240,
+  "mdb_id": 4,
   "db_name": "p-cnsldb01m",
+  "db_type": "MySQL",
+  "db_host": "p-cnsldb01m:3306",
   "dpa_data": []
 }
 ```
 
-**⚠️ 핵심**: 빈 배열 `[]`이라도 **반드시 저장**되어야 함
+**⚠️ 핵심**: 
+1. 빈 배열 `[]`이라도 **반드시 저장**되어야 함
+2. `kType='database'`, `kKey=mdb_id` 사용으로 각 DB별 독립적 관리
+3. `lssn` 대신 `mdb_id`로 각 데이터베이스를 고유하게 식별
 ```
 
 ---
@@ -188,14 +230,26 @@ cd c:\Users\lowys\Downloads\projects\giipprj\giipdb
 pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey 71240 -KFactor giipagent -Top 1
 
 # 2. DPA 느린 쿼리 데이터 확인 (kFactor=sqlnetinv) ⭐ 중요
-pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey 71240 -KFactor sqlnetinv -Top 1
+# 🚨 주의: kType='database', kKey=mdb_id 사용
+pwsh .\mgmt\query-kvs.ps1 -KType database -KKey 4 -KFactor sqlnetinv -Top 1
+
+# 3. 특정 DB의 DPA 히스토리 조회 (최근 10개)
+pwsh .\mgmt\query-kvs.ps1 -KType database -KKey 4 -KFactor sqlnetinv -Top 10
+
+# 4. 모든 Managed Database의 최신 DPA 데이터 확인
+# database-management 페이지에서 mdb_id 확인 후 각각 조회
+pwsh .\mgmt\query-kvs.ps1 -KType database -KKey 5 -KFactor sqlnetinv -Top 1
+pwsh .\mgmt\query-kvs.ps1 -KType database -KKey 6 -KFactor sqlnetinv -Top 1
 ```
 
 **확인 항목**:
-1. ✅ `sqlnetinv` 데이터가 **매번 저장되는지 확인**
-2. ✅ 느린 쿼리가 없을 때 `dpa_data: []` (빈 배열) 확인
-3. ✅ 느린 쿼리가 있을 때 배열에 데이터 존재 확인
-4. ✅ `collected_at` 타임스탬프가 매 실행마다 갱신되는지 확인
+1. ✅ `kType='database'`, `kKey=mdb_id` (예: 4, 5, 6)로 저장되는지 확인
+2. ✅ `sqlnetinv` 데이터가 **매번 저장되는지 확인**
+3. ✅ 느린 쿼리가 없을 때 `dpa_data: []` (빈 배열) 확인
+4. ✅ 느린 쿼리가 있을 때 배열에 데이터 존재 확인
+5. ✅ `collected_at` 타임스탬프가 매 실행마다 갱신되는지 확인
+6. ✅ `mdb_id`, `db_name`, `db_type`, `db_host` 필드 존재 확인
+7. ✅ Shell script 로그에 `✅ DPA data saved to KVS (kType=database, kKey=N, kFactor=sqlnetinv)` 메시지 확인
 
 ---
 
@@ -290,6 +344,163 @@ LIMIT 100;
 
 ---
 
+## SQL3D 페이지에서 DPA 데이터 조회 - ✅ 구현 완료 (2025-11-13)
+
+### 페이지 접근
+
+```
+http://localhost:3000/en/sql3d
+```
+
+### 조회 파라미터 입력 (UI)
+
+1. **kType**: `database` 선택 (드롭다운)
+2. **kKey**: `4` 입력 (database-management 페이지의 `#4`, `#5` 등 mdb_id)
+3. **kFactor**: `sqlnetinv` 입력
+4. **PickDate**: 조회할 날짜/시간 선택 또는 입력
+   - 예: `2025-11-13 20:30:00`
+   - 최신 데이터: 빈 값 또는 현재 시간
+5. **Draw 버튼** 클릭
+
+### database-management 페이지에서 mdb_id 확인
+
+```
+http://localhost:3000/en/database-management
+```
+
+각 데이터베이스 카드 제목 옆에 `#4`, `#5`, `#6` 등 고유 번호가 표시됩니다.
+이 번호가 SQL3D에서 사용할 kKey 값입니다.
+
+### 데이터 구조 및 표시
+
+**KVS에서 반환되는 데이터 구조**:
+```json
+{
+  "collected_at": "2025-11-13T20:30:00",
+  "collector_host": "infraops01",
+  "mdb_id": 4,
+  "db_name": "p-cnsldb01m",
+  "db_type": "MySQL",
+  "db_host": "p-cnsldb01m:3306",
+  "dpa_data": [
+    {
+      "host_name": "app-server01:45678",
+      "login_name": "dbuser",
+      "status": "executing",
+      "cpu_time": 75,
+      "reads": 0,
+      "writes": 0,
+      "logical_reads": 0,
+      "start_time": "2025-11-13 20:28:45",
+      "command": "SELECT",
+      "query_text": "SELECT * FROM large_table WHERE..."
+    }
+  ]
+}
+```
+
+**parseResponse() 함수** (수정 완료):
+```typescript
+// giipv3/src/app/[locale]/sql3d/page.tsx
+const parseResponse = (txt: string) => {
+  const records: any[] = parseGiipApiResponse(txt || '') || [];
+  
+  // kType='database' 응답 처리
+  if (records.length > 0) {
+    const first = records[0];
+    
+    // dpa_data 배열이 있는 경우
+    if (first.dpa_data && Array.isArray(first.dpa_data)) {
+      const sqlServer = first.db_name || first.db_host || 'Database';
+      const hostGroups = {};
+      
+      // host_name별로 그룹화
+      first.dpa_data.forEach(query => {
+        const hostName = query.host_name || 'unknown';
+        if (!hostGroups[hostName]) {
+          hostGroups[hostName] = {
+            name: hostName,
+            sessions: 0,
+            cpu_time: 0
+          };
+        }
+        hostGroups[hostName].sessions += 1;
+        hostGroups[hostName].cpu_time += (query.cpu_time || 0);
+      });
+      
+      return {
+        sqlServer,
+        hosts: Object.values(hostGroups)
+      };
+    }
+  }
+  
+  // 기존 kType='lssn' 로직도 유지
+  // ...
+};
+```
+
+**3D 그래프 표시**:
+- **중앙 노드**: Database 이름 (db_name 또는 db_host)
+- **주변 노드**: 각 `host_name` (접속 클라이언트 호스트)
+- **연결선**: Database와 각 호스트 간 연결
+- **색상**: CPU 시간에 따른 부하 표시 (높을수록 빨강)
+- **크기**: 세션 수(느린 쿼리 수)에 따른 노드 크기
+
+**노드 클릭 시 상세 정보**:
+- 해당 호스트에서 실행 중인 느린 쿼리 목록
+- 각 쿼리의 정보:
+  - `login_name`: 접속 사용자
+  - `status`: 쿼리 상태 (executing, runnable 등)
+  - `cpu_time`: CPU 사용 시간 (초)
+  - `reads`, `writes`, `logical_reads`: I/O 통계
+  - `start_time`: 쿼리 시작 시각
+  - `command`: SQL 명령 타입 (SELECT, UPDATE 등)
+  - `query_text`: 실제 쿼리 텍스트 (최대 500자)
+
+### URL 파라미터로 직접 접근
+
+```
+# 최신 데이터 조회
+http://localhost:3000/en/sql3d?kType=database&kKey=4&kFactor=sqlnetinv
+
+# 특정 시점 데이터 조회
+http://localhost:3000/en/sql3d?kType=database&kKey=4&kFactor=sqlnetinv&pickDate=2025-11-13%2020:30:00
+
+# database-management에서 "View DPA" 버튼 클릭 시 (향후 구현)
+http://localhost:3000/en/sql3d?kType=database&kKey=5&kFactor=sqlnetinv
+```
+
+### 테스트 시나리오
+
+1. **Shell Script 실행** (infraops01 서버):
+   ```bash
+   cd /opt/giipAgentLinux
+   sudo bash giipscripts/dpa-managed-databases.sh
+   ```
+
+2. **KVS 저장 확인**:
+   ```powershell
+   pwsh .\mgmt\query-kvs.ps1 -KType database -KKey 4 -KFactor sqlnetinv -Top 1
+   ```
+
+3. **SQL3D 페이지 접근**:
+   - kType: `database`
+   - kKey: `4`
+   - kFactor: `sqlnetinv`
+   - Draw 클릭
+
+4. **3D 그래프 확인**:
+   - 중앙에 Database 노드
+   - 주변에 접속 호스트 노드들
+   - 연결선 및 색상 표시
+
+5. **호스트 노드 클릭**:
+   - 우측 패널에 느린 쿼리 목록 표시
+   - 쿼리 상세 정보 확인
+
+---
+
 ## 향후 개선 사항
 
 1. **임계값 설정 가능화**
@@ -303,6 +514,10 @@ LIMIT 100;
 
 4. **Redis/MongoDB DPA**
    - 현재는 health check만, 향후 slow operation 수집
+
+5. **database-management 페이지에서 SQL3D 연동**
+   - 각 DB 카드에 "View DPA" 버튼 추가
+   - 클릭 시 해당 mdb_id로 SQL3D 페이지 열기
 
 ---
 

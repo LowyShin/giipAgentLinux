@@ -365,7 +365,7 @@ main() {
     
     # Health Check 결과 배열
     local health_results="[]"
-    local dpa_data_all="{}"
+    # ✅ dpa_data_all 변수 제거됨 (개별 DB별 저장으로 변경)
     
     # 각 DB 처리
     local index=0
@@ -406,13 +406,64 @@ main() {
             local dpa_data
             dpa_data=$(collect_mssql_dpa "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
             
-            if [ "$dpa_data" != "[]" ] && [ -n "$dpa_data" ]; then
-                dpa_data_all=$(echo "$dpa_data_all" | jq --arg key "$db_name" --argjson data "$dpa_data" \
-                    '. + {($key): $data}')
-                log "  ✓ DPA data collected"
-            else
-                log "  No slow queries detected"
+            # ✅ 개별 DB별로 즉시 KVS 저장 (kType=database, kKey=mdb_id)
+            log "  📊 Saving DPA data for $db_name (mdb_id: $mdb_id) to KVS..."
+            
+            local collected_at=$(date -u '+%Y-%m-%dT%H:%M:%S')
+            local dpa_json=$(jq -n \
+                --arg collected_at "$collected_at" \
+                --arg collector_host "$HOSTNAME" \
+                --argjson mdb_id "$mdb_id" \
+                --arg db_name "$db_name" \
+                --arg db_type "$db_type" \
+                --arg db_host "$db_host:$db_port" \
+                --argjson dpa_data "$dpa_data" \
+                '{
+                    collected_at: $collected_at,
+                    collector_host: $collector_host,
+                    mdb_id: $mdb_id,
+                    db_name: $db_name,
+                    db_type: $db_type,
+                    db_host: $db_host,
+                    dpa_data: $dpa_data
+                }')
+            
+            # kType='database', kKey=mdb_id, kFactor='sqlnetinv'
+            local kvsp_text="KVSPut database $mdb_id sqlnetinv"
+            local kvsp_json=$(echo "$dpa_json" | jq -c '.')
+            
+            log_debug "  DPA JSON: ${kvsp_json:0:200}..."
+            
+            local endpoint_url="$KVS_ENDPOINT"
+            if [ -n "$FUNCTION_CODE" ]; then
+                endpoint_url="${endpoint_url}?code=${FUNCTION_CODE}"
             fi
+            
+            local post_data="text=$(printf '%s' "$kvsp_text" | jq -sRr @uri)"
+            post_data+="&token=$(printf '%s' "$USER_TOKEN" | jq -sRr @uri)"
+            post_data+="&jsondata=$(printf '%s' "$kvsp_json" | jq -sRr @uri)"
+            
+            local response
+            response=$(curl -s -w "\n%{http_code}" -X POST "$endpoint_url" \
+                -H "Content-Type: application/x-www-form-urlencoded" \
+                -d "$post_data")
+            
+            local http_code=$(echo "$response" | tail -n1)
+            
+            if [ "$http_code" = "200" ]; then
+                log "  ✅ DPA data saved to KVS (kType=database, kKey=$mdb_id, kFactor=sqlnetinv)"
+                if [ "$dpa_data" != "[]" ] && [ -n "$dpa_data" ]; then
+                    local query_count=$(echo "$dpa_data" | jq '. | length')
+                    log "  ⚠️  Found $query_count slow queries"
+                else
+                    log "  ✓ No slow queries detected (empty dpa_data saved)"
+                fi
+            else
+                log_error "  ❌ Failed to save DPA data to KVS (HTTP $http_code)"
+                log_error "  Response: $(echo "$response" | head -n-1)"
+            fi
+            
+            # 기존 코드 제거됨 (dpa_data_all 집계 불필요)
         fi
         
         index=$((index + 1))
@@ -444,46 +495,14 @@ main() {
         log_error "Failed to update health check results (HTTP $http_code)"
     fi
     
-    # DPA 데이터 KVS 업로드
-    if [ "$(echo "$dpa_data_all" | jq '. | length')" -gt 0 ]; then
-        log "Uploading DPA data to KVS..."
-        
-        local collected_at=$(date -u '+%Y-%m-%dT%H:%M:%S')
-        local summary_json=$(jq -n \
-            --arg collected_at "$collected_at" \
-            --arg collector_host "$HOSTNAME" \
-            --arg k_key "$K_KEY" \
-            --argjson dpa_data "$dpa_data_all" \
-            '{
-                collected_at: $collected_at,
-                collector_host: $collector_host,
-                k_key: $k_key,
-                databases: $dpa_data
-            }')
-        
-        local kvsp_text="KVSPut $K_TYPE $K_KEY $K_FACTOR"
-        local kvsp_json=$(echo "$summary_json" | jq -c '.')
-        
-        local post_data="text=$(printf '%s' "$kvsp_text" | jq -sRr @uri)"
-        post_data+="&token=$(printf '%s' "$USER_TOKEN" | jq -sRr @uri)"
-        post_data+="&jsondata=$(printf '%s' "$kvsp_json" | jq -sRr @uri)"
-        
-        local response
-        response=$(curl -s -w "\n%{http_code}" -X POST "$endpoint_url" \
-            -H "Content-Type: application/x-www-form-urlencoded" \
-            -d "$post_data")
-        
-        local http_code=$(echo "$response" | tail -n1)
-        
-        if [ "$http_code" = "200" ]; then
-            log "✓ DPA data uploaded to KVS"
-        else
-            log_error "Failed to upload DPA data (HTTP $http_code)"
-        fi
-    fi
+    # ✅ DPA 데이터는 이미 각 DB별로 개별 저장됨 (위의 loop에서)
+    # ❌ 기존의 통합 DPA 업로드 로직 제거됨
+    # 이유: kType='database', kKey=mdb_id로 각 DB별 독립 저장
     
     log "=========================================="
     log "Managed Database Monitoring Completed"
+    log "  - Health checks: Updated in tManagedDatabase"
+    log "  - DPA data: Saved per-database (kType=database, kFactor=sqlnetinv)"
     log "=========================================="
 }
 

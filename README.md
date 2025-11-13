@@ -29,6 +29,11 @@
 - [Auto-Discovery Architecture](docs/AUTO_DISCOVERY_ARCHITECTURE.md) - 파일 구조와 실행 흐름 상세 설명
 - [Service Package Filter](docs/SERVICE_PACKAGE_FILTER.md) - 소프트웨어 필터링 규칙
 - **[giipAgent3.sh Specification](docs/GIIPAGENT3_SPECIFICATION.md)** - giipAgent3.sh 실행 조건, 동작 흐름, KVS 저장 로직 완전 문서화 🆕
+- **[📊 DPA Integration](docs/DPA_INTEGRATION_TEST.md)** - 🚨 Database Performance Analysis 시스템 완전 가이드
+  - DPA 데이터 수집/저장 구조
+  - kType='database', kKey=mdb_id 명명 규칙
+  - Shell scripts: dpa-managed-databases.sh, dpa-put-mssql.sh, dpa-put-mysql.sh
+  - Frontend 연동: SQL3D 페이지에서 DPA 데이터 조회/표시 방법
 
 ### Gateway & Remote Control
 - **[⚠️ Gateway Configuration Philosophy](docs/GATEWAY_CONFIG_PHILOSOPHY.md)** - **필독! DB as Single Source of Truth** 🔥
