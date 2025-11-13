@@ -8,17 +8,80 @@ echo "MySQL Performance Metrics Test"
 echo "======================================"
 echo ""
 
-# 테스트용 DB 정보 (p-cnsldb01m)
-DB_HOST="10.254.250.94"
-DB_PORT="43306"
-DB_USER="giip"
-DB_PASSWORD="qwer1234"
-DB_DATABASE="cnsl"
+# API에서 Managed DB 정보 가져오기
+get_db_info_from_api() {
+    local config_file="${1:-../giipAgent.cnf}"
+    
+    if [ ! -f "$config_file" ]; then
+        echo "❌ Config file not found: $config_file"
+        return 1
+    fi
+    
+    # giipAgent.cnf에서 설정 읽기
+    source "$config_file"
+    
+    echo "🔍 Fetching managed database info from API..."
+    
+    # API 호출
+    local api_response=$(curl -s -X POST "$APIURI" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        --data-urlencode "text=pApiGatewayManagedDatabaseListForAgentbySK" \
+        --data-urlencode "token=$SK" \
+        --data-urlencode "jsondata={\"lssn\":$LSSN}")
+    
+    if [ -z "$api_response" ]; then
+        echo "❌ API response is empty"
+        return 1
+    fi
+    
+    # JSON 파싱하여 첫 번째 DB 정보 추출
+    echo "$api_response" | python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    if 'managed_databases' in data and len(data['managed_databases']) > 0:
+        db = data['managed_databases'][0]
+        print(f\"{db['db_host']}|{db['db_port']}|{db['db_user']}|{db['db_password']}|{db['db_database']}|{db['db_name']}|{db['db_type']}\")
+    else:
+        print('ERROR: No managed databases found')
+        sys.exit(1)
+except Exception as e:
+    print(f'ERROR: {e}')
+    sys.exit(1)
+"
+}
 
+# DB 정보 가져오기
+if [ -z "$DB_HOST" ]; then
+    echo "🌐 Fetching DB info from API (config: ${CONFIG_FILE:-../giipAgent.cnf})..."
+    DB_INFO=$(get_db_info_from_api "${CONFIG_FILE:-../giipAgent.cnf}")
+    
+    if [[ "$DB_INFO" == ERROR:* ]]; then
+        echo "❌ Failed to get DB info from API: $DB_INFO"
+        echo ""
+        echo "💡 You can also set DB credentials via environment variables:"
+        echo "   DB_HOST=... DB_PORT=... DB_USER=... DB_PASSWORD=... DB_DATABASE=... bash $0"
+        exit 1
+    fi
+    
+    # 파싱
+    IFS='|' read -r DB_HOST DB_PORT DB_USER DB_PASSWORD DB_DATABASE DB_NAME DB_TYPE <<< "$DB_INFO"
+    
+    echo "✅ Got DB info from API:"
+    echo "   Name: $DB_NAME"
+    echo "   Type: $DB_TYPE"
+else
+    echo "📝 Using environment variables for DB connection"
+    DB_NAME="${DB_NAME:-manual-test}"
+    DB_TYPE="${DB_TYPE:-MySQL}"
+fi
+
+echo ""
 echo "📋 Connection Info:"
 echo "   Host: $DB_HOST:$DB_PORT"
 echo "   User: $DB_USER"
 echo "   Database: $DB_DATABASE"
+echo "   Password: ****** (hidden)"
 echo ""
 
 # MySQL 클라이언트 확인
