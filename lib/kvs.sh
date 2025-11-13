@@ -78,13 +78,16 @@ save_execution_log() {
 		rm -f "$response_file" "$stderr_file"
 	else
 		# Log error with API response and HTTP details
-		local api_response=$(cat "$response_file" 2>/dev/null | head -c 200)
+		local api_response=$(cat "$response_file" 2>/dev/null)
 		local http_status=$(grep "HTTP/" "$stderr_file" 2>/dev/null | tail -1)
+		local full_stderr=$(cat "$stderr_file" 2>/dev/null)
 		echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >&2
 		echo "[KVS-Log] ⚠️  HTTP Status: ${http_status}" >&2
-		echo "[KVS-Log] ⚠️  API Response: ${api_response}" >&2
+		echo "[KVS-Log] ⚠️  API Response (full): ${api_response}" >&2
 		echo "[KVS-Log] ⚠️  Request URL: ${kvs_url}" >&2
-		echo "[KVS-Log] ⚠️  Request jsondata: ${jsondata:0:150}..." >&2
+		echo "[KVS-Log] ⚠️  Sent encoded_jsondata (first 200 chars): ${encoded_jsondata:0:200}..." >&2
+		echo "[KVS-Log] ⚠️  Full wget stderr output:" >&2
+		echo "${full_stderr}" >&2
 		if [ -n "$LogFileName" ]; then
 			echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >> "$LogFileName"
 			echo "[KVS-Log] ⚠️  HTTP Status: ${http_status}" >> "$LogFileName"
