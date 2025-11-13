@@ -57,15 +57,8 @@ import json, sys
 try:
     data = json.load(open('$temp_file'))
     
-    # DEBUG: Print full response
-    print(f'[DEBUG] Full API response: {json.dumps(data, indent=2)}', file=sys.stderr)
-    
     if 'data' in data and isinstance(data['data'], list) and len(data['data']) > 0:
         db = data['data'][0]
-        
-        # DEBUG: Print first DB entry
-        print(f'[DEBUG] First DB entry keys: {list(db.keys())}', file=sys.stderr)
-        print(f'[DEBUG] First DB entry: {json.dumps(db, indent=2)}', file=sys.stderr)
         
         # db_* 필드명 사용 (API 응답 그대로)
         print(f\"{db.get('db_host','')}|{db.get('db_port','')}|{db.get('db_user','')}|{db.get('db_password','')}|{db.get('db_database','')}|{db.get('db_name','')}|{db.get('db_type','')}\")
@@ -86,8 +79,6 @@ if [ -z "$DB_HOST" ]; then
     echo "🌐 Fetching DB info from API (config: ${CONFIG_FILE:-../giipAgent.cnf})..."
     DB_INFO=$(get_db_info_from_api "${CONFIG_FILE:-../giipAgent.cnf}")
     
-    echo "[DEBUG] Raw DB_INFO: '$DB_INFO'"
-    
     if [[ "$DB_INFO" == ERROR:* ]]; then
         echo "❌ Failed to get DB info from API: $DB_INFO"
         echo ""
@@ -98,16 +89,6 @@ if [ -z "$DB_HOST" ]; then
     
     # 파싱
     IFS='|' read -r DB_HOST DB_PORT DB_USER DB_PASSWORD DB_DATABASE DB_NAME DB_TYPE <<< "$DB_INFO"
-    
-    echo "[DEBUG] After parsing:"
-    echo "[DEBUG]   DB_HOST='$DB_HOST'"
-    echo "[DEBUG]   DB_PORT='$DB_PORT'"
-    echo "[DEBUG]   DB_USER='$DB_USER'"
-    echo "[DEBUG]   DB_PASSWORD='$DB_PASSWORD'"
-    echo "[DEBUG]   DB_DATABASE='$DB_DATABASE'"
-    echo "[DEBUG]   DB_NAME='$DB_NAME'"
-    echo "[DEBUG]   DB_TYPE='$DB_TYPE'"
-    echo ""
     
     echo "✅ Got DB info from API:"
     echo "   Name: $DB_NAME"
@@ -149,19 +130,7 @@ START_TIME=$(date +%s%3N)
 # Set MYSQL_PWD environment variable
 export MYSQL_PWD="$DB_PASSWORD"
 
-# DEBUG: Check if MYSQL_PWD is set correctly
-echo "[DEBUG] MYSQL_PWD length: ${#MYSQL_PWD}"
-echo "[DEBUG] MYSQL_PWD value: ${MYSQL_PWD}"
-echo "[DEBUG] DB_PASSWORD value: ${DB_PASSWORD}"
-
-# DB_DATABASE가 비어있으면 -D 옵션 제외
-if [ -n "$DB_DATABASE" ]; then
-    echo "[DEBUG] Running: mysql -h \"$DB_HOST\" -P \"$DB_PORT\" -u \"$DB_USER\" -p\"\${MYSQL_PWD}\" -D \"$DB_DATABASE\" -e \"SELECT 1 AS test\""
-    CONN_TEST=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -D "$DB_DATABASE" -e "SELECT 1 AS test" 2>&1)
-else
-    echo "[DEBUG] Running: mysql -h \"$DB_HOST\" -P \"$DB_PORT\" -u \"$DB_USER\" -p\"\${MYSQL_PWD}\" -e \"SELECT 1 AS test\""
-    CONN_TEST=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -e "SELECT 1 AS test" 2>&1)
-fi
+CONN_TEST=$(timeout 5 mysql -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"${MYSQL_PWD}" -e "SELECT 1 AS test" 2>&1)
 
 CONN_EXIT=$?
 unset MYSQL_PWD

@@ -153,17 +153,17 @@ print(' '.join(sorted(db_types)))
 						logdt=$(date '+%Y%m%d%H%M%S')
 						echo "[${logdt}] [Gateway]   ✅ MySQL connection OK" >> $LogFileName
 						
-						# 성능 메트릭 수집
-						local perf_data=$(timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -p"${MYSQL_PWD}" -D "$db_database" -N -e "
+						# 성능 메트릭 수집 (MySQL 8.0+ = performance_schema.global_status)
+						local perf_data=$(timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -p"${MYSQL_PWD}" -N -e "
 							SELECT 
 								CONCAT('{',
 									'\"threads_connected\":', VARIABLE_VALUE, ',',
-									'\"threads_running\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Threads_running'), ',',
-									'\"questions\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Questions'), ',',
-									'\"slow_queries\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Slow_queries'), ',',
-									'\"uptime\":', (SELECT VARIABLE_VALUE FROM information_schema.GLOBAL_STATUS WHERE VARIABLE_NAME='Uptime'),
+									'\"threads_running\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Threads_running'), ',',
+									'\"questions\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Questions'), ',',
+									'\"slow_queries\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Slow_queries'), ',',
+									'\"uptime\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Uptime'),
 								'}')
-							FROM information_schema.GLOBAL_STATUS 
+							FROM performance_schema.global_status
 							WHERE VARIABLE_NAME='Threads_connected'
 						" 2>/dev/null)
 						
