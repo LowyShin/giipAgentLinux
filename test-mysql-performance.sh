@@ -20,7 +20,7 @@ echo "MySQL Performance Metrics Test"
 echo "======================================"
 echo ""
 
-# API에서 Managed DB 정보 가져오기
+# API에서 Managed DB 정보 가져오기 (check_managed_databases.sh에서 복사)
 get_db_info_from_api() {
     local config_file="${1:-../giipAgent.cnf}"
     
@@ -38,7 +38,7 @@ get_db_info_from_api() {
     local text="GatewayManagedDatabaseList lssn"
     local jsondata="{\"lssn\":${lssn}}"
     
-    # API 호출
+    # API 호출 (check_managed_databases.sh와 동일)
     wget -O "$temp_file" --quiet \
         --post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
         --header="Content-Type: application/x-www-form-urlencoded" \
@@ -51,16 +51,15 @@ get_db_info_from_api() {
         return 1
     fi
     
-    # JSON 파싱하여 첫 번째 DB 정보 추출
+    # JSON 파싱하여 첫 번째 DB 정보 추출 (check_managed_databases.sh와 동일)
     python3 -c "
 import json, sys
 try:
-    with open('$temp_file') as f:
-        data = json.load(f)
-    
+    data = json.load(open('$temp_file'))
     if 'data' in data and isinstance(data['data'], list) and len(data['data']) > 0:
         db = data['data'][0]
-        print(f\"{db.get('mdb_host','')}|{db.get('mdb_port','')}|{db.get('mdb_user','')}|{db.get('mdb_password','')}|{db.get('mdb_database','')}|{db.get('mdb_name','')}|{db.get('mdb_type','')}\")
+        # db_* 필드명 사용 (API 응답 그대로)
+        print(f\"{db.get('db_host','')}|{db.get('db_port','')}|{db.get('db_user','')}|{db.get('db_password','')}|{db.get('db_database','')}|{db.get('db_name','')}|{db.get('db_type','')}\")
     else:
         print('ERROR: No managed databases in response', file=sys.stderr)
         sys.exit(1)
