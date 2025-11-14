@@ -5,6 +5,14 @@
 # Purpose: Gateway mode functions for managing remote servers and database queries
 # Rule: Follow giipapi_rules.md - text contains parameter names only, jsondata contains actual values
 
+# Load SSH connection logger module
+SCRIPT_DIR_GATEWAY_SSH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/ssh_connection_logger.sh" ]; then
+	. "${SCRIPT_DIR_GATEWAY_SSH}/ssh_connection_logger.sh"
+else
+	echo "⚠️  Warning: ssh_connection_logger.sh not found" >&2
+fi
+
 # ============================================================================
 # Server Management Functions
 # ============================================================================
@@ -121,38 +129,97 @@ execute_remote_command() {
 	local ssh_key=$4
 	local ssh_password=$5
 	local script_file=$6
+	local remote_lssn=${7:-0}      # Optional LSSN parameter
+	local hostname=${8:-"unknown"}  # Optional hostname parameter
 	
 	local ssh_opts="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes"
+	local start_time=$(date +%s)
+	local auth_method="none"
+	
+	# Determine authentication method
+	if [ -n "${ssh_password}" ]; then
+		auth_method="password"
+	elif [ -n "${ssh_key}" ] && [ -f "${ssh_key}" ]; then
+		auth_method="key"
+	fi
+	
+	# 🔍 Log SSH connection attempt
+	if type log_ssh_attempt >/dev/null 2>&1; then
+		log_ssh_attempt "$remote_host" "$remote_port" "$remote_user" "$auth_method" "$remote_lssn" "$hostname"
+	fi
+	
+	local exit_code=1
 	
 	if [ -n "${ssh_password}" ]; then
 		if ! command -v sshpass &> /dev/null; then
 			echo "  ❌ sshpass not available"
+			local duration=$(($(date +%s) - start_time))
+			
+			# Log failure
+			if type log_ssh_result >/dev/null 2>&1; then
+				log_ssh_result "$remote_host" "$remote_port" "127" "$duration" "$remote_lssn" "$hostname"
+			fi
 			return 1
 		fi
 		
 		sshpass -p "${ssh_password}" scp ${ssh_opts} -P ${remote_port} \
 		    ${script_file} ${remote_user}@${remote_host}:/tmp/giipTmpScript.sh 2>&1 | head -5
 		
-		[ $? -ne 0 ] && return 1
+		if [ $? -ne 0 ]; then
+			local duration=$(($(date +%s) - start_time))
+			
+			# Log SCP failure
+			if type log_ssh_result >/dev/null 2>&1; then
+				log_ssh_result "$remote_host" "$remote_port" "126" "$duration" "$remote_lssn" "$hostname"
+			fi
+			return 1
+		fi
 		
 		sshpass -p "${ssh_password}" ssh ${ssh_opts} -p ${remote_port} \
 		    ${remote_user}@${remote_host} \
 		    "chmod +x /tmp/giipTmpScript.sh && /tmp/giipTmpScript.sh && rm -f /tmp/giipTmpScript.sh" 2>&1 | head -20
+		
+		exit_code=$?
+		
 	elif [ -n "${ssh_key}" ] && [ -f "${ssh_key}" ]; then
 		scp ${ssh_opts} -i ${ssh_key} -P ${remote_port} \
 		    ${script_file} ${remote_user}@${remote_host}:/tmp/giipTmpScript.sh 2>&1 | head -5
 		
-		[ $? -ne 0 ] && return 1
+		if [ $? -ne 0 ]; then
+			local duration=$(($(date +%s) - start_time))
+			
+			# Log SCP failure
+			if type log_ssh_result >/dev/null 2>&1; then
+				log_ssh_result "$remote_host" "$remote_port" "126" "$duration" "$remote_lssn" "$hostname"
+			fi
+			return 1
+		fi
 		
 		ssh ${ssh_opts} -i ${ssh_key} -p ${remote_port} \
 		    ${remote_user}@${remote_host} \
 		    "chmod +x /tmp/giipTmpScript.sh && /tmp/giipTmpScript.sh && rm -f /tmp/giipTmpScript.sh" 2>&1 | head -20
+		
+		exit_code=$?
 	else
 		echo "  ❌ No authentication method available"
+		local duration=$(($(date +%s) - start_time))
+		
+		# Log no auth failure
+		if type log_ssh_result >/dev/null 2>&1; then
+			log_ssh_result "$remote_host" "$remote_port" "125" "$duration" "$remote_lssn" "$hostname"
+		fi
 		return 1
 	fi
 	
-	return $?
+	# Calculate duration
+	local duration=$(($(date +%s) - start_time))
+	
+	# 🔍 Log SSH connection result
+	if type log_ssh_result >/dev/null 2>&1; then
+		log_ssh_result "$remote_host" "$remote_port" "$exit_code" "$duration" "$remote_lssn" "$hostname"
+	fi
+	
+	return $exit_code
 }
 
 # ============================================================================
@@ -270,18 +337,47 @@ process_gateway_servers() {
 		logdt=$(date '+%Y%m%d%H%M%S')
 		echo "[${logdt}] [Gateway] Processing: $hostname (LSSN:$lssn)" >> $LogFileName
 		
+		# 🔍 Log remote execution started
+		if type log_remote_execution >/dev/null 2>&1; then
+			log_remote_execution "started" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "unknown"
+		fi
+		
 		local tmpfile="${tmpdir}/script_${lssn}.sh"
 		get_remote_queue "$lssn" "$hostname" "$os_info" "$tmpfile"
 		
+		local queue_available="false"
 		if [ -s "$tmpfile" ]; then
 			local err_check=$(cat "$tmpfile" | grep "HTTP Error")
 			if [ -n "$err_check" ]; then
+				# Log execution failed (queue error)
+				if type log_remote_execution >/dev/null 2>&1; then
+					log_remote_execution "failed" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "false" "Queue fetch error: $err_check"
+				fi
 				rm -f "$tmpfile"
 				continue
 			fi
 			
-			execute_remote_command "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$tmpfile" >> $LogFileName
+			queue_available="true"
+			
+			# Execute remote command with LSSN and hostname for logging
+			execute_remote_command "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$tmpfile" "$lssn" "$hostname" >> $LogFileName
+			local exec_result=$?
+			
+			# Log execution result
+			if type log_remote_execution >/dev/null 2>&1; then
+				if [ $exec_result -eq 0 ]; then
+					log_remote_execution "success" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "true"
+				else
+					log_remote_execution "failed" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "true" "SSH execution failed (exit code: $exec_result)"
+				fi
+			fi
+			
 			rm -f "$tmpfile"
+		else
+			# No queue available
+			if type log_remote_execution >/dev/null 2>&1; then
+				log_remote_execution "success" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "false"
+			fi
 		fi
 	done
 	
