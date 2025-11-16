@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/dpa_mysql.sh"
 source "${SCRIPT_DIR}/dpa_mssql.sh"
 source "${SCRIPT_DIR}/dpa_postgresql.sh"
+source "${SCRIPT_DIR}/http_health_check.sh"
 
 # Function: Check managed databases and update health status
 # Requires: lssn, sk, apiaddrv2, apiaddrcode (from config)
@@ -122,6 +123,13 @@ print(' '.join(sorted(db_types)))
 		local db_user=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('db_user', ''))")
 		local db_password=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('db_password', ''))")
 		local db_database=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('db_database', ''))")
+		
+		# HTTP Health Check fields (NEW)
+		local http_check_enabled=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('http_check_enabled', '0'))")
+		local http_check_url=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('http_check_url', ''))")
+		local http_check_method=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('http_check_method', 'GET'))")
+		local http_check_timeout=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('http_check_timeout', '10'))")
+		local http_check_expected_code=$(echo "$db_json" | python3 -c "import json, sys; data=json.load(sys.stdin); print(data.get('http_check_expected_code', '200'))")
 		
 		[[ -z $mdb_id ]] && continue
 		[[ -z $db_name ]] && continue
@@ -437,6 +445,36 @@ print(' '.join(sorted(db_types)))
 						logdt=$(date '+%Y%m%d%H%M%S')
 						echo "[${logdt}] [Gateway]   ❌ MongoDB error: $check_message" >> $LogFileName
 					fi
+				fi
+				;;
+			HTTP|HTTPS|WebService|API|AzureAppService)
+				# HTTP Health Check (NEW!)
+				if [ "$http_check_enabled" = "1" ] || [ "$http_check_enabled" = "true" ]; then
+					if [ -z "$http_check_url" ]; then
+						check_status="error"
+						check_message="HTTP check enabled but URL is empty"
+						logdt=$(date '+%Y%m%d%H%M%S')
+						echo "[${logdt}] [Gateway]   ❌ HTTP check URL missing" >> $LogFileName
+					else
+						# Perform HTTP health check
+						local http_result=$(check_http_health "$http_check_url" "$http_check_method" "$http_check_timeout" "$http_check_expected_code")
+						IFS='|' read -r check_status response_time http_code check_message <<< "$http_result"
+						
+						logdt=$(date '+%Y%m%d%H%M%S')
+						if [ "$check_status" = "success" ]; then
+							echo "[${logdt}] [Gateway]   ✅ HTTP check OK: $http_check_url (${response_time}ms, code=$http_code)" >> $LogFileName
+						else
+							echo "[${logdt}] [Gateway]   ❌ HTTP check failed: $check_message" >> $LogFileName
+						fi
+						
+						# Build performance JSON
+						performance_json="{\"http_code\": \"$http_code\", \"response_time_ms\": $response_time, \"url\": \"$http_check_url\", \"method\": \"$http_check_method\"}"
+					fi
+				else
+					check_status="warning"
+					check_message="HTTP check not enabled (set http_check_enabled=1)"
+					logdt=$(date '+%Y%m%d%H%M%S')
+					echo "[${logdt}] [Gateway]   ⚠️  HTTP check disabled" >> $LogFileName
 				fi
 				;;
 			*)
