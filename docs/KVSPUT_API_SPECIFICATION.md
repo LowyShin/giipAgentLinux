@@ -157,10 +157,28 @@ token="ffd96879858fe73fc31d923a74ae23b5"
 | Position 4 | `kFactor` | `jsondata.kFactor` | `"netdiag"` | `@kFactor` |
 | Position 5 | `kValue` | `jsondata.kValue` | `{...}` | `@kValue` |
 
+**🚨 kType / kKey 필수 규칙** (KVS_STANDARD_SPECIFICATION.md):
+
+| kType | 참조 테이블 | kKey 형식 | kKey 예시 | 용도 |
+|-------|------------|----------|-----------|------|
+| `lssn` | `tLSvr.LSsn` | 숫자 문자열 | `"71174"` | 서버별 데이터 |
+| `database` | `tManagedDatabase.mdb_id` | 숫자 문자열 | `"1"` | DB별 성능 데이터 |
+| `cgsn` | `tCorpGroup.CGSn` | 숫자 문자열 | `"5"` | 그룹별 집계 |
+| `csn` | `tCorp.CSn` | 숫자 문자열 | `"1"` | 고객사별 집계 |
+
+**❌ 절대 금지:**
+- `kType: "sp_response"`, `kKey: "5-19406589016"` ← 임의 문자열 금지!
+- `kKey: "71174-20251118"` ← 복합 키 금지!
+- `kKey: "uuid-xxxxx"` ← UUID 금지!
+
+**✅ 올바른 사용:**
+- `kType: "lssn"`, `kKey: "71174"` ← tLSvr.LSsn 참조
+- `kType: "database"`, `kKey: "1"` ← tManagedDatabase.mdb_id 참조
+
 **Important**: 
 - `kValue`는 JSON 객체 또는 문자열 (자유 형식)
-- `kType`은 현재 `"lssn"`만 지원 (SP Line 22)
-- `kKey`는 문자열 (숫자처럼 보여도 VARCHAR(100))
+- `kKey`는 **반드시 참조 테이블의 Serial Number**
+- 조회 성능, 권한 체크, 데이터 무결성을 위한 필수 규칙
 
 ---
 
