@@ -13,6 +13,13 @@ else
 	echo "⚠️  Warning: ssh_connection_logger.sh not found" >&2
 fi
 
+# Load remote SSH test result reporting module
+if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/remote_ssh_test.sh" ]; then
+	. "${SCRIPT_DIR_GATEWAY_SSH}/remote_ssh_test.sh"
+else
+	echo "⚠️  Warning: remote_ssh_test.sh not found" >&2
+fi
+
 # ============================================================================
 # Server Management Functions
 # ============================================================================
@@ -390,11 +397,18 @@ process_gateway_servers() {
 			execute_remote_command "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$tmpfile" "$lssn" "$hostname" >> $LogFileName
 			local exec_result=$?
 			
+			# Determine SSH test result and calculate duration
+			local ssh_status="fail"
+			local duration=0
+			if [ $exec_result -eq 0 ]; then
+				ssh_status="success"
+			fi
+			
 			# 🔴 [로깅 포인트 #5.10] SSH 연결 결과
 			if [ $exec_result -eq 0 ]; then
-				echo "[gateway.sh] 🟢 [5.10] SSH 연결 성공: hostname=${hostname}, lssn=${lssn}, exit_code=${exec_result}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+				echo "[gateway.sh] 🟢 [5.10] SSH 연결 성공: hostname=${hostname}, lssn=${lssn}, exit_code=${exec_result}, ssh_status=${ssh_status}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
 			else
-				echo "[gateway.sh] ❌ [5.10-ERROR] SSH 연결 실패: hostname=${hostname}, lssn=${lssn}, exit_code=${exec_result}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+				echo "[gateway.sh] ❌ [5.10-ERROR] SSH 연결 실패: hostname=${hostname}, lssn=${lssn}, exit_code=${exec_result}, ssh_status=${ssh_status}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
 			fi
 			
 			# Log execution result
@@ -404,6 +418,26 @@ process_gateway_servers() {
 				else
 					log_remote_execution "failed" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "true" "SSH execution failed (exit code: $exec_result)"
 				fi
+			fi
+			
+			# 🔴 [로깅 포인트 #5.10.1] RemoteServerSSHTest API 호출 시작
+			echo "[gateway.sh] 🟢 [5.10.1] RemoteServerSSHTest API 호출 시작: lssn=${lssn}, gateway_lssn=${lssn}, test_type=ssh, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+			
+			# Call RemoteServerSSHTest API to update LSChkdt
+			if type report_ssh_test_result >/dev/null 2>&1; then
+				report_ssh_test_result "$lssn" "$lssn"
+				local api_result=$?
+				
+				if [ $api_result -eq 0 ]; then
+					# 🔴 [로깅 포인트 #5.10.2] RemoteServerSSHTest API 호출 성공
+					echo "[gateway.sh] 🟢 [5.10.2] RemoteServerSSHTest API 호출 성공: lssn=${lssn}, gateway_lssn=${lssn}, rstval=200, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+				else
+					# 🔴 [로깅 포인트 #5.10.3] RemoteServerSSHTest API 호출 실패 또는 응답 없음
+					echo "[gateway.sh] ❌ [5.10.3] RemoteServerSSHTest API 호출 실패: lssn=${lssn}, gateway_lssn=${lssn}, api_result=${api_result}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+				fi
+			else
+				# 🔴 [로깅 포인트 #5.10.4] RemoteServerSSHTest 모듈 로드 실패
+				echo "[gateway.sh] ❌ [5.10.4] RemoteServerSSHTest 모듈 로드 실패: report_ssh_test_result function not found, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
 			fi
 			
 			rm -f "$tmpfile"

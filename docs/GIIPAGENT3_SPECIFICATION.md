@@ -51,17 +51,44 @@ SELECT LSSN, LSHostname FROM tLSvr WHERE is_gateway = 1
 ---
 
 ### 2️⃣ 리모트 서버 (Remote Server)
-**정의**: **Gateway 서버를 통해 제어되는 서버** (내부망, 원격지 등)
+**정의**: **Gateway 서버가 SSH를 통해 원격으로 작업을 수행하는 서버** (내부망, 원격지, giipAgent 미설치)
 
 | 속성 | 값 |
 |------|-----|
 | **식별자** | `LSSN` (tLSvr 테이블) |
 | **DB 표시** | `is_gateway = 0` |
-| **gateway_lssn** | ✅ **NOT NULL** (어떤 Gateway가 관리하는지 기록) |
-| **역할** | Gateway를 통해서만 접근 가능 |
-| **실행 모드** | `gateway_mode = 0` (Normal 모드, 직접 실행 안함) |
+| **gateway_lssn** | ✅ **NOT NULL** (어떤 Gateway가 이 서버를 관리하는지 기록) |
+| **역할** | Gateway가 SSH를 통해 원격에서 작업을 수행하는 대상 |
+| **Agent 설치** | ❌ **설치 안 함** (giipAgent3.sh 미배포) |
+| **Agent 실행** | ❌ **실행 안 함** (Gateway에서 원격으로 명령 실행) |
+| **gateway_mode** | 해당 없음 (giipAgent가 없음) |
 | **SSH 정보** | `gateway_ssh_host`, `gateway_ssh_user`, `gateway_ssh_port` |
-| **예시** | 71221 (server1), gateway_lssn=71174 |
+| **예시** | 71221 (remote-server-01), gateway_lssn=71174 |
+
+**리모트 서버와 Gateway의 관계**:
+
+```
+Gateway 서버 (LSSN=71174, is_gateway=1)
+└─ giipAgent3.sh (Gateway 모드로 실행)
+   │
+   └─ 리모트 서버 목록 조회 (gateway_lssn=71174)
+      │
+      └─ 각 리모트 서버에 대해:
+         ├─ SSH 접근 테스트 (SSH 연결 가능한가?)
+         ├─ SSH를 통해 원격 명령 실행 (필요시)
+         ├─ 작업 결과를 RemoteServerSSHTest API로 리포팅
+         └─ API가 tLSvr.LSChkdt 업데이트
+
+리모트 서버 (LSSN=71221, is_gateway=0)
+└─ giipAgent 없음 (설치 안 됨)
+   └─ Gateway의 SSH 명령 수신/실행 대기
+      └─ 결과를 Gateway에 반환
+```
+
+**왜 Gateway 경유인가?**:
+- 리모트 서버에는 giipAgent를 설치할 수 없는 환경 (보안, 권한 등)
+- 따라서 Gateway가 SSH를 통해 **원격에서 대신 작업 수행**
+- Gateway = 중앙 제어점, 리모트 서버 = 작업 실행 대상
 
 **SQL**:
 ```sql
