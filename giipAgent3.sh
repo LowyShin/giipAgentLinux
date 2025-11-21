@@ -47,6 +47,9 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 
+# 🔴 [로깅 포인트 #5.1] Agent 시작
+echo "[giipAgent3.sh] 🟢 [5.1] Agent 시작: version=${sv}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')"
+
 # ============================================================================
 # Fetch Server Configuration from DB (is_gateway auto-detection)
 # ============================================================================
@@ -98,6 +101,10 @@ if [ -f "$config_tmpfile" ]; then
 	if [ -n "$is_gateway_from_db" ]; then
 		gateway_mode="$is_gateway_from_db"
 		echo "✅ DB config loaded: is_gateway=${gateway_mode}"
+		
+		# 🔴 [로깅 포인트 #5.2] 설정 로드 완료
+		echo "[giipAgent3.sh] 🟢 [5.2] 설정 로드 완료: lssn=${lssn}, hostname=${hn}, is_gateway=${gateway_mode}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')"
+		
 		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"source\":\"db_api\"}"
 	else
 		echo "⚠️  Failed to parse is_gateway from DB, using default: gateway_mode=${gateway_mode}"
@@ -179,6 +186,9 @@ if [ "${gateway_mode}" = "1" ]; then
 	# ========================================================================
 	# GATEWAY MODE
 	# ========================================================================
+	
+	# 🔴 [로깅 포인트 #5.3] Gateway 모드 감지 및 초기화
+	echo "[giipAgent3.sh] 🟢 [5.3] Gateway 모드 감지 및 초기화: lssn=${lssn}, gateway_mode=1, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')"
 	
 	log_message "INFO" "Running in GATEWAY MODE"
 	

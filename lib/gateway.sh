@@ -25,6 +25,9 @@ get_gateway_servers() {
 	local api_url="${apiaddrv2}"
 	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 	
+	# 🔴 [로깅 포인트 #5.4] Gateway 서버 목록 조회 시작
+	echo "[gateway.sh] 🟢 [5.4] Gateway 서버 목록 조회 시작: lssn=${lssn}, api_url=${api_url}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+	
 	local text="GatewayRemoteServerListForAgent lssn"
 	local jsondata="{\"lssn\":${lssn}}"
 	
@@ -35,7 +38,8 @@ get_gateway_servers() {
 		--no-check-certificate -q 2>&1
 	
 	if [ ! -s "$temp_file" ]; then
-		echo "[Gateway] ⚠️  Failed to fetch servers from DB" >&2
+		# 🔴 [로깅 포인트 #5.4-ERROR] 서버 목록 조회 실패
+		echo "[gateway.sh] ❌ [5.4-ERROR] Gateway 서버 목록 조회 실패: file_empty=true, lssn=${lssn}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
 		rm -f "$temp_file"
 		return 1
 	fi
@@ -43,10 +47,15 @@ get_gateway_servers() {
 	# Check for error response
 	local err_check=$(cat "$temp_file" | grep -i "rstval.*40[0-9]")
 	if [ -n "$err_check" ]; then
-		echo "[Gateway] ⚠️  API error response" >&2
+		# 🔴 [로깅 포인트 #5.4-ERROR] API 에러 응답
+		echo "[gateway.sh] ❌ [5.4-ERROR] Gateway 서버 목록 API 에러: error_response=${err_check}, lssn=${lssn}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
 		rm -f "$temp_file"
 		return 1
 	fi
+	
+	# 🔴 [로깅 포인트 #5.4-SUCCESS] 서버 목록 조회 성공
+	local server_count=$(cat "$temp_file" | grep -o '{[^}]*}' | wc -l)
+	echo "[gateway.sh] 🟢 [5.4-SUCCESS] Gateway 서버 목록 조회 성공: server_count=${server_count}, file_size=$(wc -c < "$temp_file"), timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
 	
 	echo "$temp_file"
 	return 0
@@ -305,10 +314,14 @@ process_gateway_servers() {
 	# Get servers from DB (real-time query, no cache)
 	local server_list_file=$(get_gateway_servers)
 	if [ $? -ne 0 ] || [ ! -f "$server_list_file" ]; then
-		echo "[Gateway] ⚠️  Failed to fetch servers from DB" >&2
+		# 🔴 [로깅 포인트 #5.5-ERROR] 서버 목록 파일 확인 실패
+		echo "[gateway.sh] ❌ [5.5-ERROR] 서버 목록 파일 확인 실패: lssn=${lssn}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
 		rm -rf "$tmpdir"
 		return 1
 	fi
+	
+	# 🔴 [로깅 포인트 #5.5] 서버 목록 파일 확인 성공
+	echo "[gateway.sh] 🟢 [5.5] 서버 목록 파일 확인 성공: file_size=$(wc -c < "$server_list_file"), lssn=${lssn}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
 	
 	local logdt=$(date '+%Y%m%d%H%M%S')
 	echo "[${logdt}] [Gateway] Starting server processing cycle..." >> $LogFileName
@@ -329,6 +342,9 @@ process_gateway_servers() {
 		[[ -z $hostname ]] && continue
 		[[ $enabled == "0" ]] && continue
 		
+		# 🔴 [로깅 포인트 #5.6] 서버 JSON 파싱 완료
+		echo "[gateway.sh] 🟢 [5.6] 서버 JSON 파싱 완료: hostname=${hostname}, lssn=${lssn}, ssh_host=${ssh_host}, ssh_port=${ssh_port}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+		
 		# Set defaults
 		[ -z "$ssh_port" ] && ssh_port="22"
 		[ -z "$ssh_user" ] && ssh_user="root"
@@ -342,6 +358,9 @@ process_gateway_servers() {
 			log_remote_execution "started" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "unknown"
 		fi
 		
+		# 🔴 [로깅 포인트 #5.7] SSH 테스트 시작
+		echo "[gateway.sh] 🟢 [5.7] SSH 테스트 시작: hostname=${hostname}, ssh_host=${ssh_host}, ssh_port=${ssh_port}, ssh_user=${ssh_user}, auth_method=$([ -n "${ssh_password}" ] && echo "password" || echo "key"), timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+		
 		local tmpfile="${tmpdir}/script_${lssn}.sh"
 		get_remote_queue "$lssn" "$hostname" "$os_info" "$tmpfile"
 		
@@ -349,6 +368,9 @@ process_gateway_servers() {
 		if [ -s "$tmpfile" ]; then
 			local err_check=$(cat "$tmpfile" | grep "HTTP Error")
 			if [ -n "$err_check" ]; then
+				# 🔴 [로깅 포인트 #5.8-ERROR] 큐 조회 실패
+				echo "[gateway.sh] ❌ [5.8-ERROR] 큐 조회 실패: hostname=${hostname}, lssn=${lssn}, error=${err_check}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+				
 				# Log execution failed (queue error)
 				if type log_remote_execution >/dev/null 2>&1; then
 					log_remote_execution "failed" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "false" "Queue fetch error: $err_check"
@@ -357,11 +379,23 @@ process_gateway_servers() {
 				continue
 			fi
 			
+			# 🔴 [로깅 포인트 #5.8] 큐 조회 성공
+			echo "[gateway.sh] 🟢 [5.8] 큐 조회 성공: hostname=${hostname}, lssn=${lssn}, script_size=$(wc -c < "$tmpfile"), timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+			
 			queue_available="true"
 			
-			# Execute remote command with LSSN and hostname for logging
+			# 🔴 [로깅 포인트 #5.9] SSH 연결 시도
+			echo "[gateway.sh] 🟢 [5.9] SSH 연결 시도: hostname=${hostname}, ssh_host=${ssh_host}:${ssh_port}, ssh_user=${ssh_user}, lssn=${lssn}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+			
 			execute_remote_command "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$tmpfile" "$lssn" "$hostname" >> $LogFileName
 			local exec_result=$?
+			
+			# 🔴 [로깅 포인트 #5.10] SSH 연결 결과
+			if [ $exec_result -eq 0 ]; then
+				echo "[gateway.sh] 🟢 [5.10] SSH 연결 성공: hostname=${hostname}, lssn=${lssn}, exit_code=${exec_result}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+			else
+				echo "[gateway.sh] ❌ [5.10-ERROR] SSH 연결 실패: hostname=${hostname}, lssn=${lssn}, exit_code=${exec_result}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+			fi
 			
 			# Log execution result
 			if type log_remote_execution >/dev/null 2>&1; then
@@ -374,6 +408,9 @@ process_gateway_servers() {
 			
 			rm -f "$tmpfile"
 		else
+			# 🔴 [로깅 포인트 #5.11] 큐 없음 (정상)
+			echo "[gateway.sh] 🟢 [5.11] 큐 없음 (정상): hostname=${hostname}, lssn=${lssn}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+			
 			# No queue available
 			if type log_remote_execution >/dev/null 2>&1; then
 				log_remote_execution "success" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "false"
@@ -385,8 +422,18 @@ process_gateway_servers() {
 	rm -f "$server_list_file"
 	rm -rf "$tmpdir"
 	
+	# 🔴 [로깅 포인트 #5.12] Gateway 사이클 완료
+	echo "[gateway.sh] 🟢 [5.12] Gateway 사이클 완료: lssn=${lssn}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+	
 	logdt=$(date '+%Y%m%d%H%M%S')
 	echo "[${logdt}] [Gateway] Cycle completed" >> $LogFileName
+	
+	# 🔴 [로깅 포인트 #5.13] 실행 로그 저장
+	if type save_execution_log >/dev/null 2>&1; then
+		local cycle_status="{\"status\":\"completed\",\"cycle_timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"lssn\":${lssn}}"
+		save_execution_log "gateway_cycle_end" "$cycle_status"
+		echo "[gateway.sh] 🟢 [5.13] 실행 로그 저장 완료: status=success, lssn=${lssn}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+	fi
 }
 
 # ============================================================================
