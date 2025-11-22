@@ -637,6 +637,25 @@ process_gateway_servers() {
 	# 🔴 DEBUG: 함수 진입 확인
 	gateway_log "🔵" "[5.4.5-PROCESS_ENTRY]" "process_gateway_servers 호출됨"
 	
+	# [5.3.1] 🟢 Gateway 자신의 큐 처리 (CQEQueueGet API 호출 → LSChkdt 자동 업데이트)
+	gateway_log "🟢" "[5.3.1]" "Gateway 자신의 큐 조회 시작"
+	local gateway_queue_file="/tmp/gateway_self_queue_$$.sh"
+	
+	if type fetch_queue >/dev/null 2>&1; then
+		fetch_queue "$lssn" "$hn" "$os" "$gateway_queue_file"
+		if [ -s "$gateway_queue_file" ]; then
+			gateway_log "🟢" "[5.3.1-EXECUTE]" "Gateway 자신의 큐 존재, 스크립트 실행"
+			bash "$gateway_queue_file"
+			local script_result=$?
+			gateway_log "🟢" "[5.3.1-COMPLETED]" "Gateway 자신의 큐 실행 완료" "\"result\":${script_result}"
+		else
+			gateway_log "🟢" "[5.3.1-EMPTY]" "Gateway 자신의 큐 없음 (404)"
+		fi
+		rm -f "$gateway_queue_file"
+	else
+		gateway_log "⚠️ " "[5.3.1-WARN]" "fetch_queue 함수 미로드"
+	fi
+	
 	# Get servers from DB (real-time query, no cache)
 	local server_list_file=$(get_gateway_servers)
 	if [ $? -ne 0 ] || [ ! -f "$server_list_file" ]; then

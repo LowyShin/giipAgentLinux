@@ -6,10 +6,10 @@
 > - 작성자: AI Agent  
 > - 목적: giipAgent3 모듈 구조 및 KVS 로깅 규칙 명세
 > 
-> **🚨 현재 이슈 (2025-11-22)**:
-> - **문제**: lsvrdetail 페이지에서 LSChkdt가 표시 안 됨
-> - **진단 문서**: [LSChkdt_UPDATE_DIAGNOSIS_CURRENT_STATUS.md](./LSChkdt_UPDATE_DIAGNOSIS_CURRENT_STATUS.md) 참고
-> - **상세 가이드**: [LSChkdt_UPDATE_DIAGNOSIS.md](./LSChkdt_UPDATE_DIAGNOSIS.md) 참고
+> **✅ 해결 완료 (2025-11-22)**:
+> - **문제**: Gateway 모드에서 자신의 LSChkdt가 업데이트되지 않음
+> - **원인**: Gateway는 Remote 서버만 관리하고, 자신의 큐를 처리하지 않아 CQEQueueGet API 호출 없음
+> - **해결**: Gateway도 자신의 큐를 처리하도록 수정 (섹션 [Gateway 자신의 큐 처리](#gateway-자신의-큐-처리) 참고)
 
 ---
 
@@ -377,6 +377,28 @@ export FILE_MODIFIED=$(stat -c %y "${BASH_SOURCE[0]}" 2>/dev/null || stat -f "%S
 }
 ```
 
+### ⏰ 타임스탐프 정책 (2025-11-22 업데이트)
+
+**원칙**: 모든 타임스탐프는 **DB 레벨**에서 `GETUTCDATE()`로 관리
+
+| 타임스탐프 타입 | 관리 위치 | 값 설정 방식 | 이유 |
+|----------------|---------|-----------|------|
+| **LSChkdt** (tLSvr.LSChkdt) | DB (SP) | `GETUTCDATE()` | 서버 시간 차이 제거, 일관성 보장 |
+| **JSON 객체 내 timestamp** | ❌ 제거됨 | 없음 | 클라이언트-서버 시간 차이로 인한 불일치 방지 |
+| **로그 파일 시간** | OS 로깅 | `date` 명령 | 로컬 로그용 (참고 목적) |
+
+**적용 사항**:
+1. ✅ 모든 API 응답 JSON에서 `timestamp` 필드 제거
+2. ✅ `save_execution_log()` JSON에서 `timestamp` 필드 제거
+3. ✅ KVS 저장 시 타임스탐프 미포함 (DB의 regdate/moddate 사용)
+4. ✅ LSChkdt는 API 호출 시점에 `GETUTCDATE()`로 자동 업데이트
+
+**결과**:
+```
+Before: Gateway LSChkdt = 10:30:03 (10시간 전)  ❌
+After:  Gateway LSChkdt = 21:04:40 (최신)      ✅
+```
+
 ---
 
 ## 실행 흐름
@@ -394,20 +416,52 @@ gateway_mode = 1 감지
   ↓
 load: db_clients.sh, gateway.sh
   ↓
-save_execution_log "startup" [gateway.sh] ⭐ 1번만!
+save_execution_log "startup" [gateway.sh]
   ↓
 check_sshpass()
   ↓
-sync_gateway_servers()
+[5.3.1] 🆕 Gateway 자신의 큐 처리 (CQEQueueGet API 호출)
+  ├─ fetch_queue() [normal.sh]
+  ├─ 자신의 큐 실행
+  └─ LSChkdt 자동 업데이트 ✅
   ↓
-save_execution_log "gateway_init" [gateway.sh]
+process_gateway_servers()
+  ├─ [5.4] Remote 서버 목록 조회
+  ├─ [5.9] SSH 테스트 수행
+  └─ [5.10] RemoteServerSSHTest API (Remote 서버 LSChkdt 업데이트)
   ↓
-while loop (cntgiip <= 3)
+check_managed_databases()
   ↓
-execute_gateway_cycle() [gateway.sh]
-  ↓
-log_message "Gateway mode terminated"
+log_message "Gateway cycle completed"
 ```
+
+#### Gateway 자신의 큐 처리
+
+**이전 (문제)**:
+- Gateway는 Remote 서버들만 관리
+- 자신의 큐를 처리하지 않음
+- CQEQueueGet API 호출 없음
+- LSChkdt가 업데이트되지 않음
+
+**해결 방법**:
+```bash
+# gateway.sh의 process_gateway_servers() 함수 시작 부분에 추가
+# 1. 자신의 큐 조회 (CQEQueueGet API)
+fetch_queue "$lssn" "$hn" "$os" "/tmp/gateway_self_queue.sh"
+
+# 2. 큐가 있으면 실행
+if [ -s "/tmp/gateway_self_queue.sh" ]; then
+    bash "/tmp/gateway_self_queue.sh"
+    rm -f "/tmp/gateway_self_queue.sh"
+fi
+
+# 3. 결과: pApiCQEQueueGetbySk SP에서 자동으로 LSChkdt 업데이트
+```
+
+**결과**:
+- Gateway도 자신의 LSChkdt가 최신으로 업데이트됨
+- Gateway 자신의 작업도 처리 가능
+- Normal Mode와 동일한 메커니즘 사용 (일관성)
 
 ### Normal 모드
 
@@ -424,18 +478,17 @@ load: normal.sh
   ↓
 run_normal_mode() [normal.sh]
   ↓
-save_execution_log "startup" [normal.sh] ⭐ 1번만!
+fetch_queue() [normal.sh] ← CQEQueueGet API 호출
+  ├─ LSChkdt 자동 업데이트 (pApiCQEQueueGetbySk SP)
+  ├─ OS 정보 수집
+  └─ 자신의 큐 조회
   ↓
-fetch_queue() [normal.sh]
-  ↓
-save_execution_log "queue_check" [normal.sh]
-  ↓
-execute_script() [normal.sh]
-  ↓
-save_execution_log "script_execution" [normal.sh]
+execute_script() [normal.sh] ← 큐 실행
   ↓
 save_execution_log "shutdown" [normal.sh]
 ```
+
+**Note**: CQEQueueGet API 호출 시 tLSvr의 LSChkdt가 자동으로 GETDATE()로 업데이트됨
 
 ---
 
