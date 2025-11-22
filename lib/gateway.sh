@@ -464,6 +464,14 @@ process_single_server() {
 		return 0
 	fi
 	
+	# 🆕 Step 1.5: Log extracted parameters to tKVS BEFORE validation
+	# Purpose: Record all extracted parameters for debugging validation failures
+	local extract_log_params="{\"action\":\"server_params_extracted\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"server_params\":${server_params}}"
+	if type kvs_put >/dev/null 2>&1; then
+		kvs_put "lssn" "${global_lssn:-0}" "gateway_server_extract" "$extract_log_params" 2>/dev/null
+		gateway_log "🟢" "[5.5.1.5]" "Extracted params logged to tKVS"
+	fi
+	
 	# Step 2: Validate parameters
 	gateway_log "🔵" "[5.5.2-VALIDATE]" "validate_server_params 시작"
 	if ! validate_server_params "$server_params"; then
@@ -471,6 +479,13 @@ process_single_server() {
 		local hostname=$(echo "$server_params" | jq -r '.hostname // empty' 2>/dev/null)
 		local enabled=$(echo "$server_params" | jq -r '.enabled // 1' 2>/dev/null)
 		gateway_log "⚠️ " "[5.5.2-DEBUG-FAIL]" "validate 실패: hostname='$hostname', enabled='$enabled', server_params='$server_params'"
+		
+		# 🆕 Log validation failure to tKVS
+		local validate_fail_log="{\"action\":\"validation_failed\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"hostname\":\"${hostname}\",\"enabled\":${enabled},\"server_params\":${server_params}}"
+		if type kvs_put >/dev/null 2>&1; then
+			kvs_put "lssn" "${global_lssn:-0}" "gateway_validation_failure" "$validate_fail_log" 2>/dev/null
+		fi
+		
 		gateway_log "⚠️ " "[5.5.2-SKIPPED]" "Server skipped (disabled or invalid)"
 		return 0
 	fi
