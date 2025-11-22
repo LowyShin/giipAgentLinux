@@ -31,6 +31,17 @@ else
 	}
 fi
 
+# Load normal mode queue fetching module (for Gateway self-queue processing via CQEQueueGet API)
+if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh" ]; then
+	. "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh"
+else
+	# Provide stub function if normal.sh not available
+	fetch_queue() {
+		echo "[gateway.sh] ⚠️  WARNING: fetch_queue stub called (normal.sh not loaded)" >&2
+		return 1
+	}
+fi
+
 # Function: Log gateway operation to both stderr AND tKVS
 # Usage: gateway_log "🟢" "[5.4]" "Gateway 서버 목록 조회 시작" "additional_json_data"
 # Function: Gateway Operation Logging

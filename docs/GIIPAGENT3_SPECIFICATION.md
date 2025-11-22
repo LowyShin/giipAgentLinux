@@ -443,25 +443,47 @@ log_message "Gateway cycle completed"
 - CQEQueueGet API 호출 없음
 - LSChkdt가 업데이트되지 않음
 
+**근본 원인**:
+1. `gateway.sh`는 `normal.sh` 모듈을 로드하지 않음
+2. 따라서 `fetch_queue()` 함수가 없음
+3. [5.3.1] 코드에서 `type fetch_queue` 체크 실패
+4. Gateway 큐 체크 로직이 실행되지 않음
+
 **해결 방법**:
+
+1. **모듈 로드 추가** (gateway.sh 줄 34):
 ```bash
-# gateway.sh의 process_gateway_servers() 함수 시작 부분에 추가
-# 1. 자신의 큐 조회 (CQEQueueGet API)
-fetch_queue "$lssn" "$hn" "$os" "/tmp/gateway_self_queue.sh"
-
-# 2. 큐가 있으면 실행
-if [ -s "/tmp/gateway_self_queue.sh" ]; then
-    bash "/tmp/gateway_self_queue.sh"
-    rm -f "/tmp/gateway_self_queue.sh"
+# Load normal mode queue fetching module (for Gateway self-queue processing)
+if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh" ]; then
+    . "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh"
+else
+    # Stub function fallback
+    fetch_queue() {
+        echo "[gateway.sh] ⚠️  WARNING: fetch_queue stub called (normal.sh not loaded)" >&2
+        return 1
+    }
 fi
+```
 
-# 3. 결과: pApiCQEQueueGetbySk SP에서 자동으로 LSChkdt 업데이트
+2. **Gateway 큐 처리 로직** (gateway.sh의 process_gateway_servers() 함수 시작):
+```bash
+# [5.3.1] 🟢 Gateway 자신의 큐 처리 (CQEQueueGet API 호출 → LSChkdt 자동 업데이트)
+if type fetch_queue >/dev/null 2>&1; then
+    fetch_queue "$lssn" "$hn" "$os" "$gateway_queue_file"
+    if [ -s "$gateway_queue_file" ]; then
+        bash "$gateway_queue_file"
+        local script_result=$?
+        gateway_log "🟢" "[5.3.1-COMPLETED]" "Gateway 자신의 큐 실행 완료"
+    fi
+    rm -f "$gateway_queue_file"
+fi
 ```
 
 **결과**:
 - Gateway도 자신의 LSChkdt가 최신으로 업데이트됨
 - Gateway 자신의 작업도 처리 가능
 - Normal Mode와 동일한 메커니즘 사용 (일관성)
+- CQEQueueGet API 호출 → pApiCQEQueueGetbySk SP 자동 실행 → `LSChkdt = GETDATE()`
 
 ### Normal 모드
 
