@@ -242,20 +242,13 @@ if [ "${gateway_mode}" = "1" ]; then
 	check_sshpass || error_handler "Failed to setup sshpass" 1
 	# Note: DB clients are checked/installed only when needed in check_managed_databases()
 	
-	# Verify DB connectivity (first time)
+	# Verify DB connectivity (connectivity check only, no file operations)
 	log_message "INFO" "Verifying DB connectivity..."
-	server_list_file=$(get_gateway_servers)
-	if [ $? -eq 0 ] && [ -f "$server_list_file" ]; then
-		server_count=$(grep -o '{[^}]*}' "$server_list_file" | wc -l)
-		log_message "INFO" "Found ${server_count} servers in DB"
-		rm -f "$server_list_file"
-	else
-		log_message "WARNING" "Could not fetch servers from DB (will retry each cycle)"
-		server_count=0
-	fi
+	# Note: Actual server list will be fetched inside process_gateway_servers()
+	# This is just a connectivity check
 	
-	# Save initialization complete
-	init_complete_details="{\"db_connectivity\":\"verified\",\"server_count\":${server_count}}"
+	# Save initialization complete (server_count will be set by process_gateway_servers)
+	init_complete_details="{\"db_connectivity\":\"will_verify\",\"server_count\":0}"
 	save_execution_log "gateway_init" "$init_complete_details"
 	
 	# Gateway main loop (run once per execution, cron will re-run)
