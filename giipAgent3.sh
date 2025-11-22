@@ -82,14 +82,39 @@ if [ -f "$config_tmpfile" ]; then
 	
 	# Extract is_gateway value from JSON response
 	# giipapisk response format: {"data":[{"is_gateway":true,"RstVal":"200",...}],...}
-	# Extract from data array first, handle both true/false and 1/0
+	# Multiple fallback methods to ensure robust parsing
 	
-	# Try jq first (preferred method for multiline JSON)
+	is_gateway_from_db=""
+	
+	# Method 1: Try jq (most reliable)
 	if command -v jq >/dev/null 2>&1; then
-		is_gateway_from_db=$(jq -r '.data[0].is_gateway // .is_gateway // false' "$config_tmpfile" 2>/dev/null)
-	else
-		# Fallback: grep with tr to normalize line breaks
-		is_gateway_from_db=$(tr -d '\n' < "$config_tmpfile" | grep -o '"is_gateway":[^,}]*' | head -1 | sed 's/"is_gateway"://g' | tr -d ' ')
+		is_gateway_from_db=$(jq -r '.data[0].is_gateway // .is_gateway // empty' "$config_tmpfile" 2>/dev/null)
+		echo "[DEBUG] Method 1 (jq): is_gateway_from_db='${is_gateway_from_db}'" >&2
+	fi
+	
+	# Method 2: If jq failed or not available, try sed/grep on normalized text
+	if [ -z "$is_gateway_from_db" ]; then
+		# Normalize: remove all newlines and carriage returns
+		normalized=$(tr -d '\n\r' < "$config_tmpfile")
+		
+		# Extract: find "is_gateway":true or "is_gateway":false or "is_gateway":1 or "is_gateway":0
+		is_gateway_from_db=$(echo "$normalized" | sed -n 's/.*"is_gateway"\s*:\s*\([^,}]*\).*/\1/p' | head -1 | tr -d ' ')
+		echo "[DEBUG] Method 2 (sed/grep normalized): is_gateway_from_db='${is_gateway_from_db}'" >&2
+	fi
+	
+	# Method 3: If still empty, try grep with literal search
+	if [ -z "$is_gateway_from_db" ]; then
+		# Look for exact patterns
+		if grep -q '"is_gateway"\s*:\s*true' "$config_tmpfile" 2>/dev/null; then
+			is_gateway_from_db="true"
+		elif grep -q '"is_gateway"\s*:\s*false' "$config_tmpfile" 2>/dev/null; then
+			is_gateway_from_db="false"
+		elif grep -q '"is_gateway"\s*:\s*1' "$config_tmpfile" 2>/dev/null; then
+			is_gateway_from_db="1"
+		elif grep -q '"is_gateway"\s*:\s*0' "$config_tmpfile" 2>/dev/null; then
+			is_gateway_from_db="0"
+		fi
+		echo "[DEBUG] Method 3 (grep patterns): is_gateway_from_db='${is_gateway_from_db}'" >&2
 	fi
 	
 	# Convert true/false to 1/0
@@ -105,6 +130,8 @@ if [ -f "$config_tmpfile" ]; then
 			;;
 	esac
 	
+	echo "[DEBUG] Final result after conversion: is_gateway_from_db='${is_gateway_from_db}'" >&2
+	
 	if [ -n "$is_gateway_from_db" ]; then
 		gateway_mode="$is_gateway_from_db"
 		echo "✅ DB config loaded: is_gateway=${gateway_mode}"
@@ -115,7 +142,8 @@ if [ -f "$config_tmpfile" ]; then
 		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"source\":\"db_api\"}"
 	else
 		echo "⚠️  Failed to parse is_gateway from DB, using default: gateway_mode=${gateway_mode}"
-		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_parse_failed" "{\"response\":${api_response}}"
+		echo "[DEBUG] All parsing methods failed. API response first 500 chars: $(head -c 500 "$config_tmpfile")" >&2
+		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_parse_failed" "{\"response\":${api_response},\"debug\":\"all_methods_failed\"}"
 	fi
 	
 	rm -f "$config_tmpfile"
