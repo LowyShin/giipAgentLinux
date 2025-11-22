@@ -260,7 +260,7 @@ if [ "${gateway_mode}" = "1" ]; then
 	# Process gateway servers (query DB each cycle)
 	# Capture stderr output and log to tKVS
 	# Use temp file to avoid subshell issues with stderr capture
-	local gw_temp_log="/tmp/gateway_stderr_$$.log"
+	gw_temp_log="/tmp/gateway_stderr_$$.log"
 	process_gateway_servers > /dev/null 2> "$gw_temp_log"
 	process_gw_result=$?
 	gateway_stderr_log=$(cat "$gw_temp_log" 2>/dev/null)
