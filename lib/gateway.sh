@@ -33,28 +33,28 @@ fi
 
 # Function: Log gateway operation to both stderr AND tKVS
 # Usage: gateway_log "🟢" "[5.4]" "Gateway 서버 목록 조회 시작" "additional_json_data"
+# Function: Gateway Operation Logging
+# Purpose: Log to both stderr (console) and tKVS with point tracking
+# Usage: gateway_log "emoji" "point_code" "message" [optional_details]
+# Example: gateway_log "🟢" "[5.6]" "Server processed" "hostname=server1"
 gateway_log() {
 	local emoji="$1"
 	local point="$2"
 	local message="$3"
-	local extra_json="${4:-}"
+	local details="${4:-}"  # Optional details (not included in JSON to avoid escaping issues)
 	local timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')
 	
-	# Log to stderr (for console visibility)
-	echo "[gateway.sh] ${emoji} ${point} ${message}: lssn=${lssn:-unknown}, timestamp=${timestamp}" >&2
-	
-	# Log to tKVS (for persistent storage) - use point only (avoid encoding issues with Korean text)
-	# Build JSON payload
-	local json_payload="{\"event_type\":\"gateway_operation\",\"point\":\"${point}\",\"timestamp\":\"${timestamp}\""
-	
-	if [ -n "$extra_json" ]; then
-		# Append extra JSON data (must be valid JSON fragment)
-		json_payload="${json_payload},${extra_json}"
+	# Log to stderr (for console visibility and log files)
+	if [ -n "$details" ]; then
+		echo "[gateway.sh] ${emoji} ${point} ${message}: ${details}" >&2
+	else
+		echo "[gateway.sh] ${emoji} ${point} ${message}" >&2
 	fi
 	
-	json_payload="${json_payload}}"
+	# Log to tKVS - store only essential info (point, timestamp)
+	# This avoids JSON escaping issues with variable content
+	local json_payload="{\"event_type\":\"gateway_operation\",\"point\":\"${point}\",\"timestamp\":\"${timestamp}\"}"
 	
-	# Store in tKVS
 	if type kvs_put >/dev/null 2>&1; then
 		kvs_put "lssn" "${lssn:-0}" "gateway_operation" "$json_payload" 2>/dev/null
 	fi
@@ -86,7 +86,7 @@ get_gateway_servers() {
 	
 	if [ ! -s "$temp_file" ]; then
 		# 🔴 [로깅 포인트 #5.4-ERROR] 서버 목록 조회 실패
-		gateway_log "❌" "[5.4-ERROR]" "Gateway 서버 목록 조회 실패: file_empty=true" "\"file_check\":\"empty\""
+		gateway_log "❌" "[5.4-ERROR]" "Gateway 서버 목록 조회 실패: file_empty=true"
 		rm -f "$temp_file"
 		return 1
 	fi
@@ -95,14 +95,14 @@ get_gateway_servers() {
 	local err_check=$(cat "$temp_file" | grep -i "rstval.*40[0-9]")
 	if [ -n "$err_check" ]; then
 		# 🔴 [로깅 포인트 #5.4-ERROR] API 에러 응답
-		gateway_log "❌" "[5.4-ERROR]" "Gateway 서버 목록 API 에러" "\"error_response\":\"${err_check}\""
+		gateway_log "❌" "[5.4-ERROR]" "Gateway 서버 목록 API 에러: ${err_check}"
 		rm -f "$temp_file"
 		return 1
 	fi
 	
 	# 🔴 [로깅 포인트 #5.4-SUCCESS] 서버 목록 조회 성공
 	local server_count=$(cat "$temp_file" | grep -o '{[^}]*}' | wc -l)
-	gateway_log "🟢" "[5.4-SUCCESS]" "Gateway 서버 목록 조회 성공" "\"server_count\":${server_count},\"file_size\":$(wc -c < "$temp_file")"
+	gateway_log "🟢" "[5.4-SUCCESS]" "Gateway 서버 목록 조회 성공: count=${server_count}"
 	
 	echo "$temp_file"
 	return 0
@@ -439,13 +439,13 @@ process_single_server() {
 	
 	# Debug: Check if server_params is empty
 	if [ -z "$server_params" ]; then
-		gateway_log "❌" "[5.5.1-DEBUG]" "extract_server_params returned empty" "\"input\":\"${server_json:0:50}\""
+		gateway_log "❌" "[5.5.1-DEBUG]" "extract_server_params returned empty"
 		return 0
 	fi
 	
 	# Step 2: Validate parameters
 	if ! validate_server_params "$server_params"; then
-		gateway_log "⚠️ " "[5.5.2-SKIPPED]" "Server skipped (disabled or invalid)" "\"params\":\"${server_params:0:100}\""
+		gateway_log "⚠️ " "[5.5.2-SKIPPED]" "Server skipped (disabled or invalid)"
 		return 0
 	fi
 	
@@ -460,7 +460,7 @@ process_single_server() {
 	local os_info=$(echo "$server_params" | jq -r '.os_info' 2>/dev/null)
 	
 	# Log: Server parsing complete
-	gateway_log "🟢" "[5.6]" "Server parsed" "\"hostname\":\"${hostname}\",\"lssn\":${server_lssn}"
+	gateway_log "🟢" "[5.6]" "Server parsed: hostname=${hostname}, lssn=${server_lssn}"
 	
 	local logdt=$(date '+%Y%m%d%H%M%S')
 	echo "[${logdt}] [Gateway] Processing: $hostname (LSSN:$server_lssn)" >> $LogFileName
@@ -479,33 +479,33 @@ process_single_server() {
 		# Check for errors
 		local err_check=$(cat "$tmpfile" | grep "HTTP Error")
 		if [ -n "$err_check" ]; then
-			gateway_log "❌" "[5.8-ERROR]" "Queue fetch failed" "\"error\":\"${err_check}\""
+			gateway_log "❌" "[5.8-ERROR]" "Queue fetch failed: ${err_check}"
 			if type log_remote_execution >/dev/null 2>&1; then
 				log_remote_execution "failed" "$hostname" "$server_lssn" "$ssh_host" "$ssh_port" "false" "Queue fetch error"
 			fi
 		else
-			gateway_log "🟢" "[5.8]" "Queue fetched" "\"size\":$(wc -c < \"$tmpfile\")"
+			gateway_log "🟢" "[5.8]" "Queue fetched successfully"
 			
 			# Step 5: Execute SSH
-			gateway_log "🟢" "[5.9]" "SSH attempt" "\"target\":\"${ssh_host}:${ssh_port}\""
+			gateway_log "🟢" "[5.9]" "SSH attempt to ${ssh_host}:${ssh_port}"
 			execute_remote_command "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$tmpfile" "$server_lssn" "$hostname" >> $LogFileName
 			ssh_result=$?
 			
 			# Log result
 			if [ $ssh_result -eq 0 ]; then
-				gateway_log "🟢" "[5.10]" "SSH success" "\"code\":0"
+				gateway_log "🟢" "[5.10]" "SSH success"
 				if type log_remote_execution >/dev/null 2>&1; then
 					log_remote_execution "success" "$hostname" "$server_lssn" "$ssh_host" "$ssh_port" "true"
 				fi
 			else
-				gateway_log "❌" "[5.10]" "SSH failed" "\"code\":${ssh_result}"
+				gateway_log "❌" "[5.10]" "SSH failed: code=${ssh_result}"
 				if type log_remote_execution >/dev/null 2>&1; then
 					log_remote_execution "failed" "$hostname" "$server_lssn" "$ssh_host" "$ssh_port" "true" "SSH failed"
 				fi
 			fi
 		fi
 	else
-		gateway_log "🟢" "[5.11]" "No queue" "\"reason\":\"empty\""
+		gateway_log "🟢" "[5.11]" "No queue (empty)"
 		if type log_remote_execution >/dev/null 2>&1; then
 			log_remote_execution "success" "$hostname" "$server_lssn" "$ssh_host" "$ssh_port" "false"
 		fi
@@ -515,13 +515,13 @@ process_single_server() {
 	
 	# Step 6: Call RemoteServerSSHTest API (only if SSH succeeded)
 	if [ $ssh_result -eq 0 ]; then
-		gateway_log "🟢" "[5.10.1]" "API call" "\"type\":\"RemoteServerSSHTest\""
+		gateway_log "🟢" "[5.10.1]" "RemoteServerSSHTest API call"
 		if type report_ssh_test_result >/dev/null 2>&1; then
 			report_ssh_test_result "$server_lssn" "$global_lssn"
 			if [ $? -eq 0 ]; then
-				gateway_log "🟢" "[5.10.2]" "API success" "\"result\":200"
+				gateway_log "🟢" "[5.10.2]" "API success"
 			else
-				gateway_log "❌" "[5.10.3]" "API failed" "\"result\":error"
+				gateway_log "❌" "[5.10.3]" "API failed"
 			fi
 		else
 			gateway_log "❌" "[5.10.4]" "API module missing"
@@ -537,41 +537,42 @@ process_server_list() {
 	local server_list_file="$1"
 	local tmpdir="$2"
 	local server_count=0
+	local temp_servers_file="${tmpdir}/servers_to_process.jsonl"
 	
 	# 🔴 [로깅 포인트 #5.5-TEST] 서버 목록 파일 읽기 테스트
 	if ! [ -s "$server_list_file" ]; then
-		gateway_log "❌" "[5.5-TEST]" "서버 목록 파일이 비어있음" "\"file_size\":0"
+		gateway_log "❌" "[5.5-TEST]" "서버 목록 파일이 비어있음"
 		return 1
 	fi
 	
-	# Choose parser method
+	# Choose parser method and create temp file
 	if command -v jq &> /dev/null; then
 		# 🔴 [로깅 포인트 #5.5-JQ-USED] jq 사용
 		gateway_log "🟢" "[5.5-JQ-USED]" "jq로 JSON 파싱 시작"
-		
-		# Use jq directly in loop - NO pipe to avoid subshell
-		while IFS= read -r server_json; do
-			[ -z "$server_json" ] && continue
-			process_single_server "$server_json" "$tmpdir"
-			((server_count++))
-		done < <(jq -r '.data[]? // .[]? // .' "$server_list_file" 2>/dev/null)
+		jq -r '.data[]? // .[]? // .' "$server_list_file" 2>/dev/null > "$temp_servers_file"
 	else
 		# 🔴 [로깅 포인트 #5.5-GREP-FALLBACK] grep fallback
 		gateway_log "🟢" "[5.5-GREP-FALLBACK]" "grep fallback 사용"
-		
-		# Normalize JSON and process each server
+		tr -d '\n' < "$server_list_file" | sed 's/}/}\n/g' | grep -o '{[^}]*}' > "$temp_servers_file"
+	fi
+	
+	# Process each server from temp file (NOT in subshell)
+	if [ -s "$temp_servers_file" ]; then
 		while IFS= read -r server_json; do
 			[ -z "$server_json" ] && continue
 			process_single_server "$server_json" "$tmpdir"
 			((server_count++))
-		done < <(tr -d '\n' < "$server_list_file" | sed 's/}/}\n/g' | grep -o '{[^}]*}')
+		done < "$temp_servers_file"
 	fi
+	
+	# Clean up temp file
+	rm -f "$temp_servers_file"
 	
 	# Log result
 	if [ $server_count -gt 0 ]; then
-		gateway_log "🟢" "[5.5-PROCESSING]" "서버 처리 완료" "\"processed\":${server_count}"
+		gateway_log "🟢" "[5.5-PROCESSING]" "서버 처리 완료: count=${server_count}"
 	else
-		gateway_log "⚠️ " "[5.5-NO-SERVERS]" "처리할 서버 없음" "\"count\":0"
+		gateway_log "⚠️ " "[5.5-NO-SERVERS]" "처리할 서버 없음"
 	fi
 }
 
