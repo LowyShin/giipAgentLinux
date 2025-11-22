@@ -47,11 +47,11 @@
 - [API Endpoints Comparison](../giipfaw/docs/API_ENDPOINTS_COMPARISON.md) - giipApi vs giipApiSk vs giipApiSk2 차이점
 
 ### Installation & Operation
-- [Agent Installation Guide](../docs/AGENT_INSTALLATION_GUIDE.md) - Linux/Windows 에이전트 설치
-- [Test Server Installation](../docs/TEST_SERVER_INSTALLATION.md) - 테스트 환경 구축
+- [Agent Installation Guide](../giipdb/docs/AGENT_INSTALLATION_GUIDE.md) - Linux/Windows 에이전트 설치
+- [Test Server Installation](../giipdb/docs/TEST_SERVER_INSTALLATION.md) - 테스트 환경 구축
 
 ### Security
-- [Security Checklist](../docs/SECURITY_CHECKLIST.md) - 보안 점검 항목
+- [Security Checklist](../giipdb/docs/SECURITY_CHECKLIST.md) - 보안 점검 항목
 
 ### Deployment Options
 
@@ -157,15 +157,15 @@ For Windows version: https://github.com/LowyShin/giipAgentWin
 - [API Endpoints Comparison](../giipfaw/docs/API_ENDPOINTS_COMPARISON.md) - giipApi vs giipApiSk vs giipApiSk2 차이점
 
 ### Installation & Operation
-- [Agent Installation Guide](../docs/AGENT_INSTALLATION_GUIDE.md) - Linux/Windows 에이전트 설치
-- [Test Server Installation](../docs/TEST_SERVER_INSTALLATION.md) - 테스트 환경 구축
+- [Agent Installation Guide](../giipdb/docs/AGENT_INSTALLATION_GUIDE.md) - Linux/Windows 에이전트 설치
+- [Test Server Installation](../giipdb/docs/TEST_SERVER_INSTALLATION.md) - 테스트 환경 구축
 
 ### Security
-- [Security Checklist](../docs/SECURITY_CHECKLIST.md) - 보안 점검 항목
+- [Security Checklist](../giipdb/docs/SECURITY_CHECKLIST.md) - 보안 점검 항목
 
 ---
 
-## �📋 Prerequisites
+## 📋 Prerequisites
 
 ### Required Packages
 - Git
@@ -918,12 +918,12 @@ bash check-process-flood.sh
 
 ---
 
-## �📚 Additional Resources
+## 📚 Additional Resources
 
 - **GIIP Portal**: https://giipasp.azurewebsites.net
-- **Documentation**: [docs/AGENT_INSTALLATION_GUIDE.md](../docs/AGENT_INSTALLATION_GUIDE.md)
-- **Architecture**: [docs/GIIP_ARCHITECTURE.md](../docs/GIIP_ARCHITECTURE.md)
-- **Auto-Discovery Design**: [docs/AUTO_DISCOVERY_DESIGN.md](../docs/AUTO_DISCOVERY_DESIGN.md)
+- **Documentation**: [AGENT_INSTALLATION_GUIDE](../giipdb/docs/AGENT_INSTALLATION_GUIDE.md)
+- **Architecture**: [GIIP_ARCHITECTURE](../giipdb/docs/GIIP_ARCHITECTURE.md)
+- **Auto-Discovery Design**: [AUTO_DISCOVERY_DESIGN](../giipdb/docs/AUTO_DISCOVERY_DESIGN.md)
 - **Windows Agent**: https://github.com/LowyShin/giipAgentWin
 
 ---

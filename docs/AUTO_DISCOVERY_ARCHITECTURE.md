@@ -425,7 +425,7 @@ SELECT * FROM tLSvrService WHERE LSsn=71174
 
 - [API Endpoints Comparison](../../giipfaw/docs/API_ENDPOINTS_COMPARISON.md)
 - [Service Package Filter](SERVICE_PACKAGE_FILTER.md)
-- [Security Checklist](../../docs/SECURITY_CHECKLIST.md)
+- [Security Checklist](../../giipdb/docs/SECURITY_CHECKLIST.md)
 
 ---
 

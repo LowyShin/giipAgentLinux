@@ -408,7 +408,7 @@ EOF
 ## 📚 참고 문서
 
 - [STANDARD_WORK_PROMPT.md](../../STANDARD_WORK_PROMPT.md) - 작업 표준 문서
-- [giipapi_rules.md](../../docs/giipapi_rules.md) - GIIP API 규칙 (text/jsondata 분리)
+- [giipapi_rules.md](../../giipdb/docs/giipapi_rules.md) - GIIP API 규칙 (text/jsondata 분리)
 - [README.md](../README.md) - Agent 설치 및 사용 가이드
 - [GATEWAY_SETUP_GUIDE.md](GATEWAY_SETUP_GUIDE.md) - Gateway 설정 가이드
 

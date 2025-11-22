@@ -350,7 +350,7 @@ $result.KData | ConvertFrom-Json | ConvertTo-Json -Depth 10
 
 ## Related Documentation
 - [KVSPUT_USAGE_GUIDE.md](KVSPUT_USAGE_GUIDE.md) - KVS upload documentation
-- [SQLNETINV_DATA_FLOW.md](../../docs/SQLNETINV_DATA_FLOW.md) - Network data flow
+- [SQLNETINV_DATA_FLOW.md](../../giipdb/docs/SQLNETINV_DATA_FLOW.md) - Network data flow
 
 ---
 

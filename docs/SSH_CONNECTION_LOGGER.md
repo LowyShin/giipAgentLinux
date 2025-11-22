@@ -296,8 +296,8 @@ pkill -f giipAgent3.sh
 
 ## 📚 관련 문서
 
-- [GIIPAGENT3_SPECIFICATION.md](../docs/GIIPAGENT3_SPECIFICATION.md) - Agent 전체 구조
-- [MODULAR_ARCHITECTURE.md](../docs/MODULAR_ARCHITECTURE.md) - 모듈 아키텍처
+- [GIIPAGENT3_SPECIFICATION.md](../../giipdb/docs/GIIPAGENT3_SPECIFICATION.md) - Agent 전체 구조
+- [MODULAR_ARCHITECTURE.md](../../giipdb/docs/MODULAR_ARCHITECTURE.md) - 모뒸 아키텍처
 - [KVS_QUERY_GUIDE.md](../../giipdb/docs/KVS_QUERY_GUIDE.md) - KVS 조회 가이드
 
 ## 🐛 알려진 이슈
