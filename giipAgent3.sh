@@ -83,7 +83,14 @@ if [ -f "$config_tmpfile" ]; then
 	# Extract is_gateway value from JSON response
 	# giipapisk response format: {"data":[{"is_gateway":true,"RstVal":"200",...}],...}
 	# Extract from data array first, handle both true/false and 1/0
-	is_gateway_from_db=$(grep -o '"is_gateway":[^,}]*' "$config_tmpfile" | head -1 | sed 's/"is_gateway"://g' | tr -d ' ')
+	
+	# Try jq first (preferred method for multiline JSON)
+	if command -v jq >/dev/null 2>&1; then
+		is_gateway_from_db=$(jq -r '.data[0].is_gateway // .is_gateway // false' "$config_tmpfile" 2>/dev/null)
+	else
+		# Fallback: grep with tr to normalize line breaks
+		is_gateway_from_db=$(tr -d '\n' < "$config_tmpfile" | grep -o '"is_gateway":[^,}]*' | head -1 | sed 's/"is_gateway"://g' | tr -d ' ')
+	fi
 	
 	# Convert true/false to 1/0
 	case "$is_gateway_from_db" in
