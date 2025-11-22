@@ -405,11 +405,21 @@ validate_server_params() {
 	local server_params="$1"
 	
 	# Check if hostname is empty
-	local hostname=$(echo "$server_params" | jq -r '.hostname // empty' 2>/dev/null || grep -o '"hostname":"[^"]*"' | sed 's/.*":"\([^"]*\)".*/\1/')
-	local enabled=$(echo "$server_params" | jq -r '.enabled // 1' 2>/dev/null || grep -o '"enabled":\([0-9]\)' | sed 's/.*:\([0-9]\).*/\1/')
+	local hostname=$(echo "$server_params" | jq -r '.hostname // empty' 2>/dev/null)
+	if [ -z "$hostname" ]; then
+		# Fallback: try grep
+		hostname=$(echo "$server_params" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+	fi
+	
+	local enabled=$(echo "$server_params" | jq -r '.enabled // 1' 2>/dev/null)
+	if [ -z "$enabled" ] || [ "$enabled" = "null" ]; then
+		# Fallback: try grep
+		enabled=$(echo "$server_params" | grep -o '"enabled"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
+		[ -z "$enabled" ] && enabled=1
+	fi
 	
 	[[ -z "$hostname" ]] && return 1
-	[[ $enabled == "0" ]] && return 1
+	[[ "$enabled" == "0" ]] && return 1
 	return 0
 }
 
@@ -427,8 +437,15 @@ process_single_server() {
 	# Step 1: Extract parameters (returns JSON)
 	local server_params=$(extract_server_params "$server_json")
 	
+	# Debug: Check if server_params is empty
+	if [ -z "$server_params" ]; then
+		gateway_log "❌" "[5.5.1-DEBUG]" "extract_server_params returned empty" "\"input\":\"${server_json:0:50}\""
+		return 0
+	fi
+	
 	# Step 2: Validate parameters
 	if ! validate_server_params "$server_params"; then
+		gateway_log "⚠️ " "[5.5.2-SKIPPED]" "Server skipped (disabled or invalid)" "\"params\":\"${server_params:0:100}\""
 		return 0
 	fi
 	
@@ -627,6 +644,7 @@ fi
 # Export Functions
 # ============================================================================
 
+export -f gateway_log
 export -f get_gateway_servers
 export -f get_db_queries
 export -f get_managed_databases
