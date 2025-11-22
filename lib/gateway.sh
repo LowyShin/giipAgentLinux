@@ -382,6 +382,9 @@ extract_server_params() {
 	local server_json="$1"
 	local hostname ssh_user ssh_host ssh_port ssh_key_path ssh_password os_info enabled lssn
 	
+	# 🔴 DEBUG: 입력 JSON 확인
+	gateway_log "🔵" "[5.4.9-INPUT]" "extract_server_params input: $(echo -n "$server_json" | head -c 100)..."
+	
 	if command -v jq &> /dev/null; then
 		# jq method
 		hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null)
@@ -573,7 +576,8 @@ process_server_list() {
 	if command -v jq &> /dev/null; then
 		# 🔴 [로깅 포인트 #5.5-JQ-USED] jq 사용
 		gateway_log "🟢" "[5.5-JQ-USED]" "jq로 JSON 파싱 시작"
-		jq -r '.data[]? // .[]? // .' "$server_list_file" 2>/dev/null > "$temp_servers_file"
+		# 올바른 jq 쿼리: complete objects만 추출
+		jq -c '.data[]? // .[]? // .' "$server_list_file" 2>/dev/null > "$temp_servers_file"
 	else
 		# 🔴 [로깅 포인트 #5.5-GREP-FALLBACK] grep fallback
 		gateway_log "🟢" "[5.5-GREP-FALLBACK]" "grep fallback 사용"
