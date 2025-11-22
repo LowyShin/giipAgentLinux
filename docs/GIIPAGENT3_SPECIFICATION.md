@@ -2,9 +2,14 @@
 
 > **📅 문서 메타데이터**  
 > - 최초 작성: 2025-11-11  
-> - 최종 수정: 2025-11-11  
+> - 최종 수정: 2025-11-22  
 > - 작성자: AI Agent  
 > - 목적: giipAgent3 모듈 구조 및 KVS 로깅 규칙 명세
+> 
+> **🚨 현재 이슈 (2025-11-22)**:
+> - **문제**: lsvrdetail 페이지에서 LSChkdt가 표시 안 됨
+> - **진단 문서**: [LSChkdt_UPDATE_DIAGNOSIS_CURRENT_STATUS.md](./LSChkdt_UPDATE_DIAGNOSIS_CURRENT_STATUS.md) 참고
+> - **상세 가이드**: [LSChkdt_UPDATE_DIAGNOSIS.md](./LSChkdt_UPDATE_DIAGNOSIS.md) 참고
 
 ---
 

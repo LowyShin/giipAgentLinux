@@ -4,6 +4,18 @@
 
 ---
 
+## 📋 전제 조건
+
+**이 문서를 읽기 전에 반드시 확인하세요:**
+
+1. **SP 배포 필수**: [`giipdb/docs/SP_DEPLOYMENT_GUIDE.md`](../../giipdb/docs/SP_DEPLOYMENT_GUIDE.md)
+   - 배포 방법 A/B/C 중 선택하여 `pApiRemoteServerSSHTestbyAK` 배포
+   - 배포 확인: `SELECT * FROM sys.procedures WHERE name = 'pApiRemoteServerSSHTestbyAK'`
+
+2. **SP 파일 확인**: [`giipdb/SP/pApiRemoteServerSSHTestbyAK.sql`](../../giipdb/SP/pApiRemoteServerSSHTestbyAK.sql)
+
+---
+
 ## API 사양 상세
 
 ### RemoteServerSSHTest API
@@ -119,83 +131,47 @@ jsondata={...}
 
 ### Stored Procedure: pApiRemoteServerSSHTestbyAK
 
-**파일**: `giipdb/SP/pApiRemoteServerSSHTestbyAK.sql`
+**파일**: [`giipdb/SP/pApiRemoteServerSSHTestbyAK.sql`](../../giipdb/SP/pApiRemoteServerSSHTestbyAK.sql)
+
+**용도**: RemoteServerSSHTest API 호출 시 LSChkdt 업데이트
+
+**주요 기능**:
+1. Secret Key 인증 확인
+2. 리모트 서버 존재 및 소유권 확인 (gateway_lssn 일치)
+3. Gateway 서버 존재 확인
+4. SSH 설정 유효성 확인
+5. **LSChkdt = GETUTCDATE()** 업데이트 (최종 체크 완료)
+
+**SP 코드**는 아래 파일에서 확인:
+
+📄 [`giipdb/SP/pApiRemoteServerSSHTestbyAK.sql`](../../giipdb/SP/pApiRemoteServerSSHTestbyAK.sql)
+
+**SP 실행 순서**:
+1. Secret Key 인증
+2. 리모트 서버 존재/소유권 확인
+3. Gateway 서버 존재 확인
+4. SSH 설정 확인
+5. **LSChkdt = GETUTCDATE()** 업데이트
+
+---
+
+### tLSvr 테이블 스키마
+
+LSChkdt 업데이트를 위해 다음 필드가 필요합니다:
 
 ```sql
-CREATE PROCEDURE pApiRemoteServerSSHTestbyAK
-    @sk VARCHAR(200),                    -- Secret Key
-    @lssn INT,                          -- 리모트 서버 LSSN
-    @gateway_lssn INT,                  -- Gateway 서버 LSSN
-    @test_type VARCHAR(50) = 'ssh',    -- 테스트 유형
-    @test_timeout_sec INT = 10         -- 타임아웃 (초)
-AS
-BEGIN
-    -- 1️⃣ 인증 확인
-    DECLARE @csn INT
-    SELECT @csn = csn FROM tLSvrAuth WITH(NOLOCK)
-    WHERE sk = @sk AND sk_status = 1
-    
-    IF @csn IS NULL
-    BEGIN
-        INSERT INTO tLogSP (lsName, lsParam, lsRstVal) 
-        VALUES ('pApiRemoteServerSSHTestbyAK', 'auth_failed', '401')
-        SELECT 401 AS RstVal, 'Secret Key 불일치' AS RstMsg
-        RETURN
-    END
-    
-    -- 2️⃣ 리모트 서버 확인
-    IF NOT EXISTS(SELECT 1 FROM tLSvr WHERE LSSN = @lssn AND is_gateway = 0 AND gateway_lssn = @gateway_lssn)
-    BEGIN
-        INSERT INTO tLogSP (lsName, lsParam, lsRstVal)
-        VALUES ('pApiRemoteServerSSHTestbyAK', 'server_not_found', '404')
-        SELECT 404 AS RstVal, 'LSSN ' + CAST(@lssn AS VARCHAR) + '을 찾을 수 없습니다' AS RstMsg
-        RETURN
-    END
-    
-    -- 3️⃣ Gateway 서버 확인
-    IF NOT EXISTS(SELECT 1 FROM tLSvr WHERE LSSN = @gateway_lssn AND is_gateway = 1)
-    BEGIN
-        INSERT INTO tLogSP (lsName, lsParam, lsRstVal)
-        VALUES ('pApiRemoteServerSSHTestbyAK', 'gateway_not_found', '404')
-        SELECT 404 AS RstVal, 'Gateway 서버를 찾을 수 없습니다' AS RstMsg
-        RETURN
-    END
-    
-    -- 4️⃣ SSH 정보 조회
-    DECLARE @ssh_host VARCHAR(100), @ssh_port INT, @ssh_user VARCHAR(50)
-    SELECT @ssh_host = gateway_ssh_host, @ssh_port = ISNULL(gateway_ssh_port, 22), @ssh_user = ISNULL(gateway_ssh_user, 'root')
-    FROM tLSvr WHERE LSSN = @lssn
-    
-    IF @ssh_host IS NULL
-    BEGIN
-        INSERT INTO tLogSP (lsName, lsParam, lsRstVal)
-        VALUES ('pApiRemoteServerSSHTestbyAK', 'ssh_config_missing', '422')
-        SELECT 422 AS RstVal, 'SSH 호스트 정보가 설정되지 않았습니다' AS RstMsg
-        RETURN
-    END
-    
-    -- 5️⃣ 테스트 결과 업데이트 (테스트는 Azure Function에서 수행)
-    DECLARE @test_result VARCHAR(20) = 'success'  -- 실제로는 Azure Function에서 전달받음
-    DECLARE @response_time_ms INT = 245
-    DECLARE @auth_method VARCHAR(20) = 'key'
-    DECLARE @test_message VARCHAR(500) = 'SSH connection successful'
-    
-    UPDATE tLSvr
-    SET 
-        gateway_ssh_last_test_result = @test_result,
-        gateway_ssh_last_test_time = GETUTCDATE(),
-        gateway_ssh_response_time_ms = @response_time_ms,
-        gateway_ssh_auth_method = @auth_method,
-        gateway_ssh_last_test_message = @test_message,
-        LSChkdt = GETUTCDATE()  -- 📍 최종 체크 완료 날짜
-    WHERE LSSN = @lssn
-    
-    INSERT INTO tLogSP (lsName, lsParam, lsRstVal)
-    VALUES ('pApiRemoteServerSSHTestbyAK', 'test_result:' + @test_result, '200')
-    
-    SELECT 200 AS RstVal, 'SSH 접속 테스트 완료' AS RstMsg
-END
+ALTER TABLE tLSvr ADD
+    gateway_ssh_last_test_result VARCHAR(20) NULL,     -- 'success' or 'failure'
+    gateway_ssh_last_test_time DATETIME NULL,          -- 테스트 실행 시각
+    gateway_ssh_response_time_ms INT NULL,             -- 응답 시간
+    gateway_ssh_auth_method VARCHAR(20) NULL,          -- 'key' or 'password'
+    gateway_ssh_last_test_message VARCHAR(500) NULL    -- 테스트 메시지
+GO
 ```
+
+**주의**: `LSChkdt` 필드는 이미 존재하며, **가장 최종 체크 완료 날짜**를 나타냅니다.
+
+---
 
 ### tLSvr 테이블 스키마 확장
 

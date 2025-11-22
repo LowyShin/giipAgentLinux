@@ -2,6 +2,44 @@
 
 > **상황**: giipAgent3.sh를 gateway 서버에서 실행했는데도 LSChkdt가 업데이트되지 않음  
 > **목적**: 문제의 원인을 찾기 위해 어디를 확인해야 하는지 단계별 안내
+> 
+> **🚨 현재 상황 업데이트 (2025-11-22)**:
+> - **문제**: lsvrdetail 페이지에서 LSChkdt가 표시 안 됨
+> - **상태**: 🔴 **미해결 - DB 로그 조사 진행 중**
+> - **최신 분석**: [LSChkdt_UPDATE_DIAGNOSIS_CURRENT_STATUS.md](./LSChkdt_UPDATE_DIAGNOSIS_CURRENT_STATUS.md) 참고
+> - **가능 원인 (확률)**:
+>   1. API 호출이 안 되고 있음 (70%)
+>   2. LSChkdt 컬럼이 없음 (10%)
+>   3. API 응답이 200이 아님 (15%)
+>   4. LSChkdt 업데이트 로직 오류 (5%)
+
+---
+
+## 🚨 전제 문서 & 필수 참고 (먼저 읽기!)
+
+### 📚 사양서 (필수)
+- **[GIIPAGENT3_SPECIFICATION.md](./GIIPAGENT3_SPECIFICATION.md)** ⭐⭐⭐ **핵심 사양서**
+  - giipAgent3.sh 모듈 구조 (로컬 파일이 아님!)
+  - Gateway vs 리모트 서버 정의 (critical!)
+  - 로깅 포인트 #5.1-#5.13 정의
+  - **KVS 로깅 규칙 - 모든 로그는 DB에 저장됨!**
+
+### 📖 에러 로깅 & 진단 가이드 (필수)
+- **[ERROR_LOG_WORKFLOW.md](../../giipdb/docs/ERROR_LOG_WORKFLOW.md)** ⭐⭐ **에러 분석 워크플로우**
+  - 에러 분석 5단계 방법론
+  - **표준 디버깅 3곳: tLogSP, ErrorLogs, tKVS 테이블**
+  - 문제 진단 순서
+- **[ERROR_QUICK_REFERENCE.md](../../giipdb/docs/ERROR_QUICK_REFERENCE.md)** - 자주 발생하는 에러
+- **[ERRORLOG_RAW_IMPLEMENTATION.md](../../giipdb/docs/ERRORLOG_RAW_IMPLEMENTATION.md)** - Raw 에러 로깅 표준
+
+### 🔍 관련 진단 문서
+- **[LSChkdt_UPDATE_DIAGNOSIS_CURRENT_STATUS.md](./LSChkdt_UPDATE_DIAGNOSIS_CURRENT_STATUS.md)** ⭐ **현재 상황 분석**
+- **[REMOTE_SERVER_SSH_TEST_UPDATE_SPEC.md](./REMOTE_SERVER_SSH_TEST_UPDATE_SPEC.md)** - API 사양서
+- **[REMOTE_SERVER_SSH_TEST_DETAILED_SPEC.md](./REMOTE_SERVER_SSH_TEST_DETAILED_SPEC.md)** - 상세 구현 명세
+
+### 🛠️ DB 로그 조사 표준 방법
+- **[STANDARD_WORK_PROMPT.md](../../giipdb/docs/STANDARD_WORK_PROMPT.md)** Line 220-280 - 표준 디버깅 3곳
+- **[DEBUG_LOGGING_GUIDE.md](../../giipdb/docs/DEBUG_LOGGING_GUIDE.md)** - 자동 로깅 방법론
 
 ---
 
@@ -24,13 +62,13 @@
     ↓ (예) → 5️⃣
     ↓ (아니오) → [원인 4] API 실패 또는 에러
     
-5️⃣  SQL Server의 pApiGatewayServerPutbyAK SP가 실행됐는가?
+5️⃣  SQL Server의 pApiRemoteServerSSHTestbyAK SP가 실행됐는가?
     ↓ (예) → 6️⃣
     ↓ (아니오) → [원인 5] SP 미실행
     
 6️⃣  LSChkdt가 업데이트됐는가?
     ✅ YES → 완료
-    ❌ NO → [원인 6] LSChkdt 컬럼 없음 또는 업데이트 로직 안 탐
+    ❌ NO → [원인 6] LSChkdt 컬럼 없음 또는 업데이트 로직 오류
 ```
 
 ---

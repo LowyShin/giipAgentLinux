@@ -6,6 +6,33 @@
 
 ---
 
+## 🚨 전제 문서 & 필수 참고 (먼저 읽기!)
+
+### 📚 사양서 (필수)
+- **[GIIPAGENT3_SPECIFICATION.md](./GIIPAGENT3_SPECIFICATION.md)** ⭐⭐⭐ **핵심 사양서**
+  - giipAgent3.sh 모듈 구조
+  - Gateway vs 리모트 서버 정의 (critical!)
+  - 로깅 포인트 #5.1-#5.13 정의
+  - **KVS 로깅 규칙 - 모든 로그는 DB에 저장됨!**
+
+### 📖 에러 로깅 & 진단 가이드 (필수)
+- **[ERROR_LOG_WORKFLOW.md](../../giipdb/docs/ERROR_LOG_WORKFLOW.md)** ⭐⭐ **에러 분석 워크플로우**
+  - 에러 분석 5단계 방법론
+  - **표준 디버깅 3곳: tLogSP, ErrorLogs, tKVS 테이블**
+  - SP 실행 로그 조회 방법
+- **[ERROR_QUICK_REFERENCE.md](../../giipdb/docs/ERROR_QUICK_REFERENCE.md)** - 자주 발생하는 에러
+
+### 🔍 관련 진단 문서
+- **[LSChkdt_UPDATE_DIAGNOSIS_CURRENT_STATUS.md](./LSChkdt_UPDATE_DIAGNOSIS_CURRENT_STATUS.md)** ⭐ **현재 상황 분석 (2025-11-22)**
+- **[LSChkdt_UPDATE_DIAGNOSIS.md](./LSChkdt_UPDATE_DIAGNOSIS.md)** - 6가지 원인 상세 분석
+- **[REMOTE_SERVER_SSH_TEST_DETAILED_SPEC.md](./REMOTE_SERVER_SSH_TEST_DETAILED_SPEC.md)** - 상세 구현 명세
+
+### 🛠️ DB 로그 조사 표준 방법
+- **[STANDARD_WORK_PROMPT.md](../../giipdb/docs/STANDARD_WORK_PROMPT.md)** Line 220-280 - 표준 디버깅 3곳 (tLogSP, ErrorLogs, tKVS)
+- **[DEBUG_LOGGING_GUIDE.md](../../giipdb/docs/DEBUG_LOGGING_GUIDE.md)** - 자동 로깅 방법론
+
+---
+
 ## 📋 목차 & 관련 문서
 
 ### 📚 메인 문서 (이 파일)
@@ -48,6 +75,13 @@
 - 자동 로깅 방법론
 - debugLogger 패턴
 - PowerShell 디버깅
+
+#### 6️⃣ **🚨 [LSChkdt_UPDATE_DIAGNOSIS_CURRENT_STATUS.md](./LSChkdt_UPDATE_DIAGNOSIS_CURRENT_STATUS.md)** (신규)
+- **현재 상황 분석 (2025-11-22)**
+- **문제**: lsvrdetail 페이지에서 LSChkdt가 표시 안 됨
+- **원인 가설**: API 호출 미실행 (70%), LSChkdt 컬럼 부재 (10%), API 응답 에러 (15%)
+- **로깅 포인트별 진단 체크리스트**: Phase 1-4 확인 방법
+- **다음 단계**: 직접 확인할 SQL 쿼리 및 스크립트 명령어 제시
 
 #### 6️⃣ [TLOGSP_LOGGING_GUIDE.md](../../giipdb/docs/TLOGSP_LOGGING_GUIDE.md)
 - SP 로깅 규칙

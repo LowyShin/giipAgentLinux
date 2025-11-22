@@ -333,17 +333,56 @@ process_gateway_servers() {
 	local logdt=$(date '+%Y%m%d%H%M%S')
 	echo "[${logdt}] [Gateway] Starting server processing cycle..." >> $LogFileName
 	
+	# 🔴 [로깅 포인트 #5.5-JSON-DEBUG] 서버 목록 파일 내용 확인
+	echo "[gateway.sh] 🟢 [5.5-JSON-DEBUG] 파일 내용 (첫 200자): $(head -c 200 "$server_list_file"), timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+	
+	# 🔴 [로깅 포인트 #5.5-GREP-TEST] grep 정규식 테스트
+	local grep_result=$(cat "$server_list_file" | grep -o '{[^}]*}')
+	local grep_count=$(echo "$grep_result" | grep -c '^')
+	echo "[gateway.sh] 🟢 [5.5-GREP-TEST] grep -o '{[^}]*}' 결과: ${grep_count}개 매칭 (파일 크기: $(wc -c < "$server_list_file")B), timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+	
+	# 🔴 [로깅 포인트 #5.5-GREP-WARN] 만약 grep이 0개면 경고
+	if [ "$grep_count" -eq 0 ]; then
+		echo "[gateway.sh] ⚠️  [5.5-GREP-WARN] grep 0개 매칭 발생 - JSON이 multiline 형식일 가능성! (파일 내용: $(cat "$server_list_file" | head -c 100)...), timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+	fi
+	
 	# Parse JSON and process each server
-	cat "$server_list_file" | grep -o '{[^}]*}' | while read -r server_json; do
-		hostname=$(echo "$server_json" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		lssn=$(echo "$server_json" | grep -o '"lssn"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-		ssh_host=$(echo "$server_json" | grep -o '"ssh_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		ssh_user=$(echo "$server_json" | grep -o '"ssh_user"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		ssh_port=$(echo "$server_json" | grep -o '"ssh_port"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-		ssh_key_path=$(echo "$server_json" | grep -o '"ssh_key_path"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		ssh_password=$(echo "$server_json" | grep -o '"ssh_password"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		os_info=$(echo "$server_json" | grep -o '"os_info"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		enabled=$(echo "$server_json" | grep -o '"enabled"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
+	# Fix: Use jq for robust JSON parsing instead of grep (handles multiline JSON)
+	# Fallback: Use grep if jq not available
+	if command -v jq &> /dev/null; then
+		# 🔴 [로깅 포인트 #5.5-JQ-USED] jq 사용 로깅
+		echo "[gateway.sh] 🟢 [5.5-JQ-USED] jq로 JSON 파싱 시작, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+		
+		# ✅ jq 사용 (권장)
+		jq -r '.data[]? // .[]? // .' "$server_list_file" 2>/dev/null | while read -r server_json; do
+			[[ -z "$server_json" || "$server_json" == "{}" ]] && continue
+			
+			hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null)
+			lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null)
+			ssh_host=$(echo "$server_json" | jq -r '.ssh_host // empty' 2>/dev/null)
+			ssh_user=$(echo "$server_json" | jq -r '.ssh_user // empty' 2>/dev/null)
+			ssh_port=$(echo "$server_json" | jq -r '.ssh_port // empty' 2>/dev/null)
+			ssh_key_path=$(echo "$server_json" | jq -r '.ssh_key_path // empty' 2>/dev/null)
+			ssh_password=$(echo "$server_json" | jq -r '.ssh_password // empty' 2>/dev/null)
+			os_info=$(echo "$server_json" | jq -r '.os_info // empty' 2>/dev/null)
+			enabled=$(echo "$server_json" | jq -r '.enabled // 1' 2>/dev/null)
+	else
+		# 🔴 [로깅 포인트 #5.5-GREP-FALLBACK] grep fallback 사용 로깅
+		echo "[gateway.sh] 🟢 [5.5-GREP-FALLBACK] jq 없음 - grep fallback 사용 (tr -d '\n' + sed), timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+		
+		# ✅ Fallback: grep (jq 없을 때)
+		# 먼저 JSON을 한 줄로 정규화
+		tr -d '\n' < "$server_list_file" | sed 's/}/}\n/g' | grep -o '{[^}]*}' | while read -r server_json; do
+			hostname=$(echo "$server_json" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+			lssn=$(echo "$server_json" | grep -o '"lssn"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
+			ssh_host=$(echo "$server_json" | grep -o '"ssh_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+			ssh_user=$(echo "$server_json" | grep -o '"ssh_user"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+			ssh_port=$(echo "$server_json" | grep -o '"ssh_port"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
+			ssh_key_path=$(echo "$server_json" | grep -o '"ssh_key_path"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+			ssh_password=$(echo "$server_json" | grep -o '"ssh_password"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+			os_info=$(echo "$server_json" | grep -o '"os_info"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+			enabled=$(echo "$server_json" | grep -o '"enabled"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
+	fi
 		
 		# Skip disabled servers
 		[[ -z $hostname ]] && continue
@@ -451,6 +490,7 @@ process_gateway_servers() {
 			fi
 		fi
 	done
+	fi  # End of if command jq check
 	
 	# Clean up
 	rm -f "$server_list_file"
