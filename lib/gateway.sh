@@ -513,6 +513,18 @@ process_single_server() {
 		else
 			gateway_log "🟢" "[5.8]" "Queue fetched successfully"
 			
+			# 🆕 Step 4.5: Log SSH connection attempt parameters BEFORE connecting
+			# Purpose: Record all connection parameters for debugging if connection fails
+			local ssh_attempt_params="{\"action\":\"ssh_attempt_before_connect\",\"hostname\":\"${hostname}\",\"lssn\":${server_lssn},\"ssh_host\":\"${ssh_host}\",\"ssh_port\":${ssh_port},\"ssh_user\":\"${ssh_user}\",\"ssh_key_path\":\"${ssh_key_path}\",\"has_password\":$([ -n \"$ssh_password\" ] && echo 'true' || echo 'false'),\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+			
+			gateway_log "🔵" "[5.8.5]" "SSH 접속 시도 파라미터 저장 시작"
+			if type kvs_put >/dev/null 2>&1; then
+				kvs_put "lssn" "${lssn:-0}" "ssh_connection_attempt" "$ssh_attempt_params" 2>/dev/null
+				gateway_log "🟢" "[5.8.5]" "SSH 접속 파라미터 tKVS 저장 완료"
+			else
+				gateway_log "⚠️ " "[5.8.5]" "kvs_put not available, skipping KVS logging"
+			fi
+			
 			# Step 5: Execute SSH
 			gateway_log "🟢" "[5.9]" "SSH attempt to ${ssh_host}:${ssh_port}"
 			execute_remote_command "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$tmpfile" "$server_lssn" "$hostname" >> $LogFileName
