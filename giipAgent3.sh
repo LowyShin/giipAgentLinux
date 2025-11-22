@@ -48,7 +48,7 @@ if [ $? -ne 0 ]; then
 fi
 
 # 🔴 [로깅 포인트 #5.1] Agent 시작
-echo "[giipAgent3.sh] 🟢 [5.1] Agent 시작: version=${sv}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')"
+echo "[giipAgent3.sh] 🟢 [5.1] Agent 시작: version=${sv}"
 
 # ============================================================================
 # Fetch Server Configuration from DB (is_gateway auto-detection)
@@ -137,7 +137,7 @@ if [ -f "$config_tmpfile" ]; then
 		echo "✅ DB config loaded: is_gateway=${gateway_mode}"
 		
 		# 🔴 [로깅 포인트 #5.2] 설정 로드 완료
-		echo "[giipAgent3.sh] 🟢 [5.2] 설정 로드 완료: lssn=${lssn}, hostname=${hn}, is_gateway=${gateway_mode}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')"
+		echo "[giipAgent3.sh] 🟢 [5.2] 설정 로드 완료: lssn=${lssn}, hostname=${hn}, is_gateway=${gateway_mode}"
 		
 		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"source\":\"db_api\"}"
 	else
@@ -223,7 +223,7 @@ if [ "${gateway_mode}" = "1" ]; then
 	# ========================================================================
 	
 	# 🔴 [로깅 포인트 #5.3] Gateway 모드 감지 및 초기화
-	echo "[giipAgent3.sh] 🟢 [5.3] Gateway 모드 감지 및 초기화: lssn=${lssn}, gateway_mode=1, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')"
+	echo "[giipAgent3.sh] 🟢 [5.3] Gateway 모드 감지 및 초기화: lssn=${lssn}, gateway_mode=1"
 	
 	log_message "INFO" "Running in GATEWAY MODE"
 	
@@ -232,7 +232,7 @@ if [ "${gateway_mode}" = "1" ]; then
 	. "${LIB_DIR}/gateway.sh"
 	
 	# Initialize Gateway
-	startup_status="{\"status\":\"started\",\"version\":\"${sv}\",\"lssn\":${lssn},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"mode\":\"gateway\",\"is_gateway\":1}"
+	startup_status="{\"status\":\"started\",\"version\":\"${sv}\",\"lssn\":${lssn},\"mode\":\"gateway\",\"is_gateway\":1}"
 	save_gateway_status "startup" "$startup_status"
 	
 	init_details="{\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"pid\":$$,\"is_gateway\":1,\"git_commit\":\"${GIT_COMMIT}\",\"file_modified\":\"${FILE_MODIFIED}\",\"script_path\":\"${BASH_SOURCE[0]}\"}"
