@@ -254,10 +254,21 @@ if [ "${gateway_mode}" = "1" ]; then
 	# Gateway main loop (run once per execution, cron will re-run)
 	log_message "INFO" "Starting Gateway cycle..."
 	
+	# 🔴 DEBUG: process_gateway_servers 호출 직전
+	echo "[giipAgent3.sh] 🔵 About to call process_gateway_servers() now" >&2
+	
 	# Process gateway servers (query DB each cycle)
 	# Capture stderr output and log to tKVS
-	gateway_stderr_log=$(process_gateway_servers 2>&1)
+	# Use temp file to avoid subshell issues with stderr capture
+	local gw_temp_log="/tmp/gateway_stderr_$$.log"
+	process_gateway_servers > /dev/null 2> "$gw_temp_log"
 	process_gw_result=$?
+	gateway_stderr_log=$(cat "$gw_temp_log" 2>/dev/null)
+	rm -f "$gw_temp_log"
+	
+	# 🔴 DEBUG: process_gateway_servers 반환 후
+	echo "[giipAgent3.sh] 🔵 process_gateway_servers() returned with code: $process_gw_result" >&2
+	echo "[giipAgent3.sh] 🔵 Captured stderr lines: $(echo "$gateway_stderr_log" | wc -l)" >&2
 	
 	# Log gateway operation details to tKVS for visibility
 	if [ -n "$gateway_stderr_log" ]; then
