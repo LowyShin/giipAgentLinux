@@ -262,7 +262,19 @@ if [ "${gateway_mode}" = "1" ]; then
 	log_message "INFO" "Starting Gateway cycle..."
 	
 	# Process gateway servers (query DB each cycle)
-	process_gateway_servers
+	# Capture stderr output and log to tKVS
+	gateway_stderr_log=$(process_gateway_servers 2>&1)
+	process_gw_result=$?
+	
+	# Log gateway operation details to tKVS for visibility
+	if [ -n "$gateway_stderr_log" ]; then
+		# Parse stderr for key information
+		gateway_servers_found=$(echo "$gateway_stderr_log" | grep -c "\[5\.[0-9]*\]")
+		gateway_errors=$(echo "$gateway_stderr_log" | grep -c "❌")
+		gateway_success=$(echo "$gateway_stderr_log" | grep -c "🟢")
+		
+		kvs_put "lssn" "${lssn}" "gateway_cycle_log" "{\"result\":\"${process_gw_result}\",\"log_entries\":${gateway_servers_found},\"successes\":${gateway_success},\"errors\":${gateway_errors},\"full_log\":\"$(echo "$gateway_stderr_log" | tr '\n' '|' | head -c 1000)\"}"
+	fi
 	
 	# Check managed databases (tManagedDatabase)
 	log_message "INFO" "Checking managed databases..."
