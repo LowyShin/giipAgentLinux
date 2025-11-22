@@ -31,7 +31,7 @@ report_ssh_test_result() {
 	local gateway_lssn=$2
 	
 	# 🔴 [로깅 포인트 #6.1] SSH 테스트 결과 API 호출 시작
-	echo "[remote_ssh_test.sh] 🟢 [6.1] SSH 테스트 결과 API 호출 시작: lssn=${lssn}, gateway_lssn=${gateway_lssn}, test_type=ssh, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+	echo "[remote_ssh_test.sh] 🟢 [6.1] SSH 테스트 결과 API 호출 시작: lssn=${lssn}, gateway_lssn=${gateway_lssn}, test_type=ssh" >&2
 	
 	# Build API call per REMOTE_SERVER_SSH_TEST_DETAILED_SPEC.md
 	local api_url="${apiaddrv2}"
@@ -62,43 +62,41 @@ report_ssh_test_result() {
 		
 		case "$api_rstval" in
 			"200")
-				# 🔴 [로깅 포인트 #6.2] SSH 테스트 결과 API 호출 성공 (LSChkdt 업데이트 완료)
-				echo "[remote_ssh_test.sh] 🟢 [6.2] SSH 테스트 결과 API 호출 성공: lssn=${lssn}, gateway_lssn=${gateway_lssn}, rstval=${api_rstval}, message='SSH 접속 테스트 성공', timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
-				
-				# Log to KVS
+			# 🔴 [로깅 포인트 #6.2] SSH 테스트 결과 API 호출 성공 (LSChkdt 업데이트 완료)
+			echo "[remote_ssh_test.sh] 🟢 [6.2] SSH 테스트 결과 API 호출 성공: lssn=${lssn}, gateway_lssn=${gateway_lssn}, rstval=${api_rstval}, message='SSH 접속 테스트 성공'" >&2				# Log to KVS
 				if type kvs_put >/dev/null 2>&1; then
 					kvs_put "lssn" "${lssn}" "remote_ssh_test_api_success" "{\"gateway_lssn\":${gateway_lssn},\"test_type\":\"ssh\",\"rstval\":\"${api_rstval}\"}"
 					
-					# 🔴 [로깅 포인트 #6.4] SSH 테스트 결과 KVS 저장 성공
-					echo "[remote_ssh_test.sh] 🟢 [6.4] SSH 테스트 결과 KVS 저장 성공: lssn=${lssn}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+				# 🔴 [로깅 포인트 #6.4] SSH 테스트 결과 KVS 저장 성공
+				echo "[remote_ssh_test.sh] 🟢 [6.4] SSH 테스트 결과 KVS 저장 성공: lssn=${lssn}" >&2
 				fi
 				
 				result=0
 				;;
 			"401")
-				# 🔴 [로깅 포인트 #6.3] 인증 실패 (Secret Key 불일치)
-				echo "[remote_ssh_test.sh] ❌ [6.3] SSH 테스트 API 인증 실패: lssn=${lssn}, gateway_lssn=${gateway_lssn}, rstval=${api_rstval}, error='Secret Key 불일치', timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+			# 🔴 [로깅 포인트 #6.3] 인증 실패 (Secret Key 불일치)
+			echo "[remote_ssh_test.sh] ❌ [6.3] SSH 테스트 API 인증 실패: lssn=${lssn}, gateway_lssn=${gateway_lssn}, rstval=${api_rstval}, error='Secret Key 불일치'" >&2
 				result=1
 				;;
 			"404")
-				# 🔴 [로깅 포인트 #6.3] 리모트 서버를 찾을 수 없음
-				echo "[remote_ssh_test.sh] ❌ [6.3] SSH 테스트 API 서버 오류: lssn=${lssn}, gateway_lssn=${gateway_lssn}, rstval=${api_rstval}, error='리모트 서버를 찾을 수 없음', timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+			# 🔴 [로깅 포인트 #6.3] 리모트 서버를 찾을 수 없음
+			echo "[remote_ssh_test.sh] ❌ [6.3] SSH 테스트 API 서버 오류: lssn=${lssn}, gateway_lssn=${gateway_lssn}, rstval=${api_rstval}, error='리모트 서버를 찾을 수 없음'" >&2
 				result=1
 				;;
 			"422")
-				# 🔴 [로깅 포인트 #6.3] SSH 접속 테스트 실패 (타임아웃, 거부 등)
-				echo "[remote_ssh_test.sh] ❌ [6.3] SSH 테스트 API SSH 접속 실패: lssn=${lssn}, gateway_lssn=${gateway_lssn}, rstval=${api_rstval}, error='Connection timeout or refused', timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+			# 🔴 [로깅 포인트 #6.3] SSH 접속 테스트 실패 (타임아웃, 거부 등)
+			echo "[remote_ssh_test.sh] ❌ [6.3] SSH 테스트 API SSH 접속 실패: lssn=${lssn}, gateway_lssn=${gateway_lssn}, rstval=${api_rstval}, error='Connection timeout or refused'" >&2
 				result=1
 				;;
 			*)
-				# 🔴 [로깅 포인트 #6.3] 기타 API 오류
-				echo "[remote_ssh_test.sh] ❌ [6.3] SSH 테스트 API 호출 실패: lssn=${lssn}, gateway_lssn=${gateway_lssn}, rstval=${api_rstval}, response='${api_data}', timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+			# 🔴 [로깅 포인트 #6.3] 기타 API 오류
+			echo "[remote_ssh_test.sh] ❌ [6.3] SSH 테스트 API 호출 실패: lssn=${lssn}, gateway_lssn=${gateway_lssn}, rstval=${api_rstval}, response='${api_data}'" >&2
 				result=1
 				;;
 		esac
 	else
 		# 🔴 [로깅 포인트 #6.3] SSH 테스트 결과 API 응답 없음
-		echo "[remote_ssh_test.sh] ❌ [6.3] SSH 테스트 결과 API 응답 없음: lssn=${lssn}, gateway_lssn=${gateway_lssn}, error='No API response', timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+		echo "[remote_ssh_test.sh] ❌ [6.3] SSH 테스트 결과 API 응답 없음: lssn=${lssn}, gateway_lssn=${gateway_lssn}, error='No API response'" >&2
 		
 		# Log to KVS
 		if type kvs_put >/dev/null 2>&1; then

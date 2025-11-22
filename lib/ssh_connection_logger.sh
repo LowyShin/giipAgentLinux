@@ -33,7 +33,7 @@ log_ssh_attempt() {
 	fi
 	
 	# Build connection attempt details JSON
-	local connection_attempt="{\"target_host\":\"${remote_host}\",\"target_port\":${remote_port},\"target_user\":\"${remote_user}\",\"target_lssn\":${remote_lssn},\"target_hostname\":\"${hostname}\",\"auth_method\":\"${auth_method}\",\"status\":\"attempting\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+	local connection_attempt="{\"target_host\":\"${remote_host}\",\"target_port\":${remote_port},\"target_user\":\"${remote_user}\",\"target_lssn\":${remote_lssn},\"target_hostname\":\"${hostname}\",\"auth_method\":\"${auth_method}\",\"status\":\"attempting\"}"
 	
 	# Save to KVS (requires save_execution_log from kvs.sh)
 	if type save_execution_log >/dev/null 2>&1; then
@@ -81,7 +81,7 @@ log_ssh_result() {
 	fi
 	
 	# Build connection result details JSON
-	local connection_result="{\"target_host\":\"${remote_host}\",\"target_port\":${remote_port},\"target_lssn\":${remote_lssn},\"target_hostname\":\"${hostname}\",\"exit_code\":${exit_code},\"status\":\"${status}\",\"duration_seconds\":${duration_seconds},\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+	local connection_result="{\"target_host\":\"${remote_host}\",\"target_port\":${remote_port},\"target_lssn\":${remote_lssn},\"target_hostname\":\"${hostname}\",\"exit_code\":${exit_code},\"status\":\"${status}\",\"duration_seconds\":${duration_seconds}}"
 	
 	# Save to KVS
 	if type save_execution_log >/dev/null 2>&1; then

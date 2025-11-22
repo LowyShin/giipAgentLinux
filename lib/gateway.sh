@@ -49,14 +49,13 @@ gateway_log() {
 	local point="$2"
 	local message="$3"
 	local extra_json="${4:-}"
-	local timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')
 	
 	# Log to stderr (for console visibility and LogFileName)
-	echo "[gateway.sh] ${emoji} ${point} ${message}: lssn=${lssn:-unknown}, timestamp=${timestamp}" >&2
+	echo "[gateway.sh] ${emoji} ${point} ${message}: lssn=${lssn:-unknown}" >&2
 	
-	# Log to tKVS - point and timestamp only (to avoid JSON escaping issues)
+	# Log to tKVS - point only (timestamp will be set by DB with getdate())
 	# Use pure JSON object as per kvs.sh requirements
-	local json_payload="{\"event_type\":\"gateway_operation\",\"point\":\"${point}\",\"timestamp\":\"${timestamp}\"}"
+	local json_payload="{\"event_type\":\"gateway_operation\",\"point\":\"${point}\"}"
 	
 	# Only append extra_json if provided (it must be valid JSON fragment)
 	if [ -n "$extra_json" ]; then
@@ -458,7 +457,7 @@ process_single_server() {
 	
 	# 🆕 Step 1.5: Log extracted parameters to tKVS BEFORE validation
 	# Purpose: Record all extracted parameters for debugging validation failures
-	local extract_log_params="{\"action\":\"server_params_extracted\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"server_params\":${server_params}}"
+	local extract_log_params="{\"action\":\"server_params_extracted\",\"server_params\":${server_params}}"
 	if type kvs_put >/dev/null 2>&1; then
 		kvs_put "lssn" "${global_lssn:-0}" "gateway_server_extract" "$extract_log_params" 2>/dev/null
 		gateway_log "🟢" "[5.5.1.5]" "Extracted params logged to tKVS"
@@ -472,7 +471,7 @@ process_single_server() {
 		gateway_log "⚠️ " "[5.5.2-DEBUG-FAIL]" "validate 실패: hostname='$hostname', server_params='$server_params'"
 		
 		# 🆕 Log validation failure to tKVS
-		local validate_fail_log="{\"action\":\"validation_failed\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"hostname\":\"${hostname}\",\"server_params\":${server_params}}"
+		local validate_fail_log="{\"action\":\"validation_failed\",\"hostname\":\"${hostname}\",\"server_params\":${server_params}}"
 		if type kvs_put >/dev/null 2>&1; then
 			kvs_put "lssn" "${global_lssn:-0}" "gateway_validation_failure" "$validate_fail_log" 2>/dev/null
 		fi
@@ -521,7 +520,7 @@ process_single_server() {
 			
 			# 🆕 Step 4.5: Log SSH connection attempt parameters BEFORE connecting
 			# Purpose: Record all connection parameters for debugging if connection fails
-			local ssh_attempt_params="{\"action\":\"ssh_attempt_before_connect\",\"hostname\":\"${hostname}\",\"lssn\":${server_lssn},\"ssh_host\":\"${ssh_host}\",\"ssh_port\":${ssh_port},\"ssh_user\":\"${ssh_user}\",\"ssh_key_path\":\"${ssh_key_path}\",\"has_password\":$([ -n \"$ssh_password\" ] && echo 'true' || echo 'false'),\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+			local ssh_attempt_params="{\"action\":\"ssh_attempt_before_connect\",\"hostname\":\"${hostname}\",\"lssn\":${server_lssn},\"ssh_host\":\"${ssh_host}\",\"ssh_port\":${ssh_port},\"ssh_user\":\"${ssh_user}\",\"ssh_key_path\":\"${ssh_key_path}\",\"has_password\":$([ -n \"$ssh_password\" ] && echo 'true' || echo 'false')}"
 			
 			gateway_log "🔵" "[5.8.5]" "SSH 접속 시도 파라미터 저장 시작"
 			if type kvs_put >/dev/null 2>&1; then
@@ -674,7 +673,7 @@ process_gateway_servers() {
 	
 	# 🔴 [로깅 포인트 #5.13] 실행 로그 저장
 	if type save_execution_log >/dev/null 2>&1; then
-		local cycle_status="{\"status\":\"completed\",\"cycle_timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"lssn\":${lssn}}"
+		local cycle_status="{\"status\":\"completed\",\"lssn\":${lssn}}"
 		save_execution_log "gateway_cycle_end" "$cycle_status"
 		gateway_log "🟢" "[5.13]" "실행 로그 저장 완료" "\"status\":\"success\""
 	fi

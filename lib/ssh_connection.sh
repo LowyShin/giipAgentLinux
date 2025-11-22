@@ -52,7 +52,7 @@ test_ssh_connection() {
 	fi
 	
 	# 연결 시도 로그
-	echo "[ssh_connection.sh] 🟢 SSH 연결 테스트 시작: host=${remote_host}, port=${remote_port}, user=${remote_user}, auth=${auth_method}, lssn=${remote_lssn}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+	echo "[ssh_connection.sh] 🟢 SSH 연결 테스트 시작: host=${remote_host}, port=${remote_port}, user=${remote_user}, auth=${auth_method}, lssn=${remote_lssn}" >&2
 	
 	local exit_code=1
 	
@@ -62,7 +62,7 @@ test_ssh_connection() {
 		if ! command -v sshpass &> /dev/null; then
 			echo "[ssh_connection.sh] ❌ sshpass 명령 미설치: host=${remote_host}, lssn=${remote_lssn}" >&2
 			local duration=$(($(date +%s) - start_time))
-			echo "[ssh_connection.sh] 연결 실패 (sshpass 미설치): duration=${duration}초, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+			echo "[ssh_connection.sh] 연결 실패 (sshpass 미설치): duration=${duration}초" >&2
 			return 127
 		fi
 		
@@ -87,7 +87,7 @@ test_ssh_connection() {
 	else
 		echo "[ssh_connection.sh] ❌ 사용 가능한 인증 방식 없음: host=${remote_host}, lssn=${remote_lssn}" >&2
 		local duration=$(($(date +%s) - start_time))
-		echo "[ssh_connection.sh] 연결 실패 (인증 방식 없음): duration=${duration}초, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+		echo "[ssh_connection.sh] 연결 실패 (인증 방식 없음): duration=${duration}초" >&2
 		return 125
 	fi
 	
@@ -96,9 +96,9 @@ test_ssh_connection() {
 	
 	# 결과 로깅
 	if [ $exit_code -eq 0 ]; then
-		echo "[ssh_connection.sh] 🟢 SSH 연결 성공: host=${remote_host}:${remote_port}, user=${remote_user}, auth=${auth_method}, duration=${duration}초, lssn=${remote_lssn}, hostname=${hostname}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+		echo "[ssh_connection.sh] 🟢 SSH 연결 성공: host=${remote_host}:${remote_port}, user=${remote_user}, auth=${auth_method}, duration=${duration}초, lssn=${remote_lssn}, hostname=${hostname}" >&2
 	else
-		echo "[ssh_connection.sh] ❌ SSH 연결 실패: host=${remote_host}:${remote_port}, user=${remote_user}, auth=${auth_method}, exit_code=${exit_code}, duration=${duration}초, lssn=${remote_lssn}, hostname=${hostname}, timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')" >&2
+		echo "[ssh_connection.sh] ❌ SSH 연결 실패: host=${remote_host}:${remote_port}, user=${remote_user}, auth=${auth_method}, exit_code=${exit_code}, duration=${duration}초, lssn=${remote_lssn}, hostname=${hostname}" >&2
 	fi
 	
 	return $exit_code

@@ -491,7 +491,7 @@ print(' '.join(sorted(db_types)))
 		
 		# Log result to KVS (managed_db_check: health + performance only, NO slow_queries)
 		local kv_key="managed_db_check_${mdb_id}"
-		local kv_value="{\"mdb_id\":${mdb_id},\"db_name\":\"${db_name}\",\"db_type\":\"${db_type}\",\"check_status\":\"${check_status}\",\"check_message\":\"${check_message}\",\"check_time\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"response_time_ms\":${response_time},\"performance\":${performance_json}}"
+		local kv_value="{\"mdb_id\":${mdb_id},\"db_name\":\"${db_name}\",\"db_type\":\"${db_type}\",\"check_status\":\"${check_status}\",\"check_message\":\"${check_message}\",\"response_time_ms\":${response_time},\"performance\":${performance_json}}"
 		
 		save_execution_log "managed_db_check" "$kv_value" "$kv_key"
 		
