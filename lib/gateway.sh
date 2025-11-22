@@ -43,9 +43,9 @@ gateway_log() {
 	# Log to stderr (for console visibility)
 	echo "[gateway.sh] ${emoji} ${point} ${message}: lssn=${lssn:-unknown}, timestamp=${timestamp}" >&2
 	
-	# Log to tKVS (for persistent storage)
+	# Log to tKVS (for persistent storage) - use point only (avoid encoding issues with Korean text)
 	# Build JSON payload
-	local json_payload="{\"event_type\":\"gateway_operation\",\"point\":\"${point}\",\"message\":\"${message}\",\"timestamp\":\"${timestamp}\""
+	local json_payload="{\"event_type\":\"gateway_operation\",\"point\":\"${point}\",\"timestamp\":\"${timestamp}\""
 	
 	if [ -n "$extra_json" ]; then
 		# Append extra JSON data (must be valid JSON fragment)
@@ -358,13 +358,20 @@ get_remote_queue() {
 # Server Processing Sub-Functions (Refactored from process_gateway_servers)
 # ============================================================================
 
-# Function: Parse server JSON (handles both jq and grep fallback)
-# Returns: parsed server variables set globally
-parse_server_json() {
+# ============================================================================
+# Server Processing - Self-Contained Functions
+# Each function is INDEPENDENT and returns results, no global variable magic
+# ============================================================================
+
+# Function: Parse server JSON and return extracted values
+# Returns: JSON string with all server parameters
+# Usage: server_params=$(extract_server_params "$server_json")
+extract_server_params() {
 	local server_json="$1"
+	local hostname ssh_user ssh_host ssh_port ssh_key_path ssh_password os_info enabled lssn
 	
-	# Extract fields using jq if available, else grep
 	if command -v jq &> /dev/null; then
+		# jq method
 		hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null)
 		lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null)
 		ssh_host=$(echo "$server_json" | jq -r '.ssh_host // empty' 2>/dev/null)
@@ -375,7 +382,7 @@ parse_server_json() {
 		os_info=$(echo "$server_json" | jq -r '.os_info // empty' 2>/dev/null)
 		enabled=$(echo "$server_json" | jq -r '.enabled // 1' 2>/dev/null)
 	else
-		# Fallback: grep method
+		# grep fallback
 		hostname=$(echo "$server_json" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
 		lssn=$(echo "$server_json" | grep -o '"lssn"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
 		ssh_host=$(echo "$server_json" | grep -o '"ssh_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
@@ -386,151 +393,122 @@ parse_server_json() {
 		os_info=$(echo "$server_json" | grep -o '"os_info"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
 		enabled=$(echo "$server_json" | grep -o '"enabled"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
 	fi
+	
+	# Return as JSON string
+	echo "{\"hostname\":\"${hostname}\",\"lssn\":\"${lssn}\",\"ssh_host\":\"${ssh_host}\",\"ssh_user\":\"${ssh_user}\",\"ssh_port\":${ssh_port:-22},\"ssh_key_path\":\"${ssh_key_path}\",\"ssh_password\":\"${ssh_password}\",\"os_info\":\"${os_info:-Linux}\",\"enabled\":${enabled:-1}}"
 }
 
-# Function: Validate and set server defaults
-# Usage: validate_server_params
+# Function: Validate server parameters
+# Returns: 0 if valid, 1 if should skip
+# Usage: if validate_server_params "$server_params"; then...
 validate_server_params() {
-	# Skip disabled servers
-	[[ -z $hostname ]] && return 1
+	local server_params="$1"
+	
+	# Check if hostname is empty
+	local hostname=$(echo "$server_params" | jq -r '.hostname // empty' 2>/dev/null || grep -o '"hostname":"[^"]*"' | sed 's/.*":"\([^"]*\)".*/\1/')
+	local enabled=$(echo "$server_params" | jq -r '.enabled // 1' 2>/dev/null || grep -o '"enabled":\([0-9]\)' | sed 's/.*:\([0-9]\).*/\1/')
+	
+	[[ -z "$hostname" ]] && return 1
 	[[ $enabled == "0" ]] && return 1
-	
-	# Set defaults
-	[ -z "$ssh_port" ] && ssh_port="22"
-	[ -z "$ssh_user" ] && ssh_user="root"
-	[ -z "$os_info" ] && os_info="Linux"
-	
 	return 0
 }
 
-# Function: Get remote queue and execute SSH command
-# Returns: 0 on success, 1 on failure or no queue
-execute_server_ssh() {
-	local tmpdir="$1"
-	local tmpfile="${tmpdir}/script_${lssn}.sh"
-	
-	# 🔴 [로깅 포인트 #5.7] SSH 테스트 시작
-	local auth_method=$([ -n "${ssh_password}" ] && echo "password" || echo "key")
-	gateway_log "🟢" "[5.7]" "SSH 테스트 시작" "\"auth_method\":\"${auth_method}\""
-	
-	# Get remote queue
-	get_remote_queue "$lssn" "$hostname" "$os_info" "$tmpfile"
-	
-	if [ ! -s "$tmpfile" ]; then
-		# 🔴 [로깅 포인트 #5.11] 큐 없음 (정상)
-		gateway_log "🟢" "[5.11]" "큐 없음 (정상)" "\"queue_available\":false"
-		
-		if type log_remote_execution >/dev/null 2>&1; then
-			log_remote_execution "success" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "false"
-		fi
-		rm -f "$tmpfile"
-		return 1
-	fi
-	
-	# Check for queue fetch error
-	local err_check=$(cat "$tmpfile" | grep "HTTP Error")
-	if [ -n "$err_check" ]; then
-		# 🔴 [로깅 포인트 #5.8-ERROR] 큐 조회 실패
-		gateway_log "❌" "[5.8-ERROR]" "큐 조회 실패" "\"error\":\"${err_check}\""
-		
-		if type log_remote_execution >/dev/null 2>&1; then
-			log_remote_execution "failed" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "false" "Queue fetch error: $err_check"
-		fi
-		rm -f "$tmpfile"
-		return 1
-	fi
-	
-	# 🔴 [로깅 포인트 #5.8] 큐 조회 성공
-	gateway_log "🟢" "[5.8]" "큐 조회 성공" "\"script_size\":$(wc -c < \"$tmpfile\")"
-	
-	# 🔴 [로깅 포인트 #5.9] SSH 연결 시도
-	gateway_log "🟢" "[5.9]" "SSH 연결 시도" "\"ssh_host\":\"${ssh_host}:${ssh_port}\",\"ssh_user\":\"${ssh_user}\""
-	
-	# Execute remote command
-	execute_remote_command "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$tmpfile" "$lssn" "$hostname" >> $LogFileName
-	local exec_result=$?
-	
-	# 🔴 [로깅 포인트 #5.10] SSH 연결 결과
-	if [ $exec_result -eq 0 ]; then
-		gateway_log "🟢" "[5.10]" "SSH 연결 성공" "\"exit_code\":${exec_result}"
-	else
-		gateway_log "❌" "[5.10-ERROR]" "SSH 연결 실패" "\"exit_code\":${exec_result}"
-	fi
-	
-	# Log execution result
-	if type log_remote_execution >/dev/null 2>&1; then
-		if [ $exec_result -eq 0 ]; then
-			log_remote_execution "success" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "true"
-		else
-			log_remote_execution "failed" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "true" "SSH execution failed (exit code: $exec_result)"
-		fi
-	fi
-	
-	rm -f "$tmpfile"
-	return $exec_result
-}
-
-# Function: Call RemoteServerSSHTest API to update lsChkdt
+# Function: Process single server - all-in-one handler
 # Returns: 0 on success, 1 on failure
-call_remote_test_api() {
-	# 🔴 [로깅 포인트 #5.10.1] RemoteServerSSHTest API 호출 시작
-	gateway_log "🟢" "[5.10.1]" "RemoteServerSSHTest API 호출 시작" "\"test_type\":\"ssh\""
-	
-	if type report_ssh_test_result >/dev/null 2>&1; then
-		report_ssh_test_result "$lssn" "$lssn"
-		local api_result=$?
-		
-		if [ $api_result -eq 0 ]; then
-			# 🔴 [로깅 포인트 #5.10.2] RemoteServerSSHTest API 호출 성공
-			gateway_log "🟢" "[5.10.2]" "RemoteServerSSHTest API 호출 성공" "\"rstval\":200"
-			return 0
-		else
-			# 🔴 [로깅 포인트 #5.10.3] RemoteServerSSHTest API 호출 실패
-			gateway_log "❌" "[5.10.3]" "RemoteServerSSHTest API 호출 실패" "\"api_result\":${api_result}"
-			return 1
-		fi
-	else
-		# 🔴 [로깅 포인트 #5.10.4] RemoteServerSSHTest 모듈 로드 실패
-		gateway_log "❌" "[5.10.4]" "RemoteServerSSHTest 모듈 로드 실패" "\"error\":\"report_ssh_test_result function not found\""
-		return 1
-	fi
-}
-
-# Function: Process single server (coordinating function)
-# Usage: process_single_server "server_json" "tmpdir"
+# Usage: process_single_server "$server_json" "$tmpdir"
 process_single_server() {
 	local server_json="$1"
 	local tmpdir="$2"
+	local global_lssn="${lssn}"  # Capture global lssn for logging
 	
 	# Skip empty objects
 	[[ -z "$server_json" || "$server_json" == "{}" ]] && return 0
 	
-	# Parse server JSON
-	parse_server_json "$server_json"
+	# Step 1: Extract parameters (returns JSON)
+	local server_params=$(extract_server_params "$server_json")
 	
-	# Validate and set defaults
-	if ! validate_server_params; then
+	# Step 2: Validate parameters
+	if ! validate_server_params "$server_params"; then
 		return 0
 	fi
 	
-	# 🔴 [로깅 포인트 #5.6] 서버 JSON 파싱 완료
-	gateway_log "🟢" "[5.6]" "서버 JSON 파싱 완료" "\"hostname\":\"${hostname}\",\"lssn\":${lssn},\"ssh_host\":\"${ssh_host}\",\"ssh_port\":${ssh_port}"
+	# Step 3: Extract individual values from params JSON
+	local hostname=$(echo "$server_params" | jq -r '.hostname' 2>/dev/null)
+	local server_lssn=$(echo "$server_params" | jq -r '.lssn' 2>/dev/null)
+	local ssh_host=$(echo "$server_params" | jq -r '.ssh_host' 2>/dev/null)
+	local ssh_user=$(echo "$server_params" | jq -r '.ssh_user' 2>/dev/null)
+	local ssh_port=$(echo "$server_params" | jq -r '.ssh_port' 2>/dev/null)
+	local ssh_key_path=$(echo "$server_params" | jq -r '.ssh_key_path' 2>/dev/null)
+	local ssh_password=$(echo "$server_params" | jq -r '.ssh_password' 2>/dev/null)
+	local os_info=$(echo "$server_params" | jq -r '.os_info' 2>/dev/null)
+	
+	# Log: Server parsing complete
+	gateway_log "🟢" "[5.6]" "Server parsed" "\"hostname\":\"${hostname}\",\"lssn\":${server_lssn}"
 	
 	local logdt=$(date '+%Y%m%d%H%M%S')
-	echo "[${logdt}] [Gateway] Processing: $hostname (LSSN:$lssn)" >> $LogFileName
+	echo "[${logdt}] [Gateway] Processing: $hostname (LSSN:$server_lssn)" >> $LogFileName
 	
 	# Log remote execution started
 	if type log_remote_execution >/dev/null 2>&1; then
-		log_remote_execution "started" "$hostname" "$lssn" "$ssh_host" "$ssh_port" "unknown"
+		log_remote_execution "started" "$hostname" "$server_lssn" "$ssh_host" "$ssh_port" "unknown"
 	fi
 	
-	# Execute SSH and call API
-	execute_server_ssh "$tmpdir"
-	local ssh_result=$?
+	# Step 4: Get remote queue
+	local tmpfile="${tmpdir}/script_${server_lssn}.sh"
+	get_remote_queue "$server_lssn" "$hostname" "$os_info" "$tmpfile"
 	
-	# Only call API if SSH execution succeeded
+	local ssh_result=1
+	if [ -s "$tmpfile" ]; then
+		# Check for errors
+		local err_check=$(cat "$tmpfile" | grep "HTTP Error")
+		if [ -n "$err_check" ]; then
+			gateway_log "❌" "[5.8-ERROR]" "Queue fetch failed" "\"error\":\"${err_check}\""
+			if type log_remote_execution >/dev/null 2>&1; then
+				log_remote_execution "failed" "$hostname" "$server_lssn" "$ssh_host" "$ssh_port" "false" "Queue fetch error"
+			fi
+		else
+			gateway_log "🟢" "[5.8]" "Queue fetched" "\"size\":$(wc -c < \"$tmpfile\")"
+			
+			# Step 5: Execute SSH
+			gateway_log "🟢" "[5.9]" "SSH attempt" "\"target\":\"${ssh_host}:${ssh_port}\""
+			execute_remote_command "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$tmpfile" "$server_lssn" "$hostname" >> $LogFileName
+			ssh_result=$?
+			
+			# Log result
+			if [ $ssh_result -eq 0 ]; then
+				gateway_log "🟢" "[5.10]" "SSH success" "\"code\":0"
+				if type log_remote_execution >/dev/null 2>&1; then
+					log_remote_execution "success" "$hostname" "$server_lssn" "$ssh_host" "$ssh_port" "true"
+				fi
+			else
+				gateway_log "❌" "[5.10]" "SSH failed" "\"code\":${ssh_result}"
+				if type log_remote_execution >/dev/null 2>&1; then
+					log_remote_execution "failed" "$hostname" "$server_lssn" "$ssh_host" "$ssh_port" "true" "SSH failed"
+				fi
+			fi
+		fi
+	else
+		gateway_log "🟢" "[5.11]" "No queue" "\"reason\":\"empty\""
+		if type log_remote_execution >/dev/null 2>&1; then
+			log_remote_execution "success" "$hostname" "$server_lssn" "$ssh_host" "$ssh_port" "false"
+		fi
+	fi
+	
+	rm -f "$tmpfile"
+	
+	# Step 6: Call RemoteServerSSHTest API (only if SSH succeeded)
 	if [ $ssh_result -eq 0 ]; then
-		call_remote_test_api
+		gateway_log "🟢" "[5.10.1]" "API call" "\"type\":\"RemoteServerSSHTest\""
+		if type report_ssh_test_result >/dev/null 2>&1; then
+			report_ssh_test_result "$server_lssn" "$global_lssn"
+			if [ $? -eq 0 ]; then
+				gateway_log "🟢" "[5.10.2]" "API success" "\"result\":200"
+			else
+				gateway_log "❌" "[5.10.3]" "API failed" "\"result\":error"
+			fi
+		else
+			gateway_log "❌" "[5.10.4]" "API module missing"
+		fi
 	fi
 	
 	return 0
@@ -541,32 +519,42 @@ process_single_server() {
 process_server_list() {
 	local server_list_file="$1"
 	local tmpdir="$2"
+	local server_count=0
 	
-	# 🔴 [로깅 포인트 #5.5-GREP-TEST] grep 정규식 테스트
-	local grep_result=$(cat "$server_list_file" | grep -o '{[^}]*}')
-	local grep_count=$(echo "$grep_result" | grep -c '^')
-	
-	if [ "$grep_count" -eq 0 ]; then
-		gateway_log "⚠️ " "[5.5-GREP-WARN]" "grep 0개 매칭 - multiline JSON 가능성" "\"matched_count\":0"
+	# 🔴 [로깅 포인트 #5.5-TEST] 서버 목록 파일 읽기 테스트
+	if ! [ -s "$server_list_file" ]; then
+		gateway_log "❌" "[5.5-TEST]" "서버 목록 파일이 비어있음" "\"file_size\":0"
+		return 1
 	fi
 	
-	# Choose parser: jq or grep fallback
+	# Choose parser method
 	if command -v jq &> /dev/null; then
 		# 🔴 [로깅 포인트 #5.5-JQ-USED] jq 사용
 		gateway_log "🟢" "[5.5-JQ-USED]" "jq로 JSON 파싱 시작"
 		
-		# Use jq for robust parsing
-		jq -r '.data[]? // .[]? // .' "$server_list_file" 2>/dev/null | while read -r server_json; do
+		# Use jq directly in loop - NO pipe to avoid subshell
+		while IFS= read -r server_json; do
+			[ -z "$server_json" ] && continue
 			process_single_server "$server_json" "$tmpdir"
-		done
+			((server_count++))
+		done < <(jq -r '.data[]? // .[]? // .' "$server_list_file" 2>/dev/null)
 	else
 		# 🔴 [로깅 포인트 #5.5-GREP-FALLBACK] grep fallback
 		gateway_log "🟢" "[5.5-GREP-FALLBACK]" "grep fallback 사용"
 		
-		# Normalize JSON to single line, then split by object
-		tr -d '\n' < "$server_list_file" | sed 's/}/}\n/g' | grep -o '{[^}]*}' | while read -r server_json; do
+		# Normalize JSON and process each server
+		while IFS= read -r server_json; do
+			[ -z "$server_json" ] && continue
 			process_single_server "$server_json" "$tmpdir"
-		done
+			((server_count++))
+		done < <(tr -d '\n' < "$server_list_file" | sed 's/}/}\n/g' | grep -o '{[^}]*}')
+	fi
+	
+	# Log result
+	if [ $server_count -gt 0 ]; then
+		gateway_log "🟢" "[5.5-PROCESSING]" "서버 처리 완료" "\"processed\":${server_count}"
+	else
+		gateway_log "⚠️ " "[5.5-NO-SERVERS]" "처리할 서버 없음" "\"count\":0"
 	fi
 }
 
@@ -645,10 +633,8 @@ export -f get_managed_databases
 export -f execute_remote_command
 export -f get_script_by_mssn
 export -f get_remote_queue
-export -f parse_server_json
+export -f extract_server_params
 export -f validate_server_params
-export -f execute_server_ssh
-export -f call_remote_test_api
 export -f process_single_server
 export -f process_server_list
 export -f process_gateway_servers
