@@ -464,6 +464,10 @@ process_single_server() {
 	# Step 2: Validate parameters
 	gateway_log "🔵" "[5.5.2-VALIDATE]" "validate_server_params 시작"
 	if ! validate_server_params "$server_params"; then
+		# 🔴 DEBUG: 왜 validate 실패했는지 상세 로그
+		local hostname=$(echo "$server_params" | jq -r '.hostname // empty' 2>/dev/null)
+		local enabled=$(echo "$server_params" | jq -r '.enabled // 1' 2>/dev/null)
+		gateway_log "⚠️ " "[5.5.2-DEBUG-FAIL]" "validate 실패: hostname='$hostname', enabled='$enabled', server_params='$server_params'"
 		gateway_log "⚠️ " "[5.5.2-SKIPPED]" "Server skipped (disabled or invalid)"
 		return 0
 	fi
@@ -575,6 +579,11 @@ process_server_list() {
 		gateway_log "🟢" "[5.5-GREP-FALLBACK]" "grep fallback 사용"
 		tr -d '\n' < "$server_list_file" | sed 's/}/}\n/g' | grep -o '{[^}]*}' > "$temp_servers_file"
 	fi
+	
+	# 🔴 DEBUG: temp_servers_file 내용 확인
+	local parsed_lines=$(wc -l < "$temp_servers_file")
+	gateway_log "🔵" "[5.5-PARSED-COUNT]" "파싱된 라인 수: $parsed_lines"
+	gateway_log "🔵" "[5.5-PARSED-FIRST]" "첫 번째 라인: $(head -1 "$temp_servers_file")"
 	
 	# Process each server from temp file (NOT in subshell)
 	if [ -s "$temp_servers_file" ]; then
