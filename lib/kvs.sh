@@ -5,6 +5,28 @@
 # Purpose: KVS (Key-Value Store) logging functions for execution tracking
 # Rule: Follow giipapi_rules.md - text contains parameter names only, jsondata contains actual values
 
+# ⚠️ ⚠️ ⚠️ CRITICAL - DO NOT MODIFY WITHOUT EXPLICIT AUTHORIZATION ⚠️ ⚠️ ⚠️
+# This library is used across the entire giipAgent system:
+#   - giipAgent3.sh (main agent)
+#   - check-process-flood.sh
+#   - collect-server-diagnostics.sh
+#   - collect-perfmon.sh
+#   - lib/gateway.sh
+#   - And many other scripts
+#
+# MODIFICATION RULE:
+# - DO NOT MODIFY kvs_put() or any function without EXPLICIT user authorization
+# - DO NOT CHANGE the JSON structure or API contract
+# - ANY CHANGE HERE AFFECTS THE ENTIRE SYSTEM
+# - Contact project owner BEFORE making any modifications
+#
+# Current API Contract (DO NOT BREAK):
+#   kvs_put "kType" "kKey" "kFactor" '{"json":"object"}'
+#   - kType: "lssn" (key type)
+#   - kKey: LSSN value (string)
+#   - kFactor: factor name (string) 
+#   - kValue: RAW JSON object (NOT escaped string)
+#
 # ============================================================================
 # KVS Execution Logging Functions
 # ============================================================================
@@ -112,8 +134,29 @@ save_execution_log() {
 }
 
 # Function: Save simple KVS key-value pair
+# ⚠️ ⚠️ ⚠️ CRITICAL FUNCTION - DO NOT MODIFY WITHOUT EXPLICIT AUTHORIZATION ⚠️ ⚠️ ⚠️
+# 
+# This function is used throughout the system. Any modification will break:
+#   - Gateway mode remote server processing
+#   - Performance monitoring
+#   - Server diagnostics collection
+#   - Process flood detection
+#   - And all other KVS logging
+#
+# DO NOT CHANGE:
+# - Function signature
+# - JSON structure or escaping method
+# - Parameter handling or API contract
+#
+# IF YOU ENCOUNTER ISSUES:
+# - DO NOT modify this function
+# - Check the CALLING CODE instead
+# - Verify that JSON is properly formed BEFORE calling kvs_put()
+# - Use debug logging to trace the problem
+#
 # Usage: kvs_put "kType" "kKey" "kFactor" "kValue_json"
 # Example: kvs_put "lssn" "71174" "test" '{"status":"ok"}'
+# CRITICAL: kValue MUST be a raw JSON object, not an escaped string
 kvs_put() {
 	local ktype=$1
 	local kkey=$2

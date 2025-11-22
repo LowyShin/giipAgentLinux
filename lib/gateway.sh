@@ -35,26 +35,35 @@ fi
 # Usage: gateway_log "🟢" "[5.4]" "Gateway 서버 목록 조회 시작" "additional_json_data"
 # Function: Gateway Operation Logging
 # Purpose: Log to both stderr (console) and tKVS with point tracking
-# Usage: gateway_log "emoji" "point_code" "message" [optional_details]
-# Example: gateway_log "🟢" "[5.6]" "Server processed" "hostname=server1"
+# Usage: gateway_log "emoji" "point_code" "message" "optional_json_fragment"
+# Example: gateway_log "🟢" "[5.6]" "Server processed" ""
+#
+# ⚠️ IMPORTANT: 
+# - This function calls kvs_put() which follows giipapi_rules.md
+# - The 4th parameter (optional_json_fragment) is appended as-is to JSON
+# - It should contain proper JSON fragments ONLY
+# - NO string escaping or variable substitution in this function
+# - If you need to log variable data, do it OUTSIDE this function as a separate kvs_put call
 gateway_log() {
 	local emoji="$1"
 	local point="$2"
 	local message="$3"
-	local details="${4:-}"  # Optional details (not included in JSON to avoid escaping issues)
+	local extra_json="${4:-}"
 	local timestamp=$(date '+%Y-%m-%d %H:%M:%S.%3N')
 	
-	# Log to stderr (for console visibility and log files)
-	if [ -n "$details" ]; then
-		echo "[gateway.sh] ${emoji} ${point} ${message}: ${details}" >&2
-	else
-		echo "[gateway.sh] ${emoji} ${point} ${message}" >&2
-	fi
+	# Log to stderr (for console visibility and LogFileName)
+	echo "[gateway.sh] ${emoji} ${point} ${message}: lssn=${lssn:-unknown}, timestamp=${timestamp}" >&2
 	
-	# Log to tKVS - store only essential info (point, timestamp)
-	# This avoids JSON escaping issues with variable content
+	# Log to tKVS - point and timestamp only (to avoid JSON escaping issues)
+	# Use pure JSON object as per kvs.sh requirements
 	local json_payload="{\"event_type\":\"gateway_operation\",\"point\":\"${point}\",\"timestamp\":\"${timestamp}\"}"
 	
+	# Only append extra_json if provided (it must be valid JSON fragment)
+	if [ -n "$extra_json" ]; then
+		json_payload="${json_payload%}},${extra_json}}"
+	fi
+	
+	# Call kvs_put with proper JSON object (NOT escaped string)
 	if type kvs_put >/dev/null 2>&1; then
 		kvs_put "lssn" "${lssn:-0}" "gateway_operation" "$json_payload" 2>/dev/null
 	fi
@@ -95,14 +104,17 @@ get_gateway_servers() {
 	local err_check=$(cat "$temp_file" | grep -i "rstval.*40[0-9]")
 	if [ -n "$err_check" ]; then
 		# 🔴 [로깅 포인트 #5.4-ERROR] API 에러 응답
-		gateway_log "❌" "[5.4-ERROR]" "Gateway 서버 목록 API 에러: ${err_check}"
+		gateway_log "❌" "[5.4-ERROR]" "Gateway 서버 목록 API 에러"
 		rm -f "$temp_file"
 		return 1
 	fi
 	
 	# 🔴 [로깅 포인트 #5.4-SUCCESS] 서버 목록 조회 성공
 	local server_count=$(cat "$temp_file" | grep -o '{[^}]*}' | wc -l)
-	gateway_log "🟢" "[5.4-SUCCESS]" "Gateway 서버 목록 조회 성공: count=${server_count}"
+	gateway_log "🟢" "[5.4-SUCCESS]" "Gateway 서버 목록 조회 성공"
+	
+	# 🔴 DEBUG: 다음 함수 호출 확인
+	gateway_log "🔵" "[5.4-RETURN]" "server_list_file 반환: $temp_file"
 	
 	echo "$temp_file"
 	return 0
@@ -431,11 +443,17 @@ process_single_server() {
 	local tmpdir="$2"
 	local global_lssn="${lssn}"  # Capture global lssn for logging
 	
+	# 🔴 DEBUG: 함수 진입 확인
+	gateway_log "🔵" "[5.5.0-ENTRY]" "process_single_server 호출됨"
+	
 	# Skip empty objects
 	[[ -z "$server_json" || "$server_json" == "{}" ]] && return 0
 	
 	# Step 1: Extract parameters (returns JSON)
 	local server_params=$(extract_server_params "$server_json")
+	
+	# 🔴 DEBUG: extract_server_params 반환값 확인
+	gateway_log "🔵" "[5.5.1-EXTRACT]" "extract_server_params 완료: length=$(echo -n "$server_params" | wc -c)"
 	
 	# Debug: Check if server_params is empty
 	if [ -z "$server_params" ]; then
@@ -444,10 +462,12 @@ process_single_server() {
 	fi
 	
 	# Step 2: Validate parameters
+	gateway_log "🔵" "[5.5.2-VALIDATE]" "validate_server_params 시작"
 	if ! validate_server_params "$server_params"; then
 		gateway_log "⚠️ " "[5.5.2-SKIPPED]" "Server skipped (disabled or invalid)"
 		return 0
 	fi
+	gateway_log "🔵" "[5.5.2-VALID]" "validate_server_params 통과"
 	
 	# Step 3: Extract individual values from params JSON
 	local hostname=$(echo "$server_params" | jq -r '.hostname' 2>/dev/null)
@@ -584,6 +604,9 @@ process_gateway_servers() {
 	local tmpdir="/tmp/giipAgent_gateway_$$"
 	mkdir -p "$tmpdir"
 	
+	# 🔴 DEBUG: 함수 진입 확인
+	gateway_log "🔵" "[5.4.5-PROCESS_ENTRY]" "process_gateway_servers 호출됨"
+	
 	# Get servers from DB (real-time query, no cache)
 	local server_list_file=$(get_gateway_servers)
 	if [ $? -ne 0 ] || [ ! -f "$server_list_file" ]; then
@@ -592,6 +615,9 @@ process_gateway_servers() {
 		rm -rf "$tmpdir"
 		return 1
 	fi
+	
+	# 🔴 DEBUG: server_list_file 수신 확인
+	gateway_log "🔵" "[5.4.6-FILE_RECEIVED]" "server_list_file 수신: $server_list_file (size=$(wc -c < \"$server_list_file\"))"
 	
 	# 🔴 [로깅 포인트 #5.5] 서버 목록 파일 확인 성공
 	gateway_log "🟢" "[5.5]" "서버 목록 파일 확인 성공" "\"file_size\":$(wc -c < \"$server_list_file\")"
