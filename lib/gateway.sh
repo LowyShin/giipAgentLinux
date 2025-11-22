@@ -378,9 +378,10 @@ get_remote_queue() {
 # Function: Parse server JSON and return extracted values
 # Returns: JSON string with all server parameters
 # Usage: server_params=$(extract_server_params "$server_json")
+# Note: 'enabled' field is no longer parsed or checked
 extract_server_params() {
 	local server_json="$1"
-	local hostname ssh_user ssh_host ssh_port ssh_key_path ssh_password os_info enabled lssn
+	local hostname ssh_user ssh_host ssh_port ssh_key_path ssh_password os_info lssn
 	
 	# 🔴 DEBUG: 입력 JSON 확인
 	gateway_log "🔵" "[5.4.9-INPUT]" "extract_server_params input: $(echo -n "$server_json" | head -c 100)..."
@@ -395,7 +396,6 @@ extract_server_params() {
 		ssh_key_path=$(echo "$server_json" | jq -r '.ssh_key_path // empty' 2>/dev/null)
 		ssh_password=$(echo "$server_json" | jq -r '.ssh_password // empty' 2>/dev/null)
 		os_info=$(echo "$server_json" | jq -r '.os_info // empty' 2>/dev/null)
-		enabled=$(echo "$server_json" | jq -r '.enabled // 1' 2>/dev/null)
 	else
 		# grep fallback
 		hostname=$(echo "$server_json" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
@@ -406,16 +406,16 @@ extract_server_params() {
 		ssh_key_path=$(echo "$server_json" | grep -o '"ssh_key_path"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
 		ssh_password=$(echo "$server_json" | grep -o '"ssh_password"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
 		os_info=$(echo "$server_json" | grep -o '"os_info"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		enabled=$(echo "$server_json" | grep -o '"enabled"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
 	fi
 	
-	# Return as JSON string
-	echo "{\"hostname\":\"${hostname}\",\"lssn\":\"${lssn}\",\"ssh_host\":\"${ssh_host}\",\"ssh_user\":\"${ssh_user}\",\"ssh_port\":${ssh_port:-22},\"ssh_key_path\":\"${ssh_key_path}\",\"ssh_password\":\"${ssh_password}\",\"os_info\":\"${os_info:-Linux}\",\"enabled\":${enabled:-1}}"
+	# Return as JSON string (without enabled field)
+	echo "{\"hostname\":\"${hostname}\",\"lssn\":\"${lssn}\",\"ssh_host\":\"${ssh_host}\",\"ssh_user\":\"${ssh_user}\",\"ssh_port\":${ssh_port:-22},\"ssh_key_path\":\"${ssh_key_path}\",\"ssh_password\":\"${ssh_password}\",\"os_info\":\"${os_info:-Linux}\"}"
 }
 
 # Function: Validate server parameters
 # Returns: 0 if valid, 1 if should skip
 # Usage: if validate_server_params "$server_params"; then...
+# Note: No longer checks 'enabled' field - all servers are processed regardless of enabled status
 validate_server_params() {
 	local server_params="$1"
 	
@@ -426,15 +426,7 @@ validate_server_params() {
 		hostname=$(echo "$server_params" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
 	fi
 	
-	local enabled=$(echo "$server_params" | jq -r '.enabled // 1' 2>/dev/null)
-	if [ -z "$enabled" ] || [ "$enabled" = "null" ]; then
-		# Fallback: try grep
-		enabled=$(echo "$server_params" | grep -o '"enabled"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-		[ -z "$enabled" ] && enabled=1
-	fi
-	
 	[[ -z "$hostname" ]] && return 1
-	[[ "$enabled" == "0" ]] && return 1
 	return 0
 }
 
@@ -477,16 +469,15 @@ process_single_server() {
 	if ! validate_server_params "$server_params"; then
 		# 🔴 DEBUG: 왜 validate 실패했는지 상세 로그
 		local hostname=$(echo "$server_params" | jq -r '.hostname // empty' 2>/dev/null)
-		local enabled=$(echo "$server_params" | jq -r '.enabled // 1' 2>/dev/null)
-		gateway_log "⚠️ " "[5.5.2-DEBUG-FAIL]" "validate 실패: hostname='$hostname', enabled='$enabled', server_params='$server_params'"
+		gateway_log "⚠️ " "[5.5.2-DEBUG-FAIL]" "validate 실패: hostname='$hostname', server_params='$server_params'"
 		
 		# 🆕 Log validation failure to tKVS
-		local validate_fail_log="{\"action\":\"validation_failed\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"hostname\":\"${hostname}\",\"enabled\":${enabled},\"server_params\":${server_params}}"
+		local validate_fail_log="{\"action\":\"validation_failed\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"hostname\":\"${hostname}\",\"server_params\":${server_params}}"
 		if type kvs_put >/dev/null 2>&1; then
 			kvs_put "lssn" "${global_lssn:-0}" "gateway_validation_failure" "$validate_fail_log" 2>/dev/null
 		fi
 		
-		gateway_log "⚠️ " "[5.5.2-SKIPPED]" "Server skipped (disabled or invalid)"
+		gateway_log "⚠️ " "[5.5.2-SKIPPED]" "Server skipped (validation failed)"
 		return 0
 	fi
 	gateway_log "🔵" "[5.5.2-VALID]" "validate_server_params 통과"
