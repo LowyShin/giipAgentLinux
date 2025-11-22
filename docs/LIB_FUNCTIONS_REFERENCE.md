@@ -26,6 +26,9 @@ lib/
 ├── check_managed_databases.sh  # tManagedDatabase health check 전용 ⭐ (2025-11-11 추가)
 ├── db_clients.sh               # DB 클라이언트 설치 및 체크 (단일 책임) ⭐
 ├── remote_execution.sh         # SSH 원격 명령 실행
+├── ssh_connection.sh           # SSH 연결 테스트 전용 ⭐ (2025-11-22 추가)
+├── ssh_connection_logger.sh    # SSH 연결 로깅 (KVS 저장)
+├── remote_ssh_test.sh          # 원격 서버 SSH 테스트 API 호출
 └── utils.sh                    # 공통 유틸리티 함수
 ```
 
@@ -526,9 +529,90 @@ giipAgent3.sh (메인)
 **"tManagedDatabase 목록은?"**
 → `lib/gateway.sh` - `get_managed_databases()`
 
+**"SSH 연결만 테스트하고 싶은데?"**
+→ `lib/ssh_connection.sh` - `test_ssh_connection()` ⭐ (2025-11-22 신규)
+
+**"SSH 접속 로깅은?"**
+→ `lib/ssh_connection_logger.sh` - `log_ssh_attempt()`, `log_ssh_result()`
+
+**"원격 서버 SSH 테스트 API는?"**
+→ `lib/remote_ssh_test.sh` - `report_ssh_test_result()`
+
+---
+
+## ⭐ 새로운 모듈 (2025-11-22)
+
+### 📌 lib/ssh_connection.sh - SSH 연결 테스트 전용
+
+**책임**: 리모트 서버로의 SSH 연결성 테스트 (연결만 테스트, 스크립트 실행 안 함)
+
+**목적**: 
+- SSH 연결 성공/실패 판단 로직을 재사용 가능한 별도 모듈로 제공
+- Gateway뿐만 아니라 다른 스크립트에서도 독립적으로 사용 가능
+- 연결 테스트만 필요한 경우 원격 명령 실행 오버헤드 회피
+
+**Export 함수**:
+```bash
+test_ssh_connection()          # SSH 연결 테스트 (연결만 확인)
+```
+
+**함수 서명**:
+```bash
+test_ssh_connection <host> <port> <user> <key> <password> [lssn] [hostname]
+```
+
+**매개변수**:
+| 파라미터 | 위치 | 타입 | 필수 | 설명 |
+|---------|------|------|------|------|
+| host | $1 | string | ✅ | 리모트 서버 IP/호스트명 |
+| port | $2 | string | ✅ | SSH 포트 (기본: 22) |
+| user | $3 | string | ✅ | SSH 사용자명 |
+| key | $4 | string | ✅ | SSH 개인키 경로 (키 인증 시) |
+| password | $5 | string | ✅ | SSH 비밀번호 (비밀번호 인증 시) |
+| lssn | $6 | number | X | 리모트 서버 LSSN (로깅용, 기본: 0) |
+| hostname | $7 | string | X | 호스트명 (로깅용, 기본: unknown) |
+
+**반환값**:
+```
+0   = SSH 연결 성공
+1   = SSH 연결 실패 (타임아웃, 거부, 인증 실패 등)
+125 = 인증 정보 없음 (비밀번호도 키도 제공 안 됨)
+126 = SSH 명령 실패
+127 = sshpass 미설치 (비밀번호 인증 사용 시)
+```
+
+**사용 예시**:
+```bash
+# 모듈 로드
+. lib/ssh_connection.sh
+
+# 연결 테스트 (비밀번호 인증)
+test_ssh_connection "192.168.1.100" "22" "root" "" "mypassword" "1001" "server-01"
+if [ $? -eq 0 ]; then
+    echo "✅ SSH 연결 성공"
+else
+    echo "❌ SSH 연결 실패"
+fi
+
+# 연결 테스트 (키 기반 인증)
+test_ssh_connection "192.168.1.101" "22" "ubuntu" "/home/user/.ssh/id_rsa" "" "1002" "server-02"
+result=$?
+```
+
+**로깅**:
+- 모든 연결 시도/결과는 stderr에 타임스탬프와 함께 로깅됨
+- 형식: `[ssh_connection.sh] 🟢 SSH 연결 시작: host=..., auth=..., lssn=..., timestamp=...`
+
+**주의사항**:
+- ⚠️ `execute_remote_command()`와 다름! (스크립트 실행 안 함)
+- ⚠️ 연결 테스트만 필요한 경우에 사용
+- ⚠️ 비밀번호 인증 사용 시 sshpass 필수
+
+**관련 문서**: [`SSH_CONNECTION_MODULE_GUIDE.md`](../SSH_CONNECTION_MODULE_GUIDE.md)
+
 ---
 
 **문서 작성일**: 2025-11-11  
 **작성자**: AI Assistant  
-**버전**: 1.0  
-**최종 수정**: 2025-11-11 - 초판 작성 (pyodbc 중복 사고 재발 방지)
+**버전**: 1.1  
+**최종 수정**: 2025-11-22 - ssh_connection.sh 모듈 추가 (연결 테스트 전용 기능)

@@ -54,7 +54,7 @@ giipAgentLinux/
 └── giipAgent.cnf
 ```
 
-### v3.0 (Modular)
+### v3.0 (Modular) - Updated 2025-11-22
 
 ```
 giipAgentLinux/
@@ -66,11 +66,22 @@ giipAgentLinux/
 │   ├── kvs.sh (130 lines) - KVS execution logging
 │   ├── db_clients.sh (260 lines) - DB client installation
 │   ├── gateway.sh (300 lines) - Gateway mode functions
-│   └── normal.sh (220 lines) - Normal mode functions
-└── test-agent-refactored.sh (Test suite)
+│   ├── normal.sh (220 lines) - Normal mode functions
+│   ├── ssh_connection.sh (120 lines) ⭐ SSH 연결 테스트 (NEW 2025-11-22)
+│   ├── ssh_connection_logger.sh - SSH 로깅
+│   ├── remote_ssh_test.sh - 원격 SSH 테스트 API
+│   └── check_managed_databases.sh - DB health check
+├── test-agent-refactored.sh (Test suite)
+├── test-ssh-connection.sh ⭐ SSH 테스트 & 사용 예제 (NEW 2025-11-22)
+└── docs/
+    ├── MODULAR_ARCHITECTURE.md (this file)
+    ├── LIB_FUNCTIONS_REFERENCE.md ⭐ (Updated 2025-11-22)
+    ├── SSH_CONNECTION_MODULE_GUIDE.md ⭐ (NEW 2025-11-22)
+    ├── SSH_CONNECTION_LOGGER.md
+    └── ... (other docs)
 ```
 
-**Total**: ~1,240 lines (modular) vs 1,450 lines (monolithic)
+**Total**: ~1,360 lines (modular + new SSH module) vs 1,450 lines (monolithic)
 
 ---
 
@@ -88,16 +99,28 @@ giipAgentLinux/
 │   ├── kvs.sh             # KVS logging
 │   ├── db_clients.sh      # DB client management
 │   ├── gateway.sh         # Gateway mode
-│   └── normal.sh          # Normal mode
+│   ├── normal.sh          # Normal mode
+│   ├── ssh_connection.sh  # SSH connection test (⭐ NEW 2025-11-22)
+│   ├── ssh_connection_logger.sh  # SSH logging to KVS
+│   ├── remote_ssh_test.sh        # Remote SSH test API
+│   └── check_managed_databases.sh # Managed DB health check
 │
 ├── test-agent-refactored.sh  # Test suite
+├── test-ssh-connection.sh    # SSH test & usage examples (⭐ NEW 2025-11-22)
 │
 ├── docs/                  # Documentation
 │   ├── MODULAR_ARCHITECTURE.md (this file)
+│   ├── LIB_FUNCTIONS_REFERENCE.md (⭐ Updated 2025-11-22)
+│   ├── SSH_CONNECTION_MODULE_GUIDE.md (⭐ NEW 2025-11-22)
+│   ├── SSH_CONNECTION_LOGGER.md
+│   ├── REMOTE_SERVER_SSH_TEST_DETAILED_SPEC.md
 │   ├── AUTO_DISCOVERY_ARCHITECTURE.md
 │   ├── GATEWAY_SETUP_GUIDE.md
-│   └── GIIPAGENT2_SPECIFICATION.md
+│   └── ... (other docs)
 │
+├── README.md              # Main README (⭐ Updated 2025-11-22)
+└── README_GATEWAY.md      # Gateway-specific guide
+```
 ├── giipscripts/           # Helper scripts
 │   ├── kvsput.sh
 │   └── ...
@@ -281,6 +304,88 @@ run_normal_mode "$lssn" "$hostname" "$os"
 
 ---
 
+### 6. ssh_connection.sh (SSH Connection Testing) ⭐ **NEW 2025-11-22**
+
+**Purpose**: Reusable SSH connection test module for testing SSH connectivity only (no script execution)
+
+**Responsibility**:
+- Test SSH connectivity to remote servers
+- Support both password and key-based authentication
+- Provide connection test results as return codes
+- Log connection attempts with timestamps
+
+**Functions**:
+```bash
+test_ssh_connection()       # Test SSH connection (connectivity test only)
+```
+
+**Function Signature**:
+```bash
+test_ssh_connection <host> <port> <user> <key> <password> [lssn] [hostname]
+```
+
+**Return Codes**:
+```
+0   = SSH connection successful
+1   = SSH connection failed (timeout, refused, auth failure, etc.)
+125 = No authentication method provided
+126 = SSH command failed
+127 = sshpass not installed (for password authentication)
+```
+
+**Usage Example**:
+```bash
+. "${LIB_DIR}/ssh_connection.sh"
+
+# Test connection with password
+test_ssh_connection "192.168.1.100" "22" "root" "" "mypassword" "1001" "server-01"
+if [ $? -eq 0 ]; then
+    echo "✅ SSH connection successful"
+fi
+
+# Test connection with key
+test_ssh_connection "192.168.1.101" "22" "ubuntu" "/home/user/.ssh/id_rsa" "" "1002" "server-02"
+result=$?
+
+case $result in
+    0)   echo "Connection successful" ;;
+    127) echo "sshpass not installed" ;;
+    *)   echo "Connection failed (code: $result)" ;;
+esac
+```
+
+**Key Differences from execute_remote_command()**:
+| Feature | test_ssh_connection() | execute_remote_command() |
+|---------|----------------------|-------------------------|
+| Purpose | Connection test only | Execute script on remote server |
+| SSH connection | ✅ Test connectivity | ✅ Execute script |
+| Script transfer | ❌ No | ✅ Yes (SCP) |
+| Script execution | ❌ No | ✅ Yes |
+| Return value | Connection status | Script result |
+| Use case | Gateway pre-check, external scripts | Gateway remote execution |
+
+**Logging**:
+```bash
+[ssh_connection.sh] 🟢 SSH 연결 테스트 시작: host=192.168.1.100, port=22, user=root, auth=password, lssn=1001, timestamp=2025-11-22 10:30:45.123
+[ssh_connection.sh] 🟢 SSH 연결 성공: host=192.168.1.100:22, user=root, auth=password, duration=2초, lssn=1001, hostname=server-01, timestamp=2025-11-22 10:30:47.456
+```
+
+**When to Use**:
+- ✅ Testing SSH connectivity before actual commands
+- ✅ Monitoring SSH availability
+- ✅ Standalone SSH tests in other scripts
+- ✅ Pre-flight checks in automation workflows
+
+**When NOT to Use**:
+- ❌ When you need to execute scripts on remote servers → Use `execute_remote_command()` instead
+- ❌ When full Gateway processing is needed → Use `gateway.sh` directly
+
+**Related Files**:
+- Test and examples: `test-ssh-connection.sh`
+- Full guide: [`SSH_CONNECTION_MODULE_GUIDE.md`](SSH_CONNECTION_MODULE_GUIDE.md)
+
+---
+
 ## 🔄 Migration Guide
 
 ### For New Installations
@@ -298,6 +403,9 @@ vi giipAgent.cnf  # Set sk, lssn, etc.
 
 # Test
 bash test-agent-refactored.sh
+
+# Test SSH connectivity
+bash test-ssh-connection.sh
 
 # Run (Normal mode)
 bash giipAgent3.sh
@@ -322,6 +430,9 @@ git pull
 
 # Test new version
 bash test-agent-refactored.sh
+
+# Test SSH connectivity
+bash test-ssh-connection.sh
 
 # Update cron job
 crontab -e
