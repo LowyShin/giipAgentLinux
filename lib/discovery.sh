@@ -3,7 +3,8 @@
 # 로컬 및 원격(SSH) 서버의 Infrastructure 데이터 수집
 # 사용: source lib/discovery.sh && collect_infrastructure_data <lssn> [ssh_user@ssh_host:ssh_port]
 
-set -euo pipefail
+# ⚠️ set -euo pipefail 제거됨 (부모 스크립트 영향 방지)
+# 대신 각 함수에서 명시적 error handling 사용
 
 # 설정
 DISCOVERY_SCRIPT_LOCAL="$(dirname "$0")/../giipscripts/auto-discover-linux.sh"
@@ -67,17 +68,18 @@ collect_infrastructure_data() {
     # 전역 LSSN 설정 (모든 로깅에 사용)
     export KVS_LSSN="$lssn"
     
-    _log_to_kvs "DISCOVERY_START" "$lssn" "RUNNING" "Starting infrastructure discovery collection, remote_info=$remote_info"
+    _log_to_kvs "DISCOVERY_START" "$lssn" "RUNNING" "Starting infrastructure discovery collection, remote_info=$remote_info" || true
     
     if [[ -n "$remote_info" ]]; then
         echo "[Discovery] 🔍 Collecting infrastructure data from remote server (LSSN=$lssn, Host=$remote_info)" >&2
-        _collect_remote_data "$lssn" "$remote_info"
+        _collect_remote_data "$lssn" "$remote_info" || return 1
     else
         echo "[Discovery] 🔍 Collecting infrastructure data locally (LSSN=$lssn)" >&2
-        _collect_local_data "$lssn"
+        _collect_local_data "$lssn" || return 1
     fi
     
-    _log_to_kvs "DISCOVERY_END" "$lssn" "SUCCESS" "Infrastructure discovery collection completed"
+    _log_to_kvs "DISCOVERY_END" "$lssn" "SUCCESS" "Infrastructure discovery collection completed" || true
+    return 0
 }
 
 # ============================================================================

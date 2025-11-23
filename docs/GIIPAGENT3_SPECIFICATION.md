@@ -823,6 +823,12 @@ giipAgentLinux/
 - `lib/normal.sh`: Normal 모드 구현 (fetch_queue 정의)
 - `lib/common.sh`: 공통 함수
 
+**필수 읽기 문서**:
+- **[SHELL_COMPONENT_SPECIFICATION.md](SHELL_COMPONENT_SPECIFICATION.md)** - lib/*.sh 개발 표준 (Error Handling, set -euo pipefail 금지)
+- [MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md) - 모듈 구조
+- [AUTO_DISCOVERY_ARCHITECTURE.md](AUTO_DISCOVERY_ARCHITECTURE.md) - Discovery 설계
+- [GATEWAY_HANG_DIAGNOSIS.md](GATEWAY_HANG_DIAGNOSIS.md) - 모듈 통합 문제 진단
+
 **관련 SP**:
 - `pApiCQEQueueGetbySk`: LSChkdt 자동 업데이트 (줄 30-32)
 - `pApiRemoteServerSSHTestbyAk`: Remote 서버 상태 업데이트

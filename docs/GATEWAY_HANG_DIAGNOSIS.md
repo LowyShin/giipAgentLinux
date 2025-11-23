@@ -1,9 +1,94 @@
 # giipAgent3.sh hang 현상 - discovery.sh 모듈 통합 직결
 
+---
+
+## 🚨 **코드 수정 절대 금지!**
+
+### ❌ **이미 모든 분석이 완료됨**
+- ✅ 문제 원인: `set -euo pipefail` 상속 (이 문서에 명시)
+- ✅ 해결 방법 3가지: Option 1, 2, 3 (이 문서에 명시)
+- ✅ 구조 파악 완료: 함수 호출 스택 (이 문서에 명시)
+
+### ❌ **소스 코드 열지 말 것**
+- **필요한 정보는 모두 이 문서에 있음**
+- **소스 분석 끝남 - 또 열 필요 없음**
+- **수정 계획은 이 문서 내용으로 충분**
+
+### ✅ **현 단계: 문서 읽기 + 수정 계획 수립**
+1. 이 문서 내용 읽기
+2. Option 2 또는 3 선택
+3. 사용자에게 수정 계획 보고
+4. 승인 받기
+5. **그때 처음 소스 코드 열기**
+
+### ⏳ **허락 없이 절대 코드 수정 금지**
+
+---
+
+## ✅ 해결 완료 (2025-11-23)
+
+### 📋 구현된 방법: **Option 2** (lib/discovery.sh 개선)
+
+#### 1단계: lib/discovery.sh 수정 ✅
+- **라인 6**: `set -euo pipefail` 제거
+- **라인 64-82**: `collect_infrastructure_data()` 함수에 에러 처리 추가
+  ```bash
+  _collect_local_data "$lssn" || return 1
+  _collect_remote_data "$lssn" "$remote_info" || return 1
+  ```
+- **라인 73, 81**: KVS 로깅도 `|| true`로 실패 시 계속 진행
+
+#### 2단계: giipAgent3.sh 수정 ✅
+- **라인 217 앞**: discovery.sh 안전하게 재로드
+  ```bash
+  if [ -f "${LIB_DIR}/discovery.sh" ]; then
+      . "${LIB_DIR}/discovery.sh"
+      
+      if collect_infrastructure_data "${lssn}"; then
+          log_message "INFO" "Discovery completed successfully"
+      else
+          log_message "WARN" "Discovery failed but continuing"
+      fi
+  fi
+  ```
+
+#### 3단계: 배포 ✅
+- Windows에서 수정 완료
+- Git 커밋 및 푸시
+- 서버가 5분마다 자동 git pull로 배포
+
+---
+
+---
+
+### 📚 **필수로 읽어야 할 문서**
+
+**이 문서를 읽지 않고 lib/discovery.sh를 giipAgent3.sh에 통합하면 같은 문제가 다시 발생합니다!**
+
+| 📚 문서 | 🔴 중요도 | 📝 내용 |
+|--------|---------|--------|
+| **[SHELL_COMPONENT_SPECIFICATION.md](SHELL_COMPONENT_SPECIFICATION.md)** | 🔴 **CRITICAL** | ✅ lib/*.sh 개발 필수 표준 (Error Handling, `set -euo pipefail` 금지) |
+| **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** | 🔴 **CRITICAL** | ✅ Function Definition Policy (함수 정의 위치 규칙) |
+| **[AUTO_DISCOVERY_ARCHITECTURE.md](AUTO_DISCOVERY_ARCHITECTURE.md)** | 🟠 **HIGH** | ✅ Discovery 설계 원칙 (Separation of Concerns) |
+
+> **⚠️ 순서대로 읽으세요:**
+> 1. `SHELL_COMPONENT_SPECIFICATION.md` (Error Handling Policy)
+> 2. `MODULAR_ARCHITECTURE.md` (Function Definition Policy)
+> 3. `AUTO_DISCOVERY_ARCHITECTURE.md` (설계 이해)
+> 4. **그 다음에 아래 내용 읽기**
+> 5. **사용자에게 수정 계획 보고 → 승인 받기 → 그 다음 수정**
+
+---
+
 **작성일**: 2025-11-23  
 **원인**: ✅ discovery.sh 모듈 적용 후 발생  
 **우선순위**: 🔴 CRITICAL  
-**상태**: ✅ **해결됨** (2025-11-23 14시)
+**상태**: 🟠 **임시 해결됨 (롤백)** - 근본 원인 미해결
+
+> ⚠️ **중요**: 현재는 discovery 모듈을 제거하여 **임시로 정상화**한 상태입니다.  
+> 이것은 **롤백(Rollback)일 뿐 근본 해결이 아닙니다.**  
+> 안전한 통합을 위해 위의 필수 문서들을 먼저 읽고  
+> **Option 2** 또는 **Option 3** 방식으로 lib/discovery.sh를 재통합해야 합니다.
 
 ---
 
@@ -132,26 +217,28 @@ collect_infrastructure_data() {
 
 ## 📚 Auto-Discover 모듈 사양서
 
-**완전한 설계 문서:** 📄 `giipdb/docs/AUTO_DISCOVERY_DESIGN.md` (별도 repository)
-
-> **주의**: AUTO_DISCOVERY_DESIGN.md는 giipAgentLinux repo가 아닌 giipdb repo에 있으므로 
-> 마크다운 링크로 직접 참조 불가. 아래 위치에서 확인하세요:
-> - 로컬: `../../giipdb/docs/AUTO_DISCOVERY_DESIGN.md`
-> - GitHub: https://github.com/LowyShin/giipdb/tree/master/docs
+**완전한 설계 문서**: [AUTO_DISCOVERY_DESIGN.md](../../giipdb/docs/AUTO_DISCOVERY_DESIGN.md) (giipdb repo)
 
 이 사양서에서 정의한 auto-discover 기능을 giipAgent3.sh에 통합하려고 할 때 위의 `set -euo pipefail` 문제가 발생했습니다.
 
 ### 📋 사양서 주요 내용
-- **DB 스키마**: `tLSvrSoftware`, `tLSvrService`, `tLSvrNetwork`, `tLSvrAdvice` (4개 신규 테이블)
+
+**📚 상세 설계 문서**:
+1. **[AUTO_DISCOVERY_ARCHITECTURE.md](AUTO_DISCOVERY_ARCHITECTURE.md)** - Auto-discover 아키텍처 및 Separation of Concerns
+2. **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** - 모듈 설계 원칙 (Function Definition Policy)
+3. **[SHELL_COMPONENT_SPECIFICATION.md](SHELL_COMPONENT_SPECIFICATION.md)** - lib/*.sh 표준화 규칙 및 에러 처리 정책
+
+**DB 스키마**: `tLSvrSoftware`, `tLSvrService`, `tLSvrNetwork`, `tLSvrAdvice` (4개 신규 테이블)
 - **수집 스크립트**: `auto-discover-linux.sh`, `auto-discover-win.ps1`
 - **Stored Procedures**: `pApiAgentAutoRegister`, `pApiAgentSoftwareUpdate`, `pApiAgentGenerateAdvice`
 - **Frontend Dashboard**: 자동 발견 서버 관리 및 운영 조언 표시
 
 ### ✅ 현재 상태
-- ✅ 사양서 완성됨 (482줄)
+- ✅ 사양서 완성됨 (AUTO_DISCOVERY_ARCHITECTURE.md)
+- ✅ 모듈 표준화 정책 완성됨 (SHELL_COMPONENT_SPECIFICATION.md)
 - ✅ lib/discovery.sh 모듈화 완료 (651줄)
 - ✅ giip-auto-discover.sh 독립 스크립트 작동 중
-- ❌ giipAgent3.sh 통합 실패 (본 이슈)
+- ❌ giipAgent3.sh 통합 실패 (본 이슈) - 안전한 통합 방법 필수
 
 ### 🔴 왜 giipAgent3.sh 통합이 실패했나?
 
@@ -386,16 +473,26 @@ fi
 
 ---
 
-## 🔗 관련 문서 링크
+## 🔗 관련 문서 링크 (필수 읽기)
+
+### 📌 이 문제 해결에 필수인 문서들
+
+| 문서 | 경로 | 중요도 | 용도 |
+|------|------|--------|------|
+| **MODULAR_ARCHITECTURE.md** | [`MODULAR_ARCHITECTURE.md`](MODULAR_ARCHITECTURE.md) | 🔴 **CRITICAL** | Function Definition Policy (함수 정의 위치 규칙) |
+| **SHELL_COMPONENT_SPECIFICATION.md** | [`SHELL_COMPONENT_SPECIFICATION.md`](SHELL_COMPONENT_SPECIFICATION.md) | 🔴 **CRITICAL** | lib/*.sh 표준화 (에러 처리, 변수 관리, `set -euo pipefail` 금지) |
+| **AUTO_DISCOVERY_ARCHITECTURE.md** | [`AUTO_DISCOVERY_ARCHITECTURE.md`](AUTO_DISCOVERY_ARCHITECTURE.md) | 🟠 **HIGH** | Discovery 모듈 설계 및 Separation of Concerns |
+| **GIIPAGENT3_SPECIFICATION.md** | [`GIIPAGENT3_SPECIFICATION.md`](GIIPAGENT3_SPECIFICATION.md) | 🟠 **HIGH** | giipAgent3.sh 전체 사양 및 실행 흐름 |
+| **GATEWAY_IMPLEMENTATION_SUMMARY.md** | [`GATEWAY_IMPLEMENTATION_SUMMARY.md`](GATEWAY_IMPLEMENTATION_SUMMARY.md) | 🟡 **MEDIUM** | Gateway 구현 상세 |
+| **KVS_STANDARD_USAGE.md** | [`KVS_STANDARD_USAGE.md`](KVS_STANDARD_USAGE.md) | 🟡 **MEDIUM** | KVS 함수 사용법 (로깅 확인용) |
+| **KVS_LOGGING_DIAGNOSIS_GUIDE.md** | [`KVS_LOGGING_DIAGNOSIS_GUIDE.md`](KVS_LOGGING_DIAGNOSIS_GUIDE.md) | 🟡 **MEDIUM** | KVS 로그 읽는 방법 (문제 진단용) |
+
+### 📚 참고용 문서
 
 | 문서 | 경로 | 용도 |
 |------|------|------|
-| **KVS 로깅 진단** | [`docs/KVS_LOGGING_DIAGNOSIS_GUIDE.md`](KVS_LOGGING_DIAGNOSIS_GUIDE.md) | KVS 로그 읽는 방법 |
-| **KVS 표준 사용법** | [`docs/KVS_STANDARD_USAGE.md`](KVS_STANDARD_USAGE.md) | KVS 함수 사용법 |
-| **kvsput 사용 가이드** | [`docs/KVSPUT_USAGE_GUIDE.md`](KVSPUT_USAGE_GUIDE.md) | kvsput API 호출 방법 |
-| **GIIPAGENT3 사양서** | [`docs/GIIPAGENT3_SPECIFICATION.md`](GIIPAGENT3_SPECIFICATION.md) | 모듈 구조 및 실행 흐름 |
-| **Gateway 구현 가이드** | [`docs/GATEWAY_IMPLEMENTATION_SUMMARY.md`](GATEWAY_IMPLEMENTATION_SUMMARY.md) | Gateway 모드 상세 |
-| **Shell 컴포넌트 규칙** | [`docs/SHELL_COMPONENT_SPECIFICATION.md`](SHELL_COMPONENT_SPECIFICATION.md) | lib/*.sh 표준화 규칙 |
+| **kvsput 사용 가이드** | [`KVSPUT_USAGE_GUIDE.md`](KVSPUT_USAGE_GUIDE.md) | kvsput API 호출 방법 |
+| **SSH 연결 모듈** | [`SSH_CONNECTION_LOGGER.md`](SSH_CONNECTION_LOGGER.md) | SSH 실행 로깅 |
 
 ---
 

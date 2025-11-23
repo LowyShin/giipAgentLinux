@@ -214,6 +214,23 @@ if [ "${lssn}" = "0" ]; then
 fi
 
 # ============================================================================
+# Load Optional Modules
+# ============================================================================
+
+# Load discovery module (safe integration with error handling)
+if [ -f "${LIB_DIR}/discovery.sh" ]; then
+	. "${LIB_DIR}/discovery.sh"
+	
+	# Run discovery if needed (6시간 주기)
+	# 🔴 [Option 2: lib/discovery.sh 개선됨 - 명시적 에러 처리 추가됨]
+	if collect_infrastructure_data "${lssn}"; then
+		log_message "INFO" "Discovery completed successfully"
+	else
+		log_message "WARN" "Discovery failed but continuing (error handling applied)"
+	fi
+fi
+
+# ============================================================================
 # Mode Selection: Gateway or Normal
 # ============================================================================
 

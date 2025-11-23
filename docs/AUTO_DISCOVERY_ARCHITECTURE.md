@@ -461,3 +461,14 @@ SELECT * FROM tLSvrService WHERE LSsn=71174
    # 매일 새벽 4시 git pull
    0 4 * * * cd /root/giipAgentLinux && git pull
    ```
+
+---
+
+## 📚 참고 문서
+
+| 문서 | 용도 |
+|------|------|
+| [MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md) | 전체 모듈 아키텍처 |
+| **[SHELL_COMPONENT_SPECIFICATION.md](SHELL_COMPONENT_SPECIFICATION.md)** | **lib/*.sh 개발 표준 (필수 읽기)** |
+| [GIIPAGENT3_SPECIFICATION.md](GIIPAGENT3_SPECIFICATION.md) | giipAgent3.sh 전체 사양 |
+| [GATEWAY_HANG_DIAGNOSIS.md](GATEWAY_HANG_DIAGNOSIS.md) | Discovery 통합 문제 진단 |

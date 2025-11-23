@@ -133,6 +133,12 @@ giipAgentLinux/
 
 ## 📚 Library Modules
 
+> 📌 **모든 lib/*.sh 파일 개발자는 반드시 읽어야 할 문서**: [SHELL_COMPONENT_SPECIFICATION.md](SHELL_COMPONENT_SPECIFICATION.md)
+> - Function Definition Policy
+> - Error Handling Policy
+> - Global Variable Policy
+> - Development Checklist
+
 ### 1. common.sh (Core Utilities)
 
 **Purpose**: Configuration loading, logging, error handling
@@ -933,3 +939,46 @@ grep -rn "^[a-z_]*().*{" lib/
 - Documentation: [README.md](../README.md)
 - Specification: [GIIPAGENT3_SPECIFICATION.md](GIIPAGENT3_SPECIFICATION.md)
 - Legacy: [GIIPAGENT2_SPECIFICATION.md](GIIPAGENT2_SPECIFICATION.md) (v2.0)
+
+---
+
+## 📋 Documentation Linking Rules (CRITICAL)
+
+**⚠️ ENFORCED**: When linking to documentation files:
+
+✅ **CORRECT** - Same repository, same directory:
+```markdown
+[Configuration Guide](GIIPAGENT3_SPECIFICATION.md)
+```
+
+✅ **CORRECT** - Same repository, parent directory:
+```markdown
+[README](../README.md)
+```
+
+✅ **CORRECT** - Cross-repository, use text path (NOT clickable):
+```markdown
+Auto-Discover Design: `giipdb/docs/AUTO_DISCOVERY_DESIGN.md`
+```
+
+❌ **WRONG** - Absolute URLs (https://...):
+```markdown
+[Link](https://github.com/LowyShin/giipdb/blob/master/docs/AUTO_DISCOVERY_DESIGN.md)
+```
+
+❌ **WRONG** - Relative paths with ../../ for cross-repo:
+```markdown
+[Link](../../../giipdb/docs/AUTO_DISCOVERY_DESIGN.md)
+```
+
+**Why?**
+- Markdown links only work within the same repository
+- Cross-repo links must be shown as text paths for clarity
+- HTTPS URLs are not acceptable in documentation
+- Readers can manually navigate to the path or GitHub URL
+
+**Verification**:
+Before committing, test each link:
+1. Is the file in the same repo?
+2. Can the relative path reach it from this location?
+3. If cross-repo, use text path instead
