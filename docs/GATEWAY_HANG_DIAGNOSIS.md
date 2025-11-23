@@ -130,6 +130,89 @@ collect_infrastructure_data() {
 
 ---
 
+## 📚 Auto-Discover 모듈 사양서
+
+**완전한 설계 문서:** 📄 **[AUTO_DISCOVERY_DESIGN.md](../../giipdb/docs/AUTO_DISCOVERY_DESIGN.md)**
+
+이 사양서에서 정의한 auto-discover 기능을 giipAgent3.sh에 통합하려고 할 때 위의 `set -euo pipefail` 문제가 발생했습니다.
+
+### 📋 사양서 주요 내용
+- **DB 스키마**: `tLSvrSoftware`, `tLSvrService`, `tLSvrNetwork`, `tLSvrAdvice` (4개 신규 테이블)
+- **수집 스크립트**: `auto-discover-linux.sh`, `auto-discover-win.ps1`
+- **Stored Procedures**: `pApiAgentAutoRegister`, `pApiAgentSoftwareUpdate`, `pApiAgentGenerateAdvice`
+- **Frontend Dashboard**: 자동 발견 서버 관리 및 운영 조언 표시
+
+### ✅ 현재 상태
+- ✅ 사양서 완성됨 (482줄)
+- ✅ lib/discovery.sh 모듈화 완료 (651줄)
+- ✅ giip-auto-discover.sh 독립 스크립트 작동 중
+- ❌ giipAgent3.sh 통합 실패 (본 이슈)
+
+### 🔴 왜 giipAgent3.sh 통합이 실패했나?
+
+**문제점:**
+1. **lib/discovery.sh의 `set -euo pipefail` (라인 6)**
+   - 모듈화된 라이브러리는 독립적으로 동작할 때는 문제없음
+   - 하지만 부모 스크립트에 로드되면 부모도 같은 설정 상속
+
+2. **giipAgent3.sh에서 직접 로드 시도**
+   - `. "${LIB_DIR}/discovery.sh"` 추가
+   - `collect_infrastructure_data()` 호출
+   - 모듈의 `set -euo pipefail`이 부모 프로세스에 영향
+   - 함수 실행 중 ANY 에러 발생 → 전체 프로세스 EXIT
+
+3. **결과: Silent Process Death**
+   - gateway 처리 못 함
+   - 5분마다 반복 실패
+   - 에러 메시지 없음 (set -e로 인해)
+
+### ✅ 안전한 통합 방법
+
+**Option 1: 독립 프로세스로 실행 (권장)**
+```bash
+# giipAgent3.sh에서:
+# discovery를 별도 스크립트로 실행하고 결과만 수집
+giip-auto-discover.sh &  # background 실행
+# gateway 처리는 계속 진행
+```
+
+**Option 2: lib/discovery.sh 개선**
+```bash
+# lib/discovery.sh에서 set -euo pipefail 제거
+# 대신 각 함수에서 명시적 error handling 추가:
+collect_infrastructure_data() {
+    _log_to_kvs ... || return 1
+    _collect_local_data ... || return 1
+    _save_discovery_to_db ... || return 1
+}
+
+# giipAgent3.sh에서:
+if collect_infrastructure_data "$lssn"; then
+    # 성공 처리
+else
+    # 실패 처리 (gateway 계속 진행)
+fi
+```
+
+**Option 3: Subshell로 격리**
+```bash
+# giipAgent3.sh에서:
+(
+    . "${LIB_DIR}/discovery.sh"
+    collect_infrastructure_data "$lssn"
+) || log_message "WARN" "Discovery failed, continuing"
+```
+
+### 🎓 핵심 교훈
+
+**모듈화된 라이브러리를 부모 스크립트에 로드할 때:**
+1. 모듈의 `set -euo pipefail` 주의 (부모도 영향 받음)
+2. 모듈의 실패가 부모를 죽이지 않도록 명시적 error handling 필수
+3. 단순 로드 + 호출이 아니라 에러 처리 래퍼 필요
+4. 되도록이면 독립 프로세스로 실행하는 것이 더 안전함
+
+---
+
 ## 🔴 직접 인과관계
 
 ### 변경 사항
