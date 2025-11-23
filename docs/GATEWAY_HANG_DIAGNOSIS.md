@@ -56,6 +56,31 @@ set -euo pipefail
 
 ### 왜 이런 일이?
 
+**분산된 설계 구조 분석:**
+
+문제 버전의 설계:
+```
+giipAgent3.sh (Main)
+├─ should_run_discovery() 함수 정의 ← giipAgent3.sh에 직접 정의!
+│  (6시간 주기 스케줄링 로직)
+│
+└─ collect_infrastructure_data() 호출
+   └─ lib/discovery.sh에서 정의됨
+      (실제 수집 로직)
+      └─ set -euo pipefail 활성화 ⚠️ 문제 발생!
+```
+
+**문제 분석:**
+- `should_run_discovery()`: giipAgent3.sh에 **직접 정의됨**
+- `collect_infrastructure_data()`: lib/discovery.sh에 정의됨
+- lib/discovery.sh 로드 시 모듈의 `set -euo pipefail`이 **부모(giipAgent3.sh)에 영향**
+- 따라서 collect_infrastructure_data() 실행 중 에러 발생 시 **전체 프로세스 exit**
+
+**왜 분산되었나?**
+- 오케스트레이션 로직(주기 관리): giipAgent3.sh에 배치
+- 구현 로직(수집): lib/discovery.sh에 배치
+- 의도는 좋았지만 **모듈 간 설정 충돌 발생**
+
 **discovery.sh 함수 분석:**
 
 ```bash
@@ -70,7 +95,7 @@ collect_infrastructure_data() {
     _collect_local_data "$lssn"           # 실패 가능
     _save_discovery_to_db ...             # 실패 가능
     
-    # 위 중 하나라도 실패 → 전체 프로세스 EXIT
+    # 위 중 하나라도 실패 → 전체 프로세스 EXIT (에러 메시지 없음)
 }
 ```
 
@@ -211,6 +236,48 @@ pwsh -c "cd giipdb; ./mgmt/query-kvs.ps1 -KType lssn -KKey 71240 -Top 20"
    # timeout 설정
    ( sleep 30; kill $discovery_pid 2>/dev/null ) &
    ```
+
+### 교훈: 모듈 설계 시 주의사항
+
+**이 문제에서 배울 점:**
+
+| 항목 | 잘못된 설계 | 올바른 설계 |
+|------|-----------|-----------|
+| **모듈화** | 함수를 여러 곳에 분산 | 관련 함수들을 한 곳에 모음 |
+| **Error Handling** | `set -euo pipefail`만 의존 | 명시적 error handling 추가 |
+| **호출 방식** | 로드된 모듈 직접 호출 | Error handling 래퍼로 호출 |
+| **테스트** | 단독 실행만 테스트 | 부모 스크립트 내 통합 테스트 필수 |
+| **문서화** | 함수 위치 불명확 | 각 함수의 에러 처리 방식 명시 |
+
+**올바른 모듈 설계 예시:**
+
+```bash
+# lib/discovery.sh (완전히 독립적)
+# - 내부 에러는 자체적으로 처리
+# - set -euo pipefail 사용 금지 (또는 set +e로 감싸기)
+
+collect_infrastructure_data() {
+    local lssn="$1"
+    
+    # 각 단계에서 에러 체크
+    _log_to_kvs "DISCOVERY_START" ... || return 1
+    _collect_local_data "$lssn" || return 1
+    _save_discovery_to_db ... || return 1
+    
+    return 0
+}
+
+# giipAgent3.sh (호출 측)
+# - 에러 처리는 호출 측에서 담당
+
+if should_run_discovery "$lssn"; then
+    if collect_infrastructure_data "$lssn"; then
+        log_message "INFO" "Discovery completed successfully"
+    else
+        log_message "WARN" "Discovery failed, continuing without data"
+    fi
+fi
+```
 
 ---
 
