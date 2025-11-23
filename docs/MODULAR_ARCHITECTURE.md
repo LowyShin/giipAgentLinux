@@ -793,6 +793,117 @@ echo "   API: $apiaddrv2"
 - [ ] Make executable: `chmod +x script.sh`
 - [ ] Test before commit: `bash -n script.sh` (syntax check)
 
+### 6. Function Definition Policy (CRITICAL - giipAgent3.sh)
+
+**⚠️ ENFORCED RULE**: All module functions **MUST** be defined in `lib/*.sh` files. **NEVER** define functions in `giipAgent3.sh`.
+
+**✅ CORRECT Architecture:**
+
+```bash
+# giipAgent3.sh (180 lines - ONLY orchestration)
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LIB_DIR="${SCRIPT_DIR}/lib"
+
+# Load library modules
+. "${LIB_DIR}/common.sh"
+. "${LIB_DIR}/gateway.sh"
+. "${LIB_DIR}/normal.sh"
+
+# Initialize and orchestrate
+load_config "../giipAgent.cnf"
+if [ "$gateway_mode" = "1" ]; then
+    process_gateway_servers  # ← Function defined in lib/gateway.sh
+else
+    run_normal_mode          # ← Function defined in lib/normal.sh
+fi
+```
+
+```bash
+# lib/gateway.sh (300 lines - all gateway functions)
+#!/bin/bash
+
+process_gateway_servers() {
+    # Gateway mode logic
+}
+
+sync_gateway_servers() {
+    # Server synchronization
+}
+
+execute_remote_command() {
+    # SSH command execution
+}
+```
+
+**❌ WRONG Architecture (DO NOT DO):**
+
+```bash
+# giipAgent3.sh - WRONG: Functions defined inline!
+#!/bin/bash
+
+# ❌ NEVER do this!
+process_gateway_servers() {
+    # 300 lines of gateway logic directly in main script
+}
+
+should_run_discovery() {
+    # Business logic mixed with orchestration
+}
+
+# ❌ This breaks module isolation and error handling
+```
+
+**Why This Rule Exists:**
+
+1. **Error Handling Isolation**: When a sourced module has `set -euo pipefail`, it affects the parent script
+   - Functions in `lib/*.sh` with strict error handling won't crash the main script
+   - Functions defined in `giipAgent3.sh` with module-level settings cause cascading failures
+
+2. **Single Responsibility**: `giipAgent3.sh` is ONLY an orchestration layer
+   - Load config
+   - Detect mode (Gateway vs Normal)
+   - Call library functions
+   - That's it!
+
+3. **Module Independence**: Each `lib/*.sh` module is independently testable
+   - Can be tested without main script
+   - Can be reused in other scripts
+   - Version control can track changes to specific modules
+
+4. **Real-World Failure Case**: See [GATEWAY_HANG_DIAGNOSIS.md](GATEWAY_HANG_DIAGNOSIS.md)
+   - **Problem**: When `discovery.sh` module had `set -euo pipefail` and `should_run_discovery()` defined in `giipAgent3.sh`, 
+     any error in `collect_infrastructure_data()` (in lib/discovery.sh) caused entire parent script to exit silently
+   - **Root Cause**: Distributed function definitions violated module isolation
+   - **Solution**: Moved all functions to `lib/discovery.sh`, giipAgent3.sh became pure orchestration layer
+   - **Lesson**: This architecture pattern applies to all modules
+
+**Enforcement:**
+
+Before committing any changes to `giipAgent3.sh`:
+
+```bash
+# ✅ Check for function definitions in giipAgent3.sh
+grep -n "^[a-z_]*().*{" giipAgent3.sh
+
+# Expected output: (empty - no functions)
+
+# ✅ All functions should be in lib/
+grep -rn "^[a-z_]*().*{" lib/
+
+# Expected output: (many functions in lib/*.sh)
+```
+
+**Migration Checklist** (for existing scripts):
+
+- [ ] Move all function definitions from main script to `lib/module.sh`
+- [ ] Keep ONLY orchestration logic in main script
+- [ ] Test each module independently first
+- [ ] Test main orchestration layer
+- [ ] Verify error handling behavior didn't change
+- [ ] Update documentation links
+- [ ] Commit with message: "refactor: Move functions to lib/ (enforce module isolation)"
+
 ---
 
 ## 📝 Summary

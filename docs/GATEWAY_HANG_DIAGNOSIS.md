@@ -7,6 +7,23 @@
 
 ---
 
+## 🔗 연관 정책 문서
+
+**⚠️ 이 문제의 근본 원인으로 인해 다음 정책이 추가되었습니다:**
+
+📌 **[MODULAR_ARCHITECTURE.md - Section 6: Function Definition Policy](MODULAR_ARCHITECTURE.md#6-function-definition-policy-critical---giipagent3sh)**
+
+**요약**: 모든 모듈 함수는 반드시 `lib/*.sh` 파일에 정의되어야 하며, **절대로** `giipAgent3.sh`에 정의되면 안 됩니다.
+
+**이유**: 
+- 이번 사건에서: `should_run_discovery()`가 giipAgent3.sh에 정의되고, `collect_infrastructure_data()`가 lib/discovery.sh에 정의되어
+  모듈 격리가 깨졌음
+- `set -euo pipefail` 상속 문제로 인해 부모 스크립트 전체가 조용히 종료됨
+
+**교훈**: 함수 정의 위치는 단순한 "코드 정리"가 아니라, **에러 핸들링과 스크립트 안정성**에 직결됨
+
+---
+
 ## 📊 문제 분석 (소스 비교)
 
 ### 정상 버전 vs 문제 버전
