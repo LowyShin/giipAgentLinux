@@ -132,7 +132,7 @@ collect_infrastructure_data() {
 
 ## 📚 Auto-Discover 모듈 사양서
 
-**완전한 설계 문서:** 📄 **[AUTO_DISCOVERY_DESIGN.md](../../giipdb/docs/AUTO_DISCOVERY_DESIGN.md)**
+**완전한 설계 문서:** 📄 **[AUTO_DISCOVERY_DESIGN.md](../../../giipdb/docs/AUTO_DISCOVERY_DESIGN.md)**
 
 이 사양서에서 정의한 auto-discover 기능을 giipAgent3.sh에 통합하려고 할 때 위의 `set -euo pipefail` 문제가 발생했습니다.
 
