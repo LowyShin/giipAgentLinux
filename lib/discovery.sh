@@ -11,12 +11,63 @@ DISCOVERY_INTERVAL=21600  # 6시간 (초 단위)
 DISCOVERY_STATE_FILE="${DISCOVERY_STATE_FILE:-/tmp/giip_discovery_state}"
 LOG_FILE="${LOG_FILE:-/var/log/giipagent.log}"
 
+# KVS 로깅 설정
+KVS_LOG_ENABLED=true
+KVS_LSSN="${KVS_LSSN:-9999}"  # 모니터링용 LSSN
+
+# ============================================================================
+# 함수 0: KVS 로깅 (문제 추적용)
+# ============================================================================
+_log_to_kvs() {
+    local phase="$1"      # 단계명 (예: INIT, LOCAL_START, REMOTE_CONNECT, JSON_PARSE, DB_SAVE, ERROR)
+    local lssn="$2"       # 대상 LSSN
+    local status="$3"     # 상태 (SUCCESS, RUNNING, ERROR, WARNING)
+    local message="$4"    # 상세 메시지
+    local data="${5:-}"   # 추가 데이터 (선택)
+    
+    if [[ "$KVS_LOG_ENABLED" != "true" ]]; then
+        return 0
+    fi
+    
+    # KVS에 저장할 JSON 생성
+    local timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    local kvs_json=$(cat <<EOF
+{
+  "phase": "$phase",
+  "target_lssn": $lssn,
+  "status": "$status",
+  "message": "$(echo "$message" | sed 's/"/\\"/g')",
+  "timestamp": "$timestamp",
+  "hostname": "$(hostname)",
+  "pid": $$
+  $(if [[ -n "$data" ]]; then echo ",$data"; fi)
+}
+EOF
+)
+    
+    # KVS에 저장 시도
+    if command -v kvsput >/dev/null 2>&1; then
+        # giipAgentLinux의 kvsput 사용
+        local factor="discovery_${phase}_$(date +%s)"
+        kvsput "$factor" "$kvs_json" 2>/dev/null || true
+    fi
+    
+    # 파일 기반 로깅도 병행
+    local log_file="/tmp/discovery_kvs_log_${KVS_LSSN}.txt"
+    echo "[$timestamp] [LSSN:$lssn] [$phase] [$status] $message" >> "$log_file" 2>/dev/null || true
+}
+
 # ============================================================================
 # 함수 1: 로컬 또는 원격 서버에서 Infrastructure Discovery 데이터 수집
 # ============================================================================
 collect_infrastructure_data() {
     local lssn="$1"
     local remote_info="${2:-}"  # 형식: ssh_user@ssh_host:ssh_port 또는 비어있음(로컬)
+    
+    # 전역 LSSN 설정 (모든 로깅에 사용)
+    export KVS_LSSN="$lssn"
+    
+    _log_to_kvs "DISCOVERY_START" "$lssn" "RUNNING" "Starting infrastructure discovery collection, remote_info=$remote_info"
     
     if [[ -n "$remote_info" ]]; then
         echo "[Discovery] 🔍 Collecting infrastructure data from remote server (LSSN=$lssn, Host=$remote_info)" >&2
@@ -25,6 +76,8 @@ collect_infrastructure_data() {
         echo "[Discovery] 🔍 Collecting infrastructure data locally (LSSN=$lssn)" >&2
         _collect_local_data "$lssn"
     fi
+    
+    _log_to_kvs "DISCOVERY_END" "$lssn" "SUCCESS" "Infrastructure discovery collection completed"
 }
 
 # ============================================================================
@@ -33,28 +86,46 @@ collect_infrastructure_data() {
 _collect_local_data() {
     local lssn="$1"
     
+    _log_to_kvs "LOCAL_START" "$lssn" "RUNNING" "Starting local discovery"
+    
     # Step 1: auto-discover-linux.sh 실행
     if [[ ! -f "$DISCOVERY_SCRIPT_LOCAL" ]]; then
-        echo "[Discovery] ❌ Error: $DISCOVERY_SCRIPT_LOCAL not found" >&2
+        local error_msg="Script not found: $DISCOVERY_SCRIPT_LOCAL"
+        echo "[Discovery] ❌ Error: $error_msg" >&2
+        _log_to_kvs "LOCAL_SCRIPT_CHECK" "$lssn" "ERROR" "$error_msg"
         return 1
     fi
     
+    _log_to_kvs "LOCAL_SCRIPT_CHECK" "$lssn" "SUCCESS" "Script found: $DISCOVERY_SCRIPT_LOCAL"
+    
     local discovery_json
-    if ! discovery_json=$("$DISCOVERY_SCRIPT_LOCAL" 2>/dev/null); then
-        echo "[Discovery] ❌ Error: Failed to collect local discovery data" >&2
+    if ! discovery_json=$("$DISCOVERY_SCRIPT_LOCAL" 2>&1); then
+        local error_msg="Failed to execute auto-discover-linux.sh: $discovery_json"
+        echo "[Discovery] ❌ Error: $error_msg" >&2
+        _log_to_kvs "LOCAL_EXECUTION" "$lssn" "ERROR" "$error_msg"
         return 1
     fi
+    
+    _log_to_kvs "LOCAL_EXECUTION" "$lssn" "SUCCESS" "Script executed successfully"
     
     # Step 2: JSON 검증
     if ! echo "$discovery_json" | python3 -m json.tool >/dev/null 2>&1; then
-        echo "[Discovery] ❌ Error: Invalid JSON from local discovery script" >&2
-        echo "[Discovery] Debug: $discovery_json" >&2
+        local error_msg="Invalid JSON from local discovery script"
+        echo "[Discovery] ❌ Error: $error_msg" >&2
+        echo "[Discovery] Debug: ${discovery_json:0:500}" >&2
+        _log_to_kvs "LOCAL_JSON_VALIDATION" "$lssn" "ERROR" "$error_msg, First 500 chars: ${discovery_json:0:500}"
         return 1
     fi
     
-    # Step 3: DB 저장
-    _save_discovery_to_db "$lssn" "$discovery_json" || return 1
+    _log_to_kvs "LOCAL_JSON_VALIDATION" "$lssn" "SUCCESS" "JSON validation passed"
     
+    # Step 3: DB 저장
+    if ! _save_discovery_to_db "$lssn" "$discovery_json"; then
+        _log_to_kvs "LOCAL_DB_SAVE" "$lssn" "ERROR" "Failed to save discovery data to DB"
+        return 1
+    fi
+    
+    _log_to_kvs "LOCAL_DB_SAVE" "$lssn" "SUCCESS" "Discovery data saved to DB"
     echo "[Discovery] ✅ Local infrastructure discovery completed for LSSN=$lssn" >&2
     echo "$(date +%s)" > "$DISCOVERY_STATE_FILE.lssn_$lssn"
     
@@ -68,64 +139,111 @@ _collect_remote_data() {
     local lssn="$1"
     local remote_info="$2"  # 형식: ssh_user@ssh_host:ssh_port 또는 ssh_user@ssh_host
     
+    _log_to_kvs "REMOTE_START" "$lssn" "RUNNING" "Starting remote discovery: $remote_info"
+    
     # remote_info 파싱
     local ssh_user ssh_host ssh_port ssh_key
-    _parse_ssh_info "$remote_info" ssh_user ssh_host ssh_port ssh_key
+    if ! _parse_ssh_info "$remote_info" ssh_user ssh_host ssh_port ssh_key; then
+        _log_to_kvs "REMOTE_PARSE" "$lssn" "ERROR" "Failed to parse remote info: $remote_info"
+        return 1
+    fi
     
-    # Step 1: 원격 서버에서 auto-discover-linux.sh 실행
-    # (리모트 서버의 스크립트 위치를 확인하거나 온디맨드로 전송)
+    _log_to_kvs "REMOTE_PARSE" "$lssn" "SUCCESS" "Parsed: user=$ssh_user, host=$ssh_host, port=$ssh_port"
+    
+    # Step 1: 원격 서버에서 auto-discover-linux.sh 실행 (방법 1: 기존 경로)
     local discovery_json
     
     echo "[Discovery] 📡 Connecting to $ssh_user@$ssh_host:$ssh_port (LSSN=$lssn)..." >&2
     
+    _log_to_kvs "REMOTE_CONNECT" "$lssn" "RUNNING" "Attempting SSH connection to $ssh_host:$ssh_port"
+    
     # 방법 1: 원격 서버에 auto-discover-linux.sh가 이미 있는 경우
+    local try1_error=""
     if discovery_json=$(_ssh_exec "$ssh_user" "$ssh_host" "$ssh_port" "$ssh_key" \
-        "bash /opt/giip/agent/linux/giipscripts/auto-discover-linux.sh 2>/dev/null" 2>/dev/null); then
+        "bash /opt/giip/agent/linux/giipscripts/auto-discover-linux.sh 2>&1" 2>&1); then
+        
+        _log_to_kvs "REMOTE_EXECUTE_METHOD1" "$lssn" "SUCCESS" "Script executed via method 1 (existing path)"
         
         if echo "$discovery_json" | python3 -m json.tool >/dev/null 2>&1; then
-            echo "[Discovery] ✅ Remote discovery data collected successfully" >&2
-            _save_discovery_to_db "$lssn" "$discovery_json" || return 1
-            echo "$(date +%s)" > "$DISCOVERY_STATE_FILE.lssn_$lssn.remote_$ssh_host"
-            return 0
+            echo "[Discovery] ✅ Remote discovery data collected successfully (method 1)" >&2
+            _log_to_kvs "REMOTE_JSON_VALIDATION" "$lssn" "SUCCESS" "JSON validation passed (method 1)"
+            
+            if _save_discovery_to_db "$lssn" "$discovery_json"; then
+                _log_to_kvs "REMOTE_DB_SAVE" "$lssn" "SUCCESS" "Discovery data saved to DB"
+                echo "$(date +%s)" > "$DISCOVERY_STATE_FILE.lssn_$lssn.remote_$ssh_host"
+                return 0
+            else
+                _log_to_kvs "REMOTE_DB_SAVE" "$lssn" "ERROR" "Failed to save discovery data to DB (method 1)"
+                # 계속 진행 (방법 2 시도)
+            fi
+        else
+            try1_error="Invalid JSON: ${discovery_json:0:200}"
+            _log_to_kvs "REMOTE_JSON_VALIDATION" "$lssn" "WARNING" "$try1_error"
         fi
+    else
+        try1_error="SSH execution failed: $discovery_json"
+        _log_to_kvs "REMOTE_EXECUTE_METHOD1" "$lssn" "WARNING" "$try1_error"
     fi
     
     # 방법 2: 로컬 스크립트를 원격으로 전송 후 실행
-    echo "[Discovery] 📤 Transferring discovery script to $ssh_host..." >&2
+    echo "[Discovery] 📤 Transferring discovery script to $ssh_host (method 2)..." >&2
+    
+    _log_to_kvs "REMOTE_TRANSFER_START" "$lssn" "RUNNING" "Transferring script from method 1 failure: $try1_error"
     
     if ! _scp_file "$ssh_user" "$ssh_host" "$ssh_port" "$ssh_key" \
         "$DISCOVERY_SCRIPT_LOCAL" "/tmp/auto-discover-linux.sh"; then
-        echo "[Discovery] ❌ Error: Failed to transfer discovery script to $ssh_host" >&2
+        local error_msg="Failed to transfer discovery script to $ssh_host"
+        echo "[Discovery] ❌ Error: $error_msg" >&2
+        _log_to_kvs "REMOTE_TRANSFER" "$lssn" "ERROR" "$error_msg"
         return 1
     fi
     
+    _log_to_kvs "REMOTE_TRANSFER" "$lssn" "SUCCESS" "Script transferred successfully"
+    
     # 원격에서 전송된 스크립트 실행
+    _log_to_kvs "REMOTE_EXECUTE_METHOD2" "$lssn" "RUNNING" "Executing transferred script"
+    
     if ! discovery_json=$(_ssh_exec "$ssh_user" "$ssh_host" "$ssh_port" "$ssh_key" \
-        "bash /tmp/auto-discover-linux.sh 2>/dev/null" 2>/dev/null); then
-        echo "[Discovery] ❌ Error: Failed to execute discovery script on $ssh_host" >&2
+        "bash /tmp/auto-discover-linux.sh 2>&1" 2>&1); then
+        local error_msg="Failed to execute discovery script on $ssh_host"
+        echo "[Discovery] ❌ Error: $error_msg" >&2
+        _log_to_kvs "REMOTE_EXECUTE_METHOD2" "$lssn" "ERROR" "$error_msg: $discovery_json"
         return 1
     fi
+    
+    _log_to_kvs "REMOTE_EXECUTE_METHOD2" "$lssn" "SUCCESS" "Script executed via method 2 (transferred)"
     
     # Step 2: JSON 검증
     if ! echo "$discovery_json" | python3 -m json.tool >/dev/null 2>&1; then
-        echo "[Discovery] ❌ Error: Invalid JSON from remote discovery script" >&2
-        echo "[Discovery] Debug: $discovery_json" >&2
+        local error_msg="Invalid JSON from remote discovery script (method 2)"
+        echo "[Discovery] ❌ Error: $error_msg" >&2
+        echo "[Discovery] Debug: ${discovery_json:0:500}" >&2
+        _log_to_kvs "REMOTE_JSON_VALIDATION_METHOD2" "$lssn" "ERROR" "$error_msg, First 500 chars: ${discovery_json:0:500}"
         return 1
     fi
     
+    _log_to_kvs "REMOTE_JSON_VALIDATION_METHOD2" "$lssn" "SUCCESS" "JSON validation passed (method 2)"
+    
     # Step 3: DB 저장
+    _log_to_kvs "REMOTE_DB_SAVE" "$lssn" "RUNNING" "Saving discovery data to database"
+    
     if ! _save_discovery_to_db "$lssn" "$discovery_json"; then
+        _log_to_kvs "REMOTE_DB_SAVE" "$lssn" "ERROR" "Failed to save discovery data to DB"
         # 정리: 원격 임시 파일 삭제
         _ssh_exec "$ssh_user" "$ssh_host" "$ssh_port" "$ssh_key" \
             "rm -f /tmp/auto-discover-linux.sh" 2>/dev/null || true
         return 1
     fi
     
+    _log_to_kvs "REMOTE_DB_SAVE" "$lssn" "SUCCESS" "Discovery data saved to DB"
+    
     # 정리: 원격 임시 파일 삭제
+    _log_to_kvs "REMOTE_CLEANUP" "$lssn" "RUNNING" "Cleaning up temporary files on remote host"
     _ssh_exec "$ssh_user" "$ssh_host" "$ssh_port" "$ssh_key" \
         "rm -f /tmp/auto-discover-linux.sh" 2>/dev/null || true
     
     echo "[Discovery] ✅ Remote infrastructure discovery completed for LSSN=$lssn (Host=$ssh_host)" >&2
+    _log_to_kvs "REMOTE_COMPLETE" "$lssn" "SUCCESS" "Remote discovery completed successfully for host=$ssh_host"
     echo "$(date +%s)" > "$DISCOVERY_STATE_FILE.lssn_$lssn.remote_$ssh_host"
     
     return 0
@@ -188,8 +306,21 @@ _ssh_exec() {
         ssh_opts="$ssh_opts -i $ssh_key"
     fi
     
-    # SSH 실행
-    ssh $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "$command"
+    # SSH 실행 (로깅 포함)
+    local output
+    local exit_code
+    
+    output=$(ssh $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "$command" 2>&1)
+    exit_code=$?
+    
+    if [[ $exit_code -eq 0 ]]; then
+        _log_to_kvs "SSH_EXEC_SUCCESS" "${KVS_LSSN:-9999}" "SUCCESS" "SSH command executed on $ssh_host:$ssh_port, user=$ssh_user"
+    else
+        _log_to_kvs "SSH_EXEC_ERROR" "${KVS_LSSN:-9999}" "ERROR" "SSH command failed with exit code $exit_code on $ssh_host:$ssh_port. Error: ${output:0:200}"
+    fi
+    
+    echo "$output"
+    return $exit_code
 }
 
 # ============================================================================
@@ -209,8 +340,20 @@ _scp_file() {
         scp_opts="$scp_opts -i $ssh_key"
     fi
     
-    # SCP 실행
-    scp $scp_opts -P "$ssh_port" "$local_file" "${ssh_user}@${ssh_host}:${remote_file}"
+    # SCP 실행 (로깅 포함)
+    local output
+    local exit_code
+    
+    output=$(scp $scp_opts -P "$ssh_port" "$local_file" "${ssh_user}@${ssh_host}:${remote_file}" 2>&1)
+    exit_code=$?
+    
+    if [[ $exit_code -eq 0 ]]; then
+        _log_to_kvs "SCP_TRANSFER_SUCCESS" "${KVS_LSSN:-9999}" "SUCCESS" "File transferred: $local_file → $ssh_host:$remote_file"
+    else
+        _log_to_kvs "SCP_TRANSFER_ERROR" "${KVS_LSSN:-9999}" "ERROR" "SCP transfer failed with exit code $exit_code. Error: ${output:0:200}"
+    fi
+    
+    return $exit_code
 }
 
 # ============================================================================
@@ -221,22 +364,48 @@ _save_discovery_to_db() {
     local discovery_json="$2"
     
     echo "[Discovery] 💾 Saving to database for LSSN=$lssn..." >&2
+    _log_to_kvs "DB_SAVE_START" "$lssn" "RUNNING" "Starting database save operations"
     
     # Step 1: Server Info (tLSvr)
-    _save_server_info "$lssn" "$discovery_json" || return 1
+    _log_to_kvs "DB_SAVE_SERVER_INFO" "$lssn" "RUNNING" "Saving server info"
+    _save_server_info "$lssn" "$discovery_json" || {
+        _log_to_kvs "DB_SAVE_SERVER_INFO" "$lssn" "ERROR" "Failed to save server info"
+        return 1
+    }
+    _log_to_kvs "DB_SAVE_SERVER_INFO" "$lssn" "SUCCESS" "Server info saved"
     
     # Step 2: Network Interfaces (tLSvrNIC)
-    _save_network_interfaces "$lssn" "$discovery_json" || return 1
+    _log_to_kvs "DB_SAVE_NETWORK" "$lssn" "RUNNING" "Saving network interfaces"
+    _save_network_interfaces "$lssn" "$discovery_json" || {
+        _log_to_kvs "DB_SAVE_NETWORK" "$lssn" "ERROR" "Failed to save network interfaces"
+        return 1
+    }
+    _log_to_kvs "DB_SAVE_NETWORK" "$lssn" "SUCCESS" "Network interfaces saved"
     
     # Step 3: Software (tLSvrSoftware)
-    _save_software "$lssn" "$discovery_json" || return 1
+    _log_to_kvs "DB_SAVE_SOFTWARE" "$lssn" "RUNNING" "Saving software inventory"
+    _save_software "$lssn" "$discovery_json" || {
+        _log_to_kvs "DB_SAVE_SOFTWARE" "$lssn" "ERROR" "Failed to save software"
+        return 1
+    }
+    _log_to_kvs "DB_SAVE_SOFTWARE" "$lssn" "SUCCESS" "Software inventory saved"
     
     # Step 4: Services (tLSvrService)
-    _save_services "$lssn" "$discovery_json" || return 1
+    _log_to_kvs "DB_SAVE_SERVICES" "$lssn" "RUNNING" "Saving services"
+    _save_services "$lssn" "$discovery_json" || {
+        _log_to_kvs "DB_SAVE_SERVICES" "$lssn" "ERROR" "Failed to save services"
+        return 1
+    }
+    _log_to_kvs "DB_SAVE_SERVICES" "$lssn" "SUCCESS" "Services saved"
     
     # Step 5: Generate Advice (pApiAgentGenerateAdvicebyAK)
-    _generate_advice "$lssn" || return 0  # 비필수
+    _log_to_kvs "DB_GENERATE_ADVICE" "$lssn" "RUNNING" "Generating advice"
+    _generate_advice "$lssn" || {
+        _log_to_kvs "DB_GENERATE_ADVICE" "$lssn" "WARNING" "Failed to generate advice (non-critical)"
+    }
+    _log_to_kvs "DB_GENERATE_ADVICE" "$lssn" "SUCCESS" "Advice generation completed"
     
+    _log_to_kvs "DB_SAVE_COMPLETE" "$lssn" "SUCCESS" "All database operations completed successfully"
     echo "[Discovery] ✅ Database save completed for LSSN=$lssn" >&2
     return 0
 }
@@ -256,6 +425,8 @@ _save_server_info() {
     local memory_gb=$(echo "$discovery_json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('memory_gb',0))" 2>/dev/null || echo "0")
     local disk_gb=$(echo "$discovery_json" | python3 -c "import sys,json; print(json.load(sys.stdin).get('disk_gb',0))" 2>/dev/null || echo "0")
     
+    _log_to_kvs "SERVER_INFO_PARSE" "$lssn" "SUCCESS" "Parsed server info: hostname=$hostname, os=$os, cores=$cpu_cores, mem=${memory_gb}GB"
+    
     # API 호출을 위한 JSON 생성
     local api_json=$(cat <<EOF
 {
@@ -274,8 +445,12 @@ EOF
     # API 호출 시뮬레이션 (실제로는 KVS에 저장 또는 API 호출)
     echo "[Discovery] 📊 Server info: hostname=$hostname, os=$os, cores=$cpu_cores, mem=${memory_gb}GB, disk=${disk_gb}GB" >&2
     
+    _log_to_kvs "SERVER_INFO_API_CALL" "$lssn" "RUNNING" "Calling server info API with: $api_json"
+    
     # TODO: 실제 API 호출 또는 KVS 저장
     # _api_call "ServerInfoUpdate" "$api_json"
+    
+    _log_to_kvs "SERVER_INFO_API_CALL" "$lssn" "SUCCESS" "Server info API call completed (TODO: actual implementation)"
     
     return 0
 }
@@ -288,6 +463,8 @@ _save_network_interfaces() {
     local discovery_json="$2"
     
     local nic_count=0
+    
+    _log_to_kvs "NETWORK_PARSE_START" "$lssn" "RUNNING" "Parsing network interfaces from discovery data"
     
     # network[] 배열 순회
     echo "$discovery_json" | python3 -c "
@@ -305,11 +482,13 @@ except Exception as e:
         [[ -z "$ifname" ]] && continue
         
         echo "[Discovery] 🌐 NIC: $ifname - IPv4=$ipv4, IPv6=$ipv6, MAC=$mac" >&2
+        _log_to_kvs "NETWORK_INTERFACE" "$lssn" "SUCCESS" "NIC entry: name=$ifname, ipv4=$ipv4, mac=$mac"
         ((nic_count++))
         
         # TODO: 실제 API 호출 또는 KVS 저장
     done
     
+    _log_to_kvs "NETWORK_PARSE_COMPLETE" "$lssn" "SUCCESS" "Network interfaces parsed: $nic_count NICs"
     echo "[Discovery] ✅ Network interfaces saved ($nic_count NICs)" >&2
     return 0
 }
@@ -322,6 +501,8 @@ _save_software() {
     local discovery_json="$2"
     
     local sw_count=0
+    
+    _log_to_kvs "SOFTWARE_PARSE_START" "$lssn" "RUNNING" "Parsing software inventory from discovery data"
     
     # software[] 배열 순회
     echo "$discovery_json" | python3 -c "
@@ -338,11 +519,13 @@ except Exception as e:
         [[ -z "$name" ]] && continue
         
         echo "[Discovery] 📦 Software: $name v$version" >&2
+        _log_to_kvs "SOFTWARE_ENTRY" "$lssn" "SUCCESS" "Software entry: name=$name, version=$version"
         ((sw_count++))
         
         # TODO: 실제 API 호출 또는 KVS 저장
     done
     
+    _log_to_kvs "SOFTWARE_PARSE_COMPLETE" "$lssn" "SUCCESS" "Software inventory parsed: $sw_count items"
     echo "[Discovery] ✅ Software list saved ($sw_count items)" >&2
     return 0
 }
@@ -355,6 +538,8 @@ _save_services() {
     local discovery_json="$2"
     
     local svc_count=0
+    
+    _log_to_kvs "SERVICES_PARSE_START" "$lssn" "RUNNING" "Parsing services from discovery data"
     
     # services[] 배열 순회
     echo "$discovery_json" | python3 -c "
@@ -371,11 +556,13 @@ except Exception as e:
         [[ -z "$name" ]] && continue
         
         echo "[Discovery] 🔧 Service: $name - $status (port=$port)" >&2
+        _log_to_kvs "SERVICE_ENTRY" "$lssn" "SUCCESS" "Service entry: name=$name, status=$status, port=$port"
         ((svc_count++))
         
         # TODO: 실제 API 호출 또는 KVS 저장
     done
     
+    _log_to_kvs "SERVICES_PARSE_COMPLETE" "$lssn" "SUCCESS" "Services parsed: $svc_count items"
     echo "[Discovery] ✅ Services saved ($svc_count items)" >&2
     return 0
 }
@@ -387,10 +574,12 @@ _generate_advice() {
     local lssn="$1"
     
     echo "[Discovery] 🧠 Generating advice for LSSN=$lssn..." >&2
+    _log_to_kvs "ADVICE_GENERATION" "$lssn" "RUNNING" "Generating advice based on discovery data"
     
     # TODO: 실제 API 호출
     # _api_call "GenerateAdvicebyAK" "{\"lssn\":$lssn}"
     
+    _log_to_kvs "ADVICE_GENERATION" "$lssn" "SUCCESS" "Advice generation completed (TODO: actual implementation)"
     echo "[Discovery] ℹ️  Advice generation skipped (optional)" >&2
     return 0
 }
