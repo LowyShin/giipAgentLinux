@@ -217,12 +217,22 @@ fi
 - `execute_gateway_cycle()`: Gateway 사이클 실행
 - `process_gateway_queue()`: Gateway 큐 처리
 - `save_execution_log()`: 실행 이력을 tKVS에 저장 (kFactor=giipagent) ⭐
+- **[2025-11-22] 추가 로드**: `fetch_queue()` from normal.sh (Gateway 자신의 큐 처리용) ⭐ **중요**
 
 **KVS 로깅**: ✅ 있음
 - `save_gateway_status()`: kFactor=gateway_status
 - `save_execution_log()`: kFactor=giipagent
 
 **로드 시점**: giipAgent3.sh Line 196 (Gateway 모드 진입 후)
+
+**[2025-11-22] 로드 순서 중요**:
+```bash
+# gateway.sh 줄 34에서 normal.sh 로드 필수!
+if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh" ]; then
+    . "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh"  # ← normal.sh 로드
+fi
+```
+✅ 이 로드가 없으면 `fetch_queue()` 함수 미정의 → [5.3.1] Gateway 큐 체크 실패!
 
 ```bash
 if [ "${gateway_mode}" = "1" ]; then
@@ -514,7 +524,152 @@ save_execution_log "shutdown" [normal.sh]
 
 ---
 
-## 🚨 AI Agent 작업 규칙
+## 🚨 AI Agent 작업 규칙 (2025-11-22 최신화)
+
+### ⚠️ 가장 흔한 에러 & 해결 방법
+
+#### 1️⃣ **[5.3.1] Gateway 큐 체크가 실행 안 됨**
+
+**증상**:
+- Gateway의 LSChkdt가 업데이트 안 됨
+- stderr에 `[5.3.1-WARN] "fetch_queue 함수 미로드"` 로그 출력
+
+**원인**:
+- ❌ gateway.sh에서 normal.sh를 로드하지 않음
+- ❌ fetch_queue() 함수가 정의되지 않음
+- ❌ `if type fetch_queue` 체크 실패
+
+**해결**:
+- ✅ gateway.sh 줄 34에 normal.sh 로드 명령 반드시 추가:
+```bash
+# Load normal mode queue fetching module (for Gateway self-queue processing)
+if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh" ]; then
+    . "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh"
+else
+    fetch_queue() { return 1; }  # Stub
+fi
+```
+
+**검증**:
+```bash
+# gateway.sh 시작 부분(줄 8-50)을 확인해서 normal.sh 로드가 있는지 확인
+grep -n "normal.sh" lib/gateway.sh
+# 결과: 줄 34: . "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh" (있어야 함!)
+```
+
+---
+
+#### 2️⃣ **startup 로깅이 2번 이상 발생**
+
+**증상**:
+- tKVS에서 같은 시간에 startup 이벤트 2개 이상
+- 디버깅 어려워짐
+
+**원인**:
+- ❌ giipAgent3.sh에서 save_execution_log("startup") 호출
+- ❌ gateway.sh에서도 save_execution_log("startup") 호출
+- ❌ normal.sh에서도 save_execution_log("startup") 호출
+
+**해결**:
+- ✅ startup 로깅은 **각 모드별 1곳에서만** 호출:
+  - **Gateway 모드**: giipAgent3.sh Line 203만 호출
+  - **Normal 모드**: lib/normal.sh Line 216만 호출
+
+**검증**:
+```bash
+# startup 로깅이 여러 곳에서 호출되는지 확인
+grep -r "save_execution_log.*startup" lib/ giipAgent3.sh
+# 예상 결과:
+# giipAgent3.sh: 1곳
+# lib/gateway.sh: 0곳 (호출 안 함)
+# lib/normal.sh: 1곳
+```
+
+---
+
+#### 3️⃣ **API 응답에 timestamp 필드가 포함되어 DB 데이터 불일치**
+
+**증상**:
+- API 응답 JSON에 `"timestamp": "2025-11-22 10:30:03"` 포함
+- 클라이언트 시간 ≠ 서버 시간 → 불일치
+- LSChkdt 업데이트 시점 모호
+
+**원인**:
+- ❌ JSON 객체에 $(date) 명령으로 timestamp 직접 삽입
+- ❌ 클라이언트-서버 시간 차이 존재
+- ❌ KVS에 저장되는 데이터가 부정확
+
+**해결**:
+- ✅ JSON에서 timestamp 필드 제거
+- ✅ LSChkdt는 DB의 `GETUTCDATE()` 사용
+- ✅ KVS 저장은 자동 timestamp 사용 (regdate)
+
+**예시** (gateway.sh gateway_log 함수):
+```bash
+# ❌ 잘못된 코드
+local json_payload="{\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"event\":...}"
+
+# ✅ 올바른 코드
+local json_payload="{\"event_type\":\"gateway_operation\",\"point\":\"${point}\"}"
+# timestamp는 KVS 자동 처리 (regdate 사용)
+```
+
+**검증**:
+```bash
+# JSON에서 timestamp 필드 검색
+grep -r "timestamp" lib/*.sh giipAgent3.sh | grep -v "# " | grep -v "⏰"
+# 결과: 없어야 함 (주석 제외)
+```
+
+---
+
+### ✅ 모듈 수정 전 체크리스트
+
+**각 모듈별로 수정할 때 반드시 확인**:
+
+#### gateway.sh 수정 시
+```markdown
+[ ] 1. normal.sh 로드가 있는가? (줄 34)
+       grep -n "normal.sh" lib/gateway.sh
+[ ] 2. fetch_queue() 함수를 사용하는가?
+       grep -n "fetch_queue" lib/gateway.sh
+[ ] 3. KVS 함수 중복이 없는가?
+       grep -n "save_execution_log.*startup" lib/gateway.sh → 결과: 0개
+[ ] 4. 문법 오류 확인
+       bash -n lib/gateway.sh
+[ ] 5. 사양서 업데이트
+       GIIPAGENT3_SPECIFICATION.md 수정
+```
+
+#### normal.sh 수정 시
+```markdown
+[ ] 1. fetch_queue() 함수 정의 확인 (줄 14)
+       grep -n "fetch_queue()" lib/normal.sh
+[ ] 2. startup 로깅이 1번만 있는가? (줄 216)
+       grep -n "save_execution_log.*startup" lib/normal.sh → 결과: 1개
+[ ] 3. KVS 함수 중복이 없는가?
+       grep -c "save_execution_log" lib/normal.sh → 개수 확인
+[ ] 4. 문법 오류 확인
+       bash -n lib/normal.sh
+[ ] 5. 사양서 업데이트
+       GIIPAGENT3_SPECIFICATION.md 수정
+```
+
+#### giipAgent3.sh 수정 시
+```markdown
+[ ] 1. Gateway startup 로깅 위치 (줄 203)
+       grep -n "save_execution_log.*startup" giipAgent3.sh → Gateway 모드에만 있어야 함
+[ ] 2. 모듈 로드 순서 확인
+       Gateway: db_clients.sh → gateway.sh
+       Normal: normal.sh
+[ ] 3. GIT_COMMIT, FILE_MODIFIED export 확인 (줄 103-119)
+[ ] 4. 문법 오류 확인
+       bash -n giipAgent3.sh
+[ ] 5. 사양서 업데이트
+       GIIPAGENT3_SPECIFICATION.md 수정
+```
+
+---
 
 ### KVS 로깅 수정 시
 
@@ -610,3 +765,68 @@ giipAgentLinux/
 ---
 
 **✅ 이 사양서를 먼저 확인하면 소스 코드를 읽지 않고도 구조 파악 가능!**
+
+---
+
+## 📅 버전 이력 (Version History)
+
+| 날짜 | 변경 사항 | 영향 범위 |
+|------|---------|---------|
+| 2025-11-11 | 초안 작성 | 전체 구조 |
+| 2025-11-22 | [5.3.1] Gateway 자신의 큐 처리 추가 | gateway.sh, normal.sh |
+| 2025-11-22 | 타임스탐프 정책 업데이트 (DB 레벨) | JSON 구조 변경 |
+| 2025-11-22 | gateway.sh에 normal.sh 로드 추가 | gateway.sh 줄 34 |
+| 2025-11-22 | 에러 원인 & 해결책 상세 문서화 | 🚨 AI Agent 작업 규칙 섹션 신규 |
+
+---
+
+## ⚡ 최근 수정 요약 (2025-11-22)
+
+### 🔴 문제
+- Gateway의 LSChkdt가 업데이트되지 않음 (고정된 시간 표시)
+- Gateway 71240: 2025-11-22 10:30:03 (고정)
+- Remote 71221: 2025-11-22 21:04:39 (최신)
+
+### 🔍 근본 원인
+1. `gateway.sh`가 `normal.sh`를 로드하지 않음
+2. `fetch_queue()` 함수가 미정의
+3. Gateway 큐 체크 로직이 실행 안 됨 ([5.3.1] 코드 스킵)
+
+### ✅ 해결책
+1. **gateway.sh 줄 34**: normal.sh 로드 추가
+   ```bash
+   if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh" ]; then
+       . "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh"
+   fi
+   ```
+
+2. **gateway.sh 줄 644-660**: [5.3.1] Gateway 큐 처리 로직 (이미 추가됨)
+   ```bash
+   if type fetch_queue >/dev/null 2>&1; then
+       fetch_queue "$lssn" "$hn" "$os" "$gateway_queue_file"
+       # ...
+   fi
+   ```
+
+### 📊 기대 효과
+- **Before**: Gateway LSChkdt = 10:30:03 (고정)
+- **After**: Gateway LSChkdt = 21:10:00 (매 사이클 업데이트)
+- 메커니즘: CQEQueueGet API → pApiCQEQueueGetbySk SP → LSChkdt = GETDATE()
+
+---
+
+## 🔗 참고 자료
+
+**핵심 파일**:
+- `giipAgent3.sh`: 메인 진입점 (모드 선택)
+- `lib/gateway.sh`: Gateway 모드 구현 (normal.sh 로드 필수!)
+- `lib/normal.sh`: Normal 모드 구현 (fetch_queue 정의)
+- `lib/common.sh`: 공통 함수
+
+**관련 SP**:
+- `pApiCQEQueueGetbySk`: LSChkdt 자동 업데이트 (줄 30-32)
+- `pApiRemoteServerSSHTestbyAk`: Remote 서버 상태 업데이트
+
+**관련 테이블**:
+- `tLSvr`: 서버 정보 (LSChkdt 포함)
+- `tKVS`: 실행 로그
