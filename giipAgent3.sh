@@ -50,6 +50,10 @@ fi
 # 🔴 [로깅 포인트 #5.1] Agent 시작
 echo "[giipAgent3.sh] 🟢 [5.1] Agent 시작: version=${sv}"
 
+# 🔴 [DEBUG-로깅 #1] 환경 변수 검증 (KVS 저장 실패 진단용)
+echo "[giipAgent3.sh] 🔍 [DEBUG-1] SCRIPT_DIR=${SCRIPT_DIR}" >&2
+echo "[giipAgent3.sh] 🔍 [DEBUG-1] LIB_DIR=${LIB_DIR}" >&2
+
 # ============================================================================
 # Fetch Server Configuration from DB (is_gateway auto-detection)
 # ============================================================================
@@ -138,6 +142,12 @@ if [ -f "$config_tmpfile" ]; then
 		
 		# 🔴 [로깅 포인트 #5.2] 설정 로드 완료
 		echo "[giipAgent3.sh] 🟢 [5.2] 설정 로드 완료: lssn=${lssn}, hostname=${hn}, is_gateway=${gateway_mode}"
+		
+		# 🔴 [DEBUG-로깅 #2] KVS 필수 변수 검증 (라인 300, 305에서 kvs_put 호출 전)
+		echo "[giipAgent3.sh] 🔍 [DEBUG-2] Validating KVS variables before auto-discover phase" >&2
+		echo "[giipAgent3.sh] 🔍 [DEBUG-2] sk=${sk:-(empty ❌)}" >&2
+		echo "[giipAgent3.sh] 🔍 [DEBUG-2] apiaddrv2=${apiaddrv2:-(empty ❌)}" >&2
+		echo "[giipAgent3.sh] 🔍 [DEBUG-2] apiaddrcode=${apiaddrcode:-(empty)}" >&2
 		
 		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"source\":\"db_api\"}"
 	else
@@ -291,15 +301,44 @@ if [ "${gateway_mode}" = "1" ]; then
 	fi
 	
 	echo "[giipAgent3.sh] 📍 DEBUG: auto_discover_script path: $auto_discover_script (exists: $([ -f "$auto_discover_script" ] && echo 'YES' || echo 'NO'))" >&2
+	
+	# 🔴 [DEBUG-로깅 #3] 파일 존재 여부 상세 검증
+	echo "[giipAgent3.sh] 🔍 [DEBUG-3] BRANCH: auto-discover script check" >&2
+	echo "[giipAgent3.sh] 🔍 [DEBUG-3] Expected path: $auto_discover_script" >&2
+	echo "[giipAgent3.sh] 🔍 [DEBUG-3] File exists: $([ -f "$auto_discover_script" ] && echo 'YES ✅' || echo 'NO ❌')" >&2
+	
 	if [ ! -f "$auto_discover_script" ]; then
 		log_message "WARN" "auto-discover script not found in both paths"
+		echo "[giipAgent3.sh] 🔍 [DEBUG-3] Searched paths:" >&2
+		echo "[giipAgent3.sh] 🔍 [DEBUG-3]   - Path 1: ${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh" >&2
+		echo "[giipAgent3.sh] 🔍 [DEBUG-3]   - Path 2: ${SCRIPT_DIR}/lib/giipscripts/auto-discover-linux.sh" >&2
 		kvs_put "lssn" "${lssn}" "auto_discover_init" "{\"status\":\"failed\",\"reason\":\"script_not_found\",\"path\":\"${auto_discover_script}\",\"script_dir\":\"${SCRIPT_DIR}\"}"
 		echo "[giipAgent3.sh] ⚠️ [5.2.1] auto-discover-linux.sh NOT FOUND at $auto_discover_script (SCRIPT_DIR=$SCRIPT_DIR)" >&2
 	else
+		echo "[giipAgent3.sh] 🔍 [DEBUG-3] Script found, proceeding with execution" >&2
 		# [로깅 #2] auto-discover 실행 시작
 		echo "[giipAgent3.sh] 📍 DEBUG: About to call kvs_put for auto_discover_init" >&2
-		kvs_put "lssn" "${lssn}" "auto_discover_init" "{\"status\":\"starting\",\"script_path\":\"${auto_discover_script}\",\"lssn\":${lssn},\"hostname\":\"${hn}\"}"
+		
+		# 🔴 [DEBUG-로깅 #4] kvs_put 호출 전 최종 변수 검증
+		echo "[giipAgent3.sh] 🔍 [DEBUG-4] BEFORE kvs_put auto_discover_init:" >&2
+		echo "[giipAgent3.sh] 🔍 [DEBUG-4]   sk length: ${#sk}" >&2
+		echo "[giipAgent3.sh] 🔍 [DEBUG-4]   apiaddrv2=${apiaddrv2:-(empty ❌)}" >&2
+		echo "[giipAgent3.sh] 🔍 [DEBUG-4]   kType=lssn, kKey=${lssn}, kFactor=auto_discover_init" >&2
+		
+		# kvs_put 호출 (stderr 캡처로 로깅)
+		kvs_put "lssn" "${lssn}" "auto_discover_init" "{\"status\":\"starting\",\"script_path\":\"${auto_discover_script}\",\"lssn\":${lssn},\"hostname\":\"${hn}\"}" 2>&1 | tee -a /tmp/kvs_put_debug_$$.log
 		kvs_put_result=$?
+		
+		# 🔴 [DEBUG-로깅 #5] kvs_put 호출 후 결과 검증
+		echo "[giipAgent3.sh] 🔍 [DEBUG-5] AFTER kvs_put auto_discover_init:" >&2
+		echo "[giipAgent3.sh] 🔍 [DEBUG-5]   exit_code=$kvs_put_result (0=success, non-zero=failure)" >&2
+		if [ $kvs_put_result -ne 0 ]; then
+			echo "[giipAgent3.sh] ❌ [DEBUG-5] ERROR: kvs_put FAILED!" >&2
+			echo "[giipAgent3.sh] 🔍 [DEBUG-5] kvs_put stderr (last 20 lines):" >&2
+			[ -f /tmp/kvs_put_debug_$$.log ] && tail -20 /tmp/kvs_put_debug_$$.log | sed 's/^/  [DEBUG-5] /' >&2
+		else
+			echo "[giipAgent3.sh] ✅ [DEBUG-5] kvs_put SUCCESS" >&2
+		fi
 		echo "[giipAgent3.sh] 📍 DEBUG: kvs_put returned: $kvs_put_result" >&2
 		
 		echo "[giipAgent3.sh] ✅ [5.2.1] auto-discover-linux.sh found, executing..." >&2
