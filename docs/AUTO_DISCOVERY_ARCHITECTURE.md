@@ -1,5 +1,19 @@
 # Auto-Discovery Architecture
 
+---
+
+## 🔗 **문서 간 링크**
+
+| 문서 | 용도 | 링크 |
+|------|------|------|
+| **[GATEWAY_HANG_DIAGNOSIS.md](GATEWAY_HANG_DIAGNOSIS.md)** | Architecture 필수 이해 | 필수 읽기 문서 목록 |
+| **[AUTO_DISCOVER_LOGGING_DIAGNOSIS.md](AUTO_DISCOVER_LOGGING_DIAGNOSIS.md)** | Discovery 진단 | 문제 발생시 참조 |
+| **[AUTO_DISCOVER_LOGGING_ENHANCED.md](AUTO_DISCOVER_LOGGING_ENHANCED.md)** | 로깅 구현 | 실행 흐름 및 로깅 포인트 |
+| **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** | 모듈 설계 | 함수 정의 위치 규칙 |
+| **[SHELL_COMPONENT_SPECIFICATION.md](SHELL_COMPONENT_SPECIFICATION.md)** | 컴포넌트 표준 | 에러 핸들링 규칙 |
+
+---
+
 ## 📁 파일 구조
 
 ```

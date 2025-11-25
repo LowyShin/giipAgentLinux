@@ -271,6 +271,7 @@ if [ "${gateway_mode}" = "1" ]; then
 	# ================================================================
 	# [NEW] Auto-Discover Phase (before Gateway processing)
 	# ================================================================
+	echo "[giipAgent3.sh] 🔵 DEBUG: About to enter auto-discover phase" >&2
 	log_message "INFO" "[5.2] Starting auto-discover phase..."
 	
 	# [로깅 #1] auto-discover 시작 알림
@@ -283,7 +284,11 @@ if [ "${gateway_mode}" = "1" ]; then
 		echo "[giipAgent3.sh] ⚠️ [5.2.1] auto-discover-linux.sh NOT FOUND at $auto_discover_script" >&2
 	else
 		# [로깅 #2] auto-discover 실행 시작
+		echo "[giipAgent3.sh] 📍 DEBUG: About to call kvs_put for auto_discover_init" >&2
 		kvs_put "lssn" "${lssn}" "auto_discover_init" "{\"status\":\"starting\",\"script_path\":\"${auto_discover_script}\",\"lssn\":${lssn},\"hostname\":\"${hn}\"}"
+		kvs_put_result=$?
+		echo "[giipAgent3.sh] 📍 DEBUG: kvs_put returned: $kvs_put_result" >&2
+		
 		echo "[giipAgent3.sh] ✅ [5.2.1] auto-discover-linux.sh found, executing..." >&2
 		
 		# [로깅 #3] 실행 환경 정보

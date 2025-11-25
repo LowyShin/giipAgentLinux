@@ -23,6 +23,7 @@
 | 6️⃣ | **[AUTO_DISCOVERY_ARCHITECTURE.md](AUTO_DISCOVERY_ARCHITECTURE.md)** | 🟠 HIGH | Discovery 설계 원칙 | Separation of Concerns |
 | 7️⃣ | **[GATEWAY_KVS_MONITORING.md](GATEWAY_KVS_MONITORING.md)** | 🟠 HIGH | KVS 정보 분석 및 모니터링 | Gateway 동작 추적 방법 |
 | 8️⃣ | **[KVS_LOGGING_IMPLEMENTATION.md](KVS_LOGGING_IMPLEMENTATION.md)** | 🟠 HIGH | KVS 로깅 구현 및 분석 | 로그 데이터 해석 방법 |
+| 9️⃣ | **[AUTO_DISCOVER_LOGGING_DIAGNOSIS.md](AUTO_DISCOVER_LOGGING_DIAGNOSIS.md)** | 🟠 HIGH | Auto-discover 미실행 원인 진단 | Auto-discover 문제 해결 |
 
 ### 📌 참고용 추가 문서
 
@@ -64,7 +65,39 @@
 
 ## ✅ 해결 완료 (2025-11-23)
 
-### 📋 구현된 방법: **Option 2** (lib/discovery.sh 개선)
+### 현재 상태: ✅ auto-discover 로깅 강화 완료 (2025-11-25)
+
+**최근 확인사항:**
+- ✅ giipAgent3.sh [5.2] auto-discover 섹션 적용됨 (라인 272-340+)
+- ✅ auto-discover-linux.sh에 stderr 로깅 추가됨 (라인 1-30+)
+- ✅ check-latest.ps1 수정됨 (포인트 필터 기본값 제거)
+- ⏳ KVS에 auto_discover_init 로그 대기 중 (서버 cron 실행 대기)
+
+**최신 수정사항 (2025-11-25):**
+
+#### 1단계: check-latest.ps1 수정 ✅
+- 포인트 필터 기본값 제거 (`$NoPointFilter = $true`)
+- 5분 이내 필터링은 유지 (정확한 타임스탬프 비교)
+- 모든 포인트의 로그를 5분 이내로 추출
+
+#### 2단계: giipAgent3.sh DEBUG 로깅 추가 ✅
+- 라인 274: `echo "[giipAgent3.sh] 🔵 DEBUG: About to enter auto-discover phase" >&2`
+- 라인 285: `echo "[giipAgent3.sh] 📍 DEBUG: About to call kvs_put for auto_discover_init" >&2`
+- 라인 287: `echo "[giipAgent3.sh] 📍 DEBUG: kvs_put returned: $kvs_put_result" >&2`
+
+**목적**: auto-discover 섹션이 실제로 도달하는지, kvs_put이 성공하는지 확인
+
+#### 3단계: 다음 cron 실행 후 확인 예정
+```
+check-latest.ps1로 다음 로그 확인:
+1. "DEBUG: About to enter auto-discover phase" → 섹션 도달 확인
+2. "DEBUG: kvs_put returned: 0" → kvs_put 성공 확인
+3. auto_discover_init KVS 저장 확인
+```
+
+---
+
+### 📋 구현된 방법: **Option B** (lib/discovery.sh 개선)
 
 #### 1단계: lib/discovery.sh 수정 ✅
 - **라인 6**: `set -euo pipefail` 제거

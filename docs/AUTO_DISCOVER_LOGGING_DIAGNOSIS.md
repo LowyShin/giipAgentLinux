@@ -1,8 +1,32 @@
 # Auto-Discover 미실행 원인 진단 가이드
 
-**작성일**: 2025-11-25  
+**작성일**: 2025-11-23 (업데이트: 2025-11-25)  
 **상태**: auto-discover가 실행되지 않음 (KVS discovery_collection_local만 경고 상태)  
 **목표**: 로깅 강화를 통해 실제 원인 파악
+
+---
+
+## 🔗 **문서 간 링크**
+
+| 문서 | 관계 | 링크 |
+|------|------|------|
+| **[GATEWAY_HANG_DIAGNOSIS.md](GATEWAY_HANG_DIAGNOSIS.md)** | 이 문서의 진입점 | 필수 읽기 문서 목록에 포함 |
+| **[AUTO_DISCOVER_LOGGING_ENHANCED.md](AUTO_DISCOVER_LOGGING_ENHANCED.md)** | 진단 완료 후 읽기 | 로깅 구현 결과 |
+| **[GATEWAY_KVS_MONITORING.md](GATEWAY_KVS_MONITORING.md)** | KVS 모니터링 | 진단을 위한 쿼리 도구 |
+| **[AUTO_DISCOVERY_ARCHITECTURE.md](AUTO_DISCOVERY_ARCHITECTURE.md)** | 설계 배경 | Discovery 아키텍처 이해 |
+
+---
+
+## 🔗 로깅 강화 문서 (옵션 B 완료)
+
+> ⚠️ **중요**: 먼저 이 문서를 읽으세요!
+
+📄 **[AUTO_DISCOVER_LOGGING_ENHANCED.md](AUTO_DISCOVER_LOGGING_ENHANCED.md)**
+
+- 실행 흐름도 (로깅 위치 명시)
+- 26개 로깅 포인트 (실행 순서대로)
+- 문제별 확인 포인트
+- 실시간 진단 명령어
 
 ---
 

@@ -2,51 +2,255 @@
 
 **작성일**: 2025-11-25  
 **목적**: auto-discover가 실행되지 않는 원인 명확히 파악  
-**상태**: 로깅 강화 완료  
+**상태**: ✅ 로깅 강화 완료 + DEBUG 로깅 추가 (2025-11-25)
 
 ---
 
-## 📋 추가된 로깅 포인트
+## 📌 최신 업데이트 (2025-11-25)
 
-### 1️⃣ giipAgent3.sh - auto-discover 호출 단계 (9개 로깅 포인트)
+### 문제 발견
+- ✅ auto-discover 코드는 giipAgent3.sh에 있음 (라인 272-340+)
+- ❌ KVS에 auto_discover_init 로그가 없음
+- ➡️ **원인 불명**: 섹션이 도달하는지, kvs_put이 성공하는지 확인 필요
 
-**위치**: giipAgent3.sh [5.2] 섹션  
-**목표**: auto-discover 실행 여부와 각 단계 진행 상황 추적
+### 해결책: DEBUG 로깅 추가
+```bash
+# giipAgent3.sh 라인 274
+echo "[giipAgent3.sh] 🔵 DEBUG: About to enter auto-discover phase" >&2
 
-#### 로깅 포인트:
-```
-🟢 [5.2.1] auto-discover-linux.sh 찾음/못 찾음
-✅ [5.2.1] auto-discover-linux.sh 발견 및 실행 시작
-📋 [5.2.2] 실행 환경 정보 (LSSN, Hostname, OS, PID)
-⏱️  [5.2.3] 실행 시작 시간
-✅ [5.2.4] auto-discover 성공 완료
-🕒 [5.2.5] 실행 종료 시간
-📊 [5.2.6] 결과 파일 크기
-💾 [5.2.7] 결과 KVS 저장 여부
-📝 [5.2.8] 전체 결과 KVS 저장 완료
-❌ [5.2.4] auto-discover 실패 (Timeout 또는 Exit Code)
-📋 [5.2.5] 에러 로그 라인 수 및 미리보기
-🧹 [5.2.9] 임시 파일 정리
+# giipAgent3.sh 라인 285-287
+echo "[giipAgent3.sh] 📍 DEBUG: About to call kvs_put for auto_discover_init" >&2
+kvs_put "lssn" "${lssn}" "auto_discover_init" {...}
+kvs_put_result=$?
+echo "[giipAgent3.sh] 📍 DEBUG: kvs_put returned: $kvs_put_result" >&2
 ```
 
-#### KVS 저장 항목:
-- `auto_discover_init` - 시작 정보
-- `auto_discover_result` - 결과 상태 (SUCCESS/FAILED/TIMEOUT)
-- `auto_discover_full_result` - 전체 JSON 결과
-- `auto_discover_error_log` - 에러 로그
-- `auto_discover_complete` - 완료 알림
+### 다음 단계
+서버 cron 실행 후 `check-latest.ps1` 실행:
+```powershell
+pwsh .\mgmt\check-latest.ps1 -Lssn 71240
+```
+위 DEBUG 메시지가 나타나면 섹션이 도달하고 있음
 
 ---
 
-### 2️⃣ auto-discover-linux.sh - 실행 로깅 강화
+## 🔗 **문서 간 링크**
 
-**위치**: 각 수집 단계  
-**목표**: 어느 단계에서 문제가 발생하는지 파악
+| 문서 | 관계 | 링크 |
+|------|------|------|
+| **[AUTO_DISCOVER_LOGGING_DIAGNOSIS.md](AUTO_DISCOVER_LOGGING_DIAGNOSIS.md)** | 진단 방법 문서 | 원인 분석 및 3가지 옵션 제시 |
+| **[GATEWAY_HANG_DIAGNOSIS.md](GATEWAY_HANG_DIAGNOSIS.md)** | 최상위 진입점 | 필수 읽기 문서 목록 |
+| **[GATEWAY_KVS_MONITORING.md](GATEWAY_KVS_MONITORING.md)** | KVS 모니터링 | 로깅 결과 확인 도구 |
+| **[giipAgent3.sh](../../giipAgentLinux/giipAgent3.sh)** | 실제 코드 | 로깅 구현 위치 (라인 ~250-330) |
+| **[auto-discover-linux.sh](../../giipAgentLinux/giipscripts/auto-discover-linux.sh)** | 실제 코드 | 로깅 구현 위치 (라인 ~1-30, ~280-320) |
 
-#### 로깅 포인트:
+---
+
+## 🔄 실행 흐름도 (로깅 위치 명시)```
+┌─────────────────────────────────────────────────────────────────────┐
+│ 1️⃣ giipAgent3.sh 시작                                               │
+│    └─ echo "[giipAgent3.sh] 🟢 [5.1] Agent 시작"                    │
+└─────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 2️⃣ 설정 로드 (common.sh, kvs.sh)                                     │
+│    └─ echo "[giipAgent3.sh] 🟢 [5.2] 설정 로드 완료"                 │
+└─────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 3️⃣ Gateway 모드 판단 (DB에서 is_gateway 확인)                       │
+│    ├─ API 호출: LSvrGetConfig                                      │
+│    ├─ kvs_put "api_lsvrgetconfig_response"  ←[로깅]                │
+│    └─ echo "[giipAgent3.sh] 🟢 [5.3] Gateway 모드 감지"             │
+└─────────────────────────────────────────────────────────────────────┘
+                              ↓
+                         ┌─ YES ─┐
+                         ↓       ↓ NO
+                 ┌──────────┐  NORMAL 모드
+                 │ GATEWAY  │  (로깅 없음)
+                 │  모드    │
+                 └──────────┘
+                         ↓
+        ╔════════════════════════════════════════╗
+        ║      [5.2] AUTO-DISCOVER 단계        ║
+        ║     (새로 추가된 로깅 포인트)         ║
+        ╚════════════════════════════════════════╝
+                         ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 4️⃣ auto-discover-linux.sh 스크립트 확인                             │
+│    ├─ 파일 존재 여부 확인                                           │
+│    ├─ echo "[giipAgent3.sh] 🟢 [5.2] Starting auto-discover..."    │
+│    ├─ kvs_put "auto_discover_init" {"status":"starting"} ←[로깅 #2]│
+│    └─ echo "[giipAgent3.sh] ✅ [5.2.1] auto-discover-linux.sh found"│
+└─────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 5️⃣ auto-discover-linux.sh 실행                                      │
+│                                                                      │
+│    bash auto-discover-linux.sh $LSSN $HOSTNAME $OS                 │
+│                                                                      │
+│    ┌────────────────────────────────────────────────────────────┐   │
+│    │ auto-discover-linux.sh 내부 실행                           │   │
+│    │                                                            │   │
+│    │ echo "[auto-discover] 🟢 START"              ←[로깅 시작] │   │
+│    │ echo "[auto-discover] 📋 Parameters: ..."                │   │
+│    │                                                            │   │
+│    │ ── Step 1: OS 정보 수집 ──                                 │   │
+│    │ echo "[auto-discover] 📋 [Step 1] Collecting OS..."       │   │
+│    │ echo "[auto-discover] ✅ [Step 1] OS: ..."                │   │
+│    │                                                            │   │
+│    │ ── Step 2: CPU 정보 수집 ──                                │   │
+│    │ echo "[auto-discover] 📋 [Step 2] Collecting CPU..."      │   │
+│    │ echo "[auto-discover] ✅ [Step 2] CPU: ..."               │   │
+│    │                                                            │   │
+│    │ ── Step 3: 메모리 정보 수집 ──                             │   │
+│    │ echo "[auto-discover] 📋 [Step 3] Collecting Memory..."   │   │
+│    │ echo "[auto-discover] ✅ [Step 3] Memory: ..."            │   │
+│    │                                                            │   │
+│    │ ── Step 4: Hostname 수집 ──                               │   │
+│    │ echo "[auto-discover] 📋 [Step 4] Collecting Hostname..." │   │
+│    │ echo "[auto-discover] ✅ [Step 4] Hostname: ..."          │   │
+│    │                                                            │   │
+│    │ ── Step 5: Network 수집 ──                                │   │
+│    │ echo "[auto-discover] 📋 [Step 5] Collecting Network..."  │   │
+│    │                                                            │   │
+│    │ ── JSON 생성 ──                                            │   │
+│    │ echo "[auto-discover] 📋 [Step Final] Generating JSON..."  │   │
+│    │ echo "[auto-discover] 📊 [Statistics] ..."                │   │
+│    │ echo "[auto-discover] 🌐 [Network] ..."                   │   │
+│    │ echo "[auto-discover] 📦 [Inventory] ..."                 │   │
+│    │ echo "[auto-discover] ✅ COMPLETED at ..."  ←[로깅 종료]   │   │
+│    │ echo "[auto-discover] 🕒 Total execution time: ..."       │   │
+│    │                                                            │   │
+│    │ cat <<EOF                                                 │   │
+│    │ { JSON 결과 출력 }                                         │   │
+│    │ EOF                                                        │   │
+│    └────────────────────────────────────────────────────────────┘   │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+                              ↓
+        ┌──────────────────────┬──────────────────────┐
+        ↓ 성공                ↓ 실패/Timeout         
+┌──────────────────┐  ┌──────────────────────────┐
+│ 결과 파일 저장    │  │ 에러 로그 캡처          │
+│ [5.2.6]         │  │ [5.2.5]                │
+└──────────────────┘  └──────────────────────────┘
+        ↓                       ↓
+        └────────┬─────────────┘
+                 ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 6️⃣ giipAgent3.sh에서 결과 처리                                      │
+│                                                                      │
+│    if [ -s "$auto_discover_result_file" ]; then                    │
+│      echo "[giipAgent3.sh] 💾 [5.2.7] result saved to KVS"         │
+│      kvs_put "auto_discover_full_result" $JSON  ←[로깅 #6]         │
+│      echo "[giipAgent3.sh] 📝 [5.2.8] full result saved"           │
+│    else                                                             │
+│      echo "[giipAgent3.sh] ⚠️ [5.2.7] Result file is empty"        │
+│      kvs_put "auto_discover_result" {"status":"empty_result"}      │
+│    fi                                                               │
+│                                                                      │
+│    또는 (실패)                                                       │
+│                                                                      │
+│    if [ exit_code -eq 124 ]; then                                  │
+│      echo "[giipAgent3.sh] ❌ [5.2.4] TIMEOUT (after 60s)"         │
+│      kvs_put "auto_discover_result" {"status":"timeout"} ←[로깅]   │
+│    else                                                             │
+│      echo "[giipAgent3.sh] ❌ [5.2.4] failed with exit_code: ..."  │
+│      kvs_put "auto_discover_error_log" {...}  ←[로깅 #7]          │
+│    fi                                                               │
+│                                                                      │
+│    rm -f "$auto_discover_result_file"                               │
+│    echo "[giipAgent3.sh] 🧹 [5.2.9] Temporary files cleaned up"    │
+└─────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 7️⃣ auto-discover 단계 완료                                          │
+│    └─ kvs_put "auto_discover_complete" {"status":"complete"}       │
+│    └─ echo "[giipAgent3.sh] 🟢 [5.2.end] Auto-discover phase done" │
+└─────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│ 8️⃣ Gateway 처리 시작 (process_gateway_servers)                     │
+│    └─ echo "[giipAgent3.sh] 🔵 About to call gateway..."           │
+└─────────────────────────────────────────────────────────────────────┘
 ```
-🟢 START       - 스크립트 시작 (PID, 시간)
-📋 Parameters  - 수신한 파라미터 (LSSN, Hostname, OS)
+
+---
+
+## 📋 로깅 포인트 요약 (실행 순서)
+
+| # | 로깅 위치 | 로그 | KVS 저장 | 설명 |
+|---|---------|------|--------|------|
+| 1 | giipAgent3.sh 시작 | `🟢 [5.1] Agent 시작` | - | Agent 시작 알림 |
+| 2 | 설정 로드 후 | `🟢 [5.2] 설정 로드 완료` | - | 설정 로드 확인 |
+| 3 | Gateway 모드 확인 | `🟢 [5.3] Gateway 모드 감지` | `api_lsvrgetconfig_response` | DB에서 Gateway 모드 확인 |
+| **→ auto-discover 단계 시작** ||||
+| 4 | auto-discover 시작 | `🟢 [5.2] Starting auto-discover` | `auto_discover_init` (starting) | 스크립트 발견 및 실행 준비 |
+| 5 | auto-discover 실행 환경 | `📋 [5.2.2] Environment: ...` | - | LSSN, Hostname, OS, PID 정보 |
+| 6 | auto-discover 실행 시작 시간 | `⏱️ [5.2.3] Execution started at:` | - | 시작 시간 기록 |
+| **→ auto-discover-linux.sh 내부** ||||
+| 7 | auto-discover 스크립트 시작 | `🟢 START` | - | stderr로 출력 (giipAgent3.sh에서 캡처) |
+| 8 | auto-discover 파라미터 | `📋 Parameters: LSSN=...` | - | 수신한 파라미터 로깅 |
+| 9 | Step 1: OS 수집 | `📋 [Step 1] Collecting OS...` → `✅ [Step 1] OS: ...` | - | 각 단계 진행 상황 |
+| 10 | Step 2: CPU 수집 | `📋 [Step 2]` → `✅ [Step 2]` | - | 동일 패턴 |
+| 11 | Step 3: Memory 수집 | `📋 [Step 3]` → `✅ [Step 3]` | - | 동일 패턴 |
+| 12 | Step 4: Hostname 수집 | `📋 [Step 4]` → `✅ [Step 4]` | - | 동일 패턴 |
+| 13 | Step 5: Network 수집 | `📋 [Step 5]` | - | 수집 시작 알림 |
+| 14 | JSON 생성 단계 | `📋 [Step Final] Generating JSON...` | - | JSON 생성 시작 |
+| 15 | 수집 통계 | `📊 [Statistics]` | - | 수집 결과 요약 |
+| 16 | 네트워크 정보 | `🌐 [Network]` | - | IP 주소 정보 |
+| 17 | 인벤토리 수 | `📦 [Inventory]` | - | 수집된 항목 수 |
+| 18 | auto-discover 완료 | `✅ COMPLETED at ...` | - | 스크립트 완료 |
+| 19 | 실행 시간 | `🕒 Total execution time: ...` | - | 전체 소요 시간 |
+| **→ giipAgent3.sh에서 결과 처리** ||||
+| 20 | auto-discover 완료 시간 | `🕒 [5.2.5] Execution ended at:` | - | 종료 시간 기록 |
+| 21 | 결과 파일 크기 | `📊 [5.2.6] Result file size:` | - | 생성된 JSON 크기 |
+| 22 | 결과 저장 (성공) | `💾 [5.2.7] result saved to KVS` | `auto_discover_result` (success) | 결과 저장 완료 |
+| 23 | 전체 결과 저장 | `📝 [5.2.8] full result saved` | `auto_discover_full_result` | 전체 JSON 저장 |
+| 24 | 임시 파일 정리 | `🧹 [5.2.9] Temporary files cleaned` | - | 임시 파일 삭제 |
+| 25 | auto-discover 단계 종료 | `🟢 [5.2.end] Auto-discover phase done` | `auto_discover_complete` | 단계 완료 알림 |
+| **→ Gateway 처리로 진행** ||||
+| 26 | Gateway 시작 | `🔵 About to call gateway...` | - | Gateway 처리 시작 |
+
+---
+
+## 🔴 문제 시 확인 포인트
+
+### ❌ auto-discover 호출 안 됨
+- **라인 4-5** 로그 없음 → `auto_discover_init` KVS 없음
+- **해결**: giipAgent.cnf에서 `is_gateway=1` 확인
+
+### ⏱️ auto-discover Timeout
+- **라인 20** 시간이 나오지 않음 (60초 이상 대기)
+- **KVS**: `auto_discover_result` = "timeout"
+- **해결**: 특정 Step에서 문제 발생 (Step 1-5 로그 확인)
+
+### ❌ auto-discover 실행 실패
+- **라인 18-19** 로그 없음
+- **라인 24** `auto_discover_error_log` KVS 확인
+- **해결**: 에러 로그의 Step 번호 확인
+
+---
+
+## 📊 실시간 진단 (5분마다 확인)
+
+```powershell
+# auto-discover 초기화
+pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey 71174 -KFactor "auto_discover_init" -Hours 0.1
+
+# auto-discover 결과
+pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey 71174 -KFactor "auto_discover_result" -Hours 0.1
+
+# auto-discover 전체 결과
+pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey 71174 -KFactor "auto_discover_full_result" -Hours 0.1
+
+# auto-discover 에러
+pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey 71174 -KFactor "auto_discover_error_log" -Hours 0.1
+
+# auto-discover 완료
+pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey 71174 -KFactor "auto_discover_complete" -Hours 0.1
+```
 📋 Step 1      - OS 정보 수집 중
 ✅ Step 1      - OS 정보 수집 완료
 📋 Step 2      - CPU 정보 수집 중

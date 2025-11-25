@@ -3,6 +3,19 @@
 ## 개요
 Gateway 서버가 KVS에 저장하는 상태 정보를 조회하는 방법입니다.
 
+---
+
+## 🔗 **문서 간 링크**
+
+| 문서 | 용도 | 링크 |
+|------|------|------|
+| **[GATEWAY_HANG_DIAGNOSIS.md](GATEWAY_HANG_DIAGNOSIS.md)** | Gateway hang 문제 진단 | 필수 읽기 문서 목록 |
+| **[AUTO_DISCOVER_LOGGING_DIAGNOSIS.md](AUTO_DISCOVER_LOGGING_DIAGNOSIS.md)** | Auto-discover 진단 | KVS 조회 도구 사용 |
+| **[AUTO_DISCOVER_LOGGING_ENHANCED.md](AUTO_DISCOVER_LOGGING_ENHANCED.md)** | Auto-discover 로깅 | 로깅 결과 확인 |
+| **[KVS_LOGGING_IMPLEMENTATION.md](KVS_LOGGING_IMPLEMENTATION.md)** | KVS 로깅 구현 | 로깅 메커니즘 |
+
+---
+
 ## KVS 키 구조
 
 ### 1. Gateway 시작 상태
