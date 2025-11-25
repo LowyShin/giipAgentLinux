@@ -168,6 +168,25 @@ if [ ! -f "$DISCOVERY_FILE" ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] - DISCOVERY_FILE not found: $DISCOVERY_FILE" >> "$LOG_FILE"
 fi
 
+# ====================================================================
+# API 호출 전: 수집된 원본 JSON을 KVS에 저장 (진단용)
+# ====================================================================
+if [ -f "$KVSPUT_SCRIPT" ] && [ -f "$DISCOVERY_FILE" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading RAW discovery JSON to KVS (before API call)..." >> "$LOG_FILE"
+    
+    # Pass CONFIG_FILE to kvsput.sh (redirect stderr to log, not full response)
+    if CONFIG_FILE="$CONFIG_FILE" bash "$KVSPUT_SCRIPT" "$DISCOVERY_FILE" autodiscover_raw 2>> "$LOG_FILE"; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✓ KVS upload successful (autodiscover_raw)" >> "$LOG_FILE"
+    else
+        KVS_EXIT_CODE=$?
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ KVS upload failed (exit code: $KVS_EXIT_CODE, non-critical)" >> "$LOG_FILE"
+    fi
+else
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ Skipping raw JSON KVS upload - prerequisites missing" >> "$LOG_FILE"
+fi
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading discovery data to KVS (kfactor: autodiscover)..." >> "$LOG_FILE"
+
 if [ -f "$KVSPUT_SCRIPT" ] && [ -f "$DISCOVERY_FILE" ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading discovery data to KVS (kfactor: autodiscover)..." >> "$LOG_FILE"
     
@@ -179,6 +198,8 @@ if [ -f "$KVSPUT_SCRIPT" ] && [ -f "$DISCOVERY_FILE" ]; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ KVS upload failed (exit code: $KVS_EXIT_CODE, non-critical)" >> "$LOG_FILE"
     fi
 else
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ Skipping discovery data KVS upload - prerequisites missing" >> "$LOG_FILE"
+fi
 
 # giipApiSk2 pattern (same as kvsput.sh):
 # - text: command name + parameter names (NO sk, NO values)
@@ -201,10 +222,70 @@ if [ $HTTP_CODE -eq 0 ]; then
     
     if [ "$RSTVAL" = "200" ]; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✓ SUCCESS: Action=$ACTION, Network data sent to DB" >> "$LOG_FILE"
+        
+        # ====================================================================
+        # API 성공 후: API 응답도 KVS에 저장 (성공 기록)
+        # ====================================================================
+        if [ -f "$KVSPUT_SCRIPT" ]; then
+            API_RESPONSE_JSON="${TEMP_JSON%.json}-api-response.json"
+            cat > "$API_RESPONSE_JSON" <<EOF
+{
+  "timestamp": "$(date -Iseconds)",
+  "hostname": "$(hostname)",
+  "status": "success",
+  "api_response": $(echo "$RESPONSE" | jq -Rs . 2>/dev/null || echo "\"$RESPONSE\""),
+  "action": "$ACTION"
+}
+EOF
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading API success response to KVS..." >> "$LOG_FILE"
+            bash "$KVSPUT_SCRIPT" "$API_RESPONSE_JSON" autodiscover_api_response >> "$LOG_FILE" 2>&1 || true
+            rm -f "$API_RESPONSE_JSON"
+        fi
     elif [ "$RSTVAL" = "401" ]; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✗ ERROR: Authentication failed - Invalid SK" >> "$LOG_FILE"
+        
+        # ====================================================================
+        # API 인증 실패: 에러를 KVS에 저장
+        # ====================================================================
+        if [ -f "$KVSPUT_SCRIPT" ]; then
+            ERROR_JSON="${TEMP_JSON%.json}-api-auth-error.json"
+            cat > "$ERROR_JSON" <<EOF
+{
+  "timestamp": "$(date -Iseconds)",
+  "hostname": "$(hostname)",
+  "status": "error",
+  "error_type": "authentication_failed",
+  "rstval": "$RSTVAL",
+  "api_response": $(echo "$RESPONSE" | jq -Rs . 2>/dev/null || echo "\"$RESPONSE\"")
+}
+EOF
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading API auth error to KVS..." >> "$LOG_FILE"
+            bash "$KVSPUT_SCRIPT" "$ERROR_JSON" autodiscover_api_error >> "$LOG_FILE" 2>&1 || true
+            rm -f "$ERROR_JSON"
+        fi
     else
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ WARNING: Unexpected response code: $RSTVAL" >> "$LOG_FILE"
+        
+        # ====================================================================
+        # API 예상 외 응답: 경고를 KVS에 저장
+        # ====================================================================
+        if [ -f "$KVSPUT_SCRIPT" ]; then
+            WARN_JSON="${TEMP_JSON%.json}-api-warn.json"
+            cat > "$WARN_JSON" <<EOF
+{
+  "timestamp": "$(date -Iseconds)",
+  "hostname": "$(hostname)",
+  "status": "warning",
+  "error_type": "unexpected_response_code",
+  "rstval": "$RSTVAL",
+  "action": "$ACTION",
+  "api_response": $(echo "$RESPONSE" | jq -Rs . 2>/dev/null || echo "\"$RESPONSE\"")
+}
+EOF
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading API unexpected response to KVS..." >> "$LOG_FILE"
+            bash "$KVSPUT_SCRIPT" "$WARN_JSON" autodiscover_api_warn >> "$LOG_FILE" 2>&1 || true
+            rm -f "$WARN_JSON"
+        fi
     fi
     
     # Extract lssn from response if this is first registration
@@ -222,22 +303,25 @@ else
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Response: $RESPONSE" >> "$LOG_FILE"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Check network connectivity and API endpoint" >> "$LOG_FILE"
     
+    # ====================================================================
+    # API 호출 실패: 에러 정보를 KVS에 저장
+    # ====================================================================
     # Upload error diagnostic to KVS
     if [ -f "$KVSPUT_SCRIPT" ]; then
-        ERROR_JSON="${TEMP_JSON%.json}-error.json"
+        ERROR_JSON="${TEMP_JSON%.json}-api-call-error.json"
         cat > "$ERROR_JSON" <<EOF
 {
   "timestamp": "$(date -Iseconds)",
   "hostname": "$(hostname)",
+  "status": "error",
   "error_type": "api_call_failed",
   "http_code": $HTTP_CODE,
   "api_url": "$API_URL",
-  "response": $(echo "$RESPONSE" | jq -Rs . 2>/dev/null || echo "\"$RESPONSE\""),
-  "discovery_data": $DISCOVERY_JSON
+  "response": $(echo "$RESPONSE" | jq -Rs . 2>/dev/null || echo "\"$RESPONSE\"")
 }
 EOF
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading error diagnostic to KVS..." >> "$LOG_FILE"
-        bash "$KVSPUT_SCRIPT" "$ERROR_JSON" autoerror >> "$LOG_FILE" 2>&1 || true
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading API call error diagnostic to KVS..." >> "$LOG_FILE"
+        bash "$KVSPUT_SCRIPT" "$ERROR_JSON" autodiscover_api_call_error >> "$LOG_FILE" 2>&1 || true
         rm -f "$ERROR_JSON"
     fi
 fi
@@ -248,25 +332,6 @@ if [ "$RSTVAL" = "200" ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Temp JSON file cleaned up" >> "$LOG_FILE"
 else
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ⚠ Temp JSON file kept for debugging: $TEMP_JSON" >> "$LOG_FILE"
-    
-    # Also upload failure diagnostic
-    if [ -f "$KVSPUT_SCRIPT" ] && [ -f "$TEMP_JSON" ]; then
-        FAIL_JSON="${TEMP_JSON%.json}-fail.json"
-        cat > "$FAIL_JSON" <<EOF
-{
-  "timestamp": "$(date -Iseconds)",
-  "hostname": "$(hostname)",
-  "error_type": "unexpected_response",
-  "rstval": "$RSTVAL",
-  "action": "$ACTION",
-  "full_response": $(echo "$RESPONSE" | jq -Rs . 2>/dev/null || echo "\"$RESPONSE\""),
-  "discovery_data": $DISCOVERY_JSON
-}
-EOF
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading failure diagnostic to KVS..." >> "$LOG_FILE"
-        bash "$KVSPUT_SCRIPT" "$FAIL_JSON" autofail >> "$LOG_FILE" 2>&1 || true
-        rm -f "$FAIL_JSON"
-    fi
 fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] ========================================" >> "$LOG_FILE"
