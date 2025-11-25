@@ -1,5 +1,42 @@
 # giipAgent3.sh hang 현상 - discovery.sh 모듈 통합 직결
 
+**작성일**: 2025-11-23  
+**원인**: ✅ discovery.sh 모듈 적용 후 발생  
+**우선순위**: 🔴 CRITICAL  
+**상태**: 🟠 **임시 해결됨 (롤백)** - 근본 원인 미해결
+
+---
+
+## 📚 **필수 읽기 문서 (최상단)**
+
+⚠️ **이 문서를 읽지 않고 lib/discovery.sh를 giipAgent3.sh에 통합하면 같은 문제가 다시 발생합니다!**
+
+**순서대로 읽으세요:**
+
+| # | 📚 문서 | 중요도 | 내용 | 용도 |
+|---|--------|--------|------|------|
+| 1️⃣ | **[STANDARD_PROMPT_GUIDE.md](STANDARD_PROMPT_GUIDE.md)** | 🔴 CRITICAL | 표준 프롬프트 및 코딩 규칙 | 프로젝트 기본 정책 |
+| 2️⃣ | **[AI_WORK_INSTRUCTION.md](AI_WORK_INSTRUCTION.md)** | 🔴 CRITICAL | AI 작업 절차 및 문서화 표준 | 작업 방식 및 협업 규칙 |
+| 3️⃣ | **[PROHIBITED_ACTIONS.md](PROHIBITED_ACTIONS.md)** | 🔴 CRITICAL | 금지 사항 및 안전 규칙 | 반드시 피해야 할 패턴 명시 |
+| 4️⃣ | **[SHELL_COMPONENT_SPECIFICATION.md](SHELL_COMPONENT_SPECIFICATION.md)** | 🔴 CRITICAL | lib/*.sh 개발 필수 표준 | Error Handling, `set -euo pipefail` 금지 사항 |
+| 5️⃣ | **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** | 🔴 CRITICAL | Function Definition Policy | 함수 정의 위치 규칙 (핵심!) |
+| 6️⃣ | **[AUTO_DISCOVERY_ARCHITECTURE.md](AUTO_DISCOVERY_ARCHITECTURE.md)** | 🟠 HIGH | Discovery 설계 원칙 | Separation of Concerns |
+| 7️⃣ | **[GATEWAY_KVS_MONITORING.md](GATEWAY_KVS_MONITORING.md)** | 🟠 HIGH | KVS 정보 분석 및 모니터링 | Gateway 동작 추적 방법 |
+| 8️⃣ | **[KVS_LOGGING_IMPLEMENTATION.md](KVS_LOGGING_IMPLEMENTATION.md)** | 🟠 HIGH | KVS 로깅 구현 및 분석 | 로그 데이터 해석 방법 |
+
+### 📌 참고용 추가 문서
+
+| 📚 문서 | 용도 |
+|--------|------|
+| **[GIIPAGENT3_SPECIFICATION.md](GIIPAGENT3_SPECIFICATION.md)** | giipAgent3.sh 전체 사양 및 실행 흐름 |
+| **[GATEWAY_IMPLEMENTATION_SUMMARY.md](GATEWAY_IMPLEMENTATION_SUMMARY.md)** | Gateway 구현 상세 |
+| **[KVS_STANDARD_USAGE.md](KVS_STANDARD_USAGE.md)** | KVS 함수 사용법 (로깅 확인용) |
+| **[KVS_LOGGING_DIAGNOSIS_GUIDE.md](KVS_LOGGING_DIAGNOSIS_GUIDE.md)** | KVS 로그 읽는 방법 (문제 진단용) |
+| **[KVSPUT_USAGE_GUIDE.md](KVSPUT_USAGE_GUIDE.md)** | kvsput API 호출 방법 |
+| **[SSH_CONNECTION_LOGGER.md](SSH_CONNECTION_LOGGER.md)** | SSH 실행 로깅 |
+
+> ✅ **위의 필수 읽기 문서를 모두 읽은 후에 아래 내용 읽기**
+
 ---
 
 ## 🚨 **코드 수정 절대 금지!**
@@ -15,7 +52,7 @@
 - **수정 계획은 이 문서 내용으로 충분**
 
 ### ✅ **현 단계: 문서 읽기 + 수정 계획 수립**
-1. 이 문서 내용 읽기
+1. 위의 **필수 읽기 문서 8개** 읽기
 2. Option 2 또는 3 선택
 3. 사용자에게 수정 계획 보고
 4. 승인 받기
@@ -56,34 +93,6 @@
 - Windows에서 수정 완료
 - Git 커밋 및 푸시
 - 서버가 5분마다 자동 git pull로 배포
-
----
-
----
-
-### 📚 **필수로 읽어야 할 문서**
-
-**이 문서를 읽지 않고 lib/discovery.sh를 giipAgent3.sh에 통합하면 같은 문제가 다시 발생합니다!**
-
-| 📚 문서 | 🔴 중요도 | 📝 내용 |
-|--------|---------|--------|
-| **[SHELL_COMPONENT_SPECIFICATION.md](SHELL_COMPONENT_SPECIFICATION.md)** | 🔴 **CRITICAL** | ✅ lib/*.sh 개발 필수 표준 (Error Handling, `set -euo pipefail` 금지) |
-| **[MODULAR_ARCHITECTURE.md](MODULAR_ARCHITECTURE.md)** | 🔴 **CRITICAL** | ✅ Function Definition Policy (함수 정의 위치 규칙) |
-| **[AUTO_DISCOVERY_ARCHITECTURE.md](AUTO_DISCOVERY_ARCHITECTURE.md)** | 🟠 **HIGH** | ✅ Discovery 설계 원칙 (Separation of Concerns) |
-
-> **⚠️ 순서대로 읽으세요:**
-> 1. `SHELL_COMPONENT_SPECIFICATION.md` (Error Handling Policy)
-> 2. `MODULAR_ARCHITECTURE.md` (Function Definition Policy)
-> 3. `AUTO_DISCOVERY_ARCHITECTURE.md` (설계 이해)
-> 4. **그 다음에 아래 내용 읽기**
-> 5. **사용자에게 수정 계획 보고 → 승인 받기 → 그 다음 수정**
-
----
-
-**작성일**: 2025-11-23  
-**원인**: ✅ discovery.sh 모듈 적용 후 발생  
-**우선순위**: 🔴 CRITICAL  
-**상태**: 🟠 **임시 해결됨 (롤백)** - 근본 원인 미해결
 
 > ⚠️ **중요**: 현재는 discovery 모듈을 제거하여 **임시로 정상화**한 상태입니다.  
 > 이것은 **롤백(Rollback)일 뿐 근본 해결이 아닙니다.**  
@@ -471,47 +480,139 @@ if should_run_discovery "$lssn"; then
 fi
 ```
 
----
 
-## 🔗 관련 문서 링크 (필수 읽기)
-
-### 📌 이 문제 해결에 필수인 문서들
-
-| 문서 | 경로 | 중요도 | 용도 |
-|------|------|--------|------|
-| **MODULAR_ARCHITECTURE.md** | [`MODULAR_ARCHITECTURE.md`](MODULAR_ARCHITECTURE.md) | 🔴 **CRITICAL** | Function Definition Policy (함수 정의 위치 규칙) |
-| **SHELL_COMPONENT_SPECIFICATION.md** | [`SHELL_COMPONENT_SPECIFICATION.md`](SHELL_COMPONENT_SPECIFICATION.md) | 🔴 **CRITICAL** | lib/*.sh 표준화 (에러 처리, 변수 관리, `set -euo pipefail` 금지) |
-| **AUTO_DISCOVERY_ARCHITECTURE.md** | [`AUTO_DISCOVERY_ARCHITECTURE.md`](AUTO_DISCOVERY_ARCHITECTURE.md) | 🟠 **HIGH** | Discovery 모듈 설계 및 Separation of Concerns |
-| **GIIPAGENT3_SPECIFICATION.md** | [`GIIPAGENT3_SPECIFICATION.md`](GIIPAGENT3_SPECIFICATION.md) | 🟠 **HIGH** | giipAgent3.sh 전체 사양 및 실행 흐름 |
-| **GATEWAY_IMPLEMENTATION_SUMMARY.md** | [`GATEWAY_IMPLEMENTATION_SUMMARY.md`](GATEWAY_IMPLEMENTATION_SUMMARY.md) | 🟡 **MEDIUM** | Gateway 구현 상세 |
-| **KVS_STANDARD_USAGE.md** | [`KVS_STANDARD_USAGE.md`](KVS_STANDARD_USAGE.md) | 🟡 **MEDIUM** | KVS 함수 사용법 (로깅 확인용) |
-| **KVS_LOGGING_DIAGNOSIS_GUIDE.md** | [`KVS_LOGGING_DIAGNOSIS_GUIDE.md`](KVS_LOGGING_DIAGNOSIS_GUIDE.md) | 🟡 **MEDIUM** | KVS 로그 읽는 방법 (문제 진단용) |
-
-### 📚 참고용 문서
-
-| 문서 | 경로 | 용도 |
-|------|------|------|
-| **kvsput 사용 가이드** | [`KVSPUT_USAGE_GUIDE.md`](KVSPUT_USAGE_GUIDE.md) | kvsput API 호출 방법 |
-| **SSH 연결 모듈** | [`SSH_CONNECTION_LOGGER.md`](SSH_CONNECTION_LOGGER.md) | SSH 실행 로깅 |
 
 ---
 
 ## 🔍 KVS 로깅 확인 방법
 
-### 1️⃣ 데이터베이스 tKVS 테이블 조회
+### 📌 최우선: check-latest.ps1 스크립트 사용
 
-```sql
--- 최근 1시간 내 모든 KVS 로그 조회
-SELECT TOP 100
-    KVSsn,
-    LSsn,
-    KFactor,
-    KValue,
-    CreatedDT
-FROM tKVS
-WHERE CreatedDT >= DATEADD(HOUR, -1, GETDATE())
-ORDER BY KVSsn DESC
+**스크립트**: [`giipdb/mgmt/check-latest.ps1`](../../giipdb/mgmt/check-latest.ps1)
+
+⚠️ **이 스크립트를 최우선으로 사용하세요. 복잡한 조회가 필요할 때만 아래 스크립트 사용**
+
+```powershell
+# 1️⃣ 기본 사용 (LSSN 71240, 최근 5분, [5.x] 포인트)
+pwsh .\mgmt\check-latest.ps1
+
+# 2️⃣ 다른 LSSN 조회
+pwsh .\mgmt\check-latest.ps1 -Lssn 71174
+
+# 3️⃣ 더 긴 기간 조회 (최근 10분)
+pwsh .\mgmt\check-latest.ps1 -Minutes 10
+
+# 4️⃣ 특정 포인트 필터 ([3.x] 조회)
+pwsh .\mgmt\check-latest.ps1 -PointFilter "3\."
+
+# 5️⃣ 포인트 필터 제거 (모든 로그)
+pwsh .\mgmt\check-latest.ps1 -NoPointFilter
+
+# 6️⃣ 더 많은 레코드 조회
+pwsh .\mgmt\check-latest.ps1 -Top 500
+
+# 7️⃣ 요약 모드 (빠른 통계)
+pwsh .\mgmt\check-latest.ps1 -Summary
+
+# 8️⃣ 복합 사용 (LSSN 71174, 10분, [3.x] 포인트, 500개)
+pwsh .\mgmt\check-latest.ps1 -Lssn 71174 -Minutes 10 -PointFilter "3\." -Top 500
 ```
+
+**출력 예시:**
+```
+✅ 조회 완료: 15/100
+📋 로그 목록 (15개):
+   필터: [5.]
+...로그 내용...
+```
+
+---
+
+### 📋 심화 조회: 범용 KVS 조회 스크립트들
+
+복잡한 조회가 필요한 경우만 아래 스크립트들을 사용하세요.
+
+#### 1️⃣ 데이터베이스 tKVS 테이블 조회
+
+**스크립트**: [`giipdb/mgmt/query-kvs-recent-logs.ps1`](../../giipdb/mgmt/query-kvs-recent-logs.ps1)
+
+⚠️ **직접 SQL 쿼리 금지 - 반드시 스크립트 사용**
+
+```powershell
+# 기본 조회 (최근 1시간)
+pwsh .\mgmt\query-kvs-recent-logs.ps1
+
+# 최근 5분 조회
+pwsh .\mgmt\query-kvs-recent-logs.ps1 -Hours 0.083
+
+# 최근 6시간 조회
+pwsh .\mgmt\query-kvs-recent-logs.ps1 -Hours 6
+
+# 더 많은 레코드 (500개)
+pwsh .\mgmt\query-kvs-recent-logs.ps1 -Hours 1 -Top 500
+
+# 요약 모드 (KFactor별 집계)
+pwsh .\mgmt\query-kvs-recent-logs.ps1 -Hours 1 -Summary
+
+# CSV로 내보내기
+pwsh .\mgmt\query-kvs-recent-logs.ps1 -Hours 1 -ExportCsv
+```
+
+#### 2️⃣ Discovery 실행 완료 여부 확인
+
+**스크립트**: [`giipdb/mgmt/query-kvs-discovery-logs.ps1`](../../giipdb/mgmt/query-kvs-discovery-logs.ps1)
+
+```powershell
+# 기본 조회 (모든 Discovery 로그)
+pwsh .\mgmt\query-kvs-discovery-logs.ps1
+
+# 특정 단계만 조회 (DISCOVERY_START)
+pwsh .\mgmt\query-kvs-discovery-logs.ps1 -KFactor "DISCOVERY_START"
+
+# DISCOVERY_END 로그만 확인
+pwsh .\mgmt\query-kvs-discovery-logs.ps1 -KFactor "DISCOVERY_END"
+
+# 최근 6시간 조회
+pwsh .\mgmt\query-kvs-discovery-logs.ps1 -Hours 6
+
+# 요약 모드 (단계별 집계)
+pwsh .\mgmt\query-kvs-discovery-logs.ps1 -Summary
+
+# CSV로 내보내기
+pwsh .\mgmt\query-kvs-discovery-logs.ps1 -ExportCsv
+```
+
+**기대 결과**: 
+- `DISCOVERY_END` 존재 → discovery 완료
+- `DISCOVERY_END` 없음 → discovery 중 hang
+
+#### 3️⃣ auto-discover-linux.sh 실행 상태 확인
+
+**스크립트**: [`giipdb/mgmt/query-kvs-auto-discover-status.ps1`](../../giipdb/mgmt/query-kvs-auto-discover-status.ps1)
+
+```powershell
+# 기본 조회 (최근 24시간)
+pwsh .\mgmt\query-kvs-auto-discover-status.ps1
+
+# 최근 6시간 조회
+pwsh .\mgmt\query-kvs-auto-discover-status.ps1 -Hours 6
+
+# 성공한 실행만 조회
+pwsh .\mgmt\query-kvs-auto-discover-status.ps1 -StatusFilter "SUCCESS"
+
+# 실패한 실행만 조회
+pwsh .\mgmt\query-kvs-auto-discover-status.ps1 -StatusFilter "ERROR"
+
+# 요약 모드 (상태별 집계)
+pwsh .\mgmt\query-kvs-auto-discover-status.ps1 -Summary
+
+# CSV로 내보내기
+pwsh .\mgmt\query-kvs-auto-discover-status.ps1 -ExportCsv
+```
+
+**해석**:
+- Status = "SUCCESS" → auto-discover-linux.sh 완료
+- Status = "ERROR" → auto-discover-linux.sh 실패
 
 **tKVS 테이블 참고**: [GIIPAGENT3_SPECIFICATION.md - KVS 로깅 규칙](GIIPAGENT3_SPECIFICATION.md#kvs-로깅-규칙)
 
@@ -694,42 +795,47 @@ echo "$discovery_json" | python3 -m json.tool
 
 ## ✅ KVS 로그 확인 액션
 
-### 1️⃣ Discovery 실행 완료 여부 확인
+### 🎯 빠른 진단 (check-latest.ps1 사용)
 
-```sql
--- DISCOVERY_END 로그 확인 (완료 지표)
-SELECT TOP 5
-    KVSsn,
-    KFactor,
-    SUBSTRING(KValue, 1, 200) as KValue_Preview,
-    CreatedDT
-FROM tKVS
-WHERE KFactor IN ('DISCOVERY_START', 'DISCOVERY_END', 'LOCAL_EXECUTION', 'LOCAL_DB_SAVE')
-ORDER BY KVSsn DESC
+**최우선으로 이 명령어를 먼저 실행하세요:**
+
+```powershell
+# Gateway 최근 5분 [5.x] 포인트 로그 조회
+pwsh .\mgmt\check-latest.ps1
+
+# 결과:
+# ✅ 조회 완료: 15/100
+# 📋 로그 목록 (15개):
+# ...로그들...
 ```
 
-**기대 결과**: 
-- `DISCOVERY_END` 존재 → discovery 완료
-- `DISCOVERY_END` 없음 → discovery 중 hang
+**로그가 많으면** → Gateway 정상 작동 중
+**로그가 없으면** → Gateway 실행 안 됨 또는 hang 상태
 
-### 2️⃣ auto-discover-linux.sh 실행 상태 확인
+---
 
-```sql
--- LOCAL_EXECUTION 로그로 auto-discover 완료 여부 확인
-SELECT TOP 5
-    KVSsn,
-    KFactor,
-    JSON_VALUE(KValue, '$.status') as status,
-    JSON_VALUE(KValue, '$.message') as message,
-    CreatedDT
-FROM tKVS
-WHERE KFactor = 'LOCAL_EXECUTION'
-ORDER BY KVSsn DESC
+### 📊 상세 진단 (심화 스크립트들)
+
+#### 1️⃣ Discovery 실행 완료 여부 확인
+
+```powershell
+# Discovery 관련 모든 로그 조회
+pwsh .\mgmt\query-kvs-discovery-logs.ps1
+
+# DISCOVERY_END 존재? → discovery 완료
+# DISCOVERY_END 없음? → discovery 중 hang
 ```
 
-**해석**:
-- status = "SUCCESS" → auto-discover-linux.sh 완료
-- status = "ERROR" → auto-discover-linux.sh 실패
+#### 2️⃣ auto-discover-linux.sh 실행 상태 확인
+
+```powershell
+# 최근 24시간 auto-discover 실행 상태
+pwsh .\mgmt\query-kvs-auto-discover-status.ps1 -Summary
+
+# 해석:
+# Status = "SUCCESS" → 완료됨
+# Status = "ERROR"   → 실패함
+```
 
 ---
 

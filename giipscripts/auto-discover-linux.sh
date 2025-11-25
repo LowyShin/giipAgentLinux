@@ -2,6 +2,24 @@
 # Auto-Discovery Script for Linux
 # Collects OS, Hardware, Software, Services, Network information
 # Output: JSON format
+# Parameters: $1=LSSN, $2=Hostname, $3=OS (from giipAgent3.sh)
+
+# ============================================================================
+# [로깅] Auto-discover 스크립트 시작
+# ============================================================================
+
+# 스크립트 시작 타임스탐프
+DISCOVER_START_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+DISCOVER_SCRIPT_PID=$$
+
+# 파라미터 로깅
+LSSN="${1:-unknown}"
+HOSTNAME_FROM_PARAM="${2:-unknown}"
+OS_FROM_PARAM="${3:-unknown}"
+
+# stderr로 로깅 (giipAgent3.sh에서 캡처)
+echo "[auto-discover-linux.sh] 🟢 START - PID=$DISCOVER_SCRIPT_PID at $DISCOVER_START_TIME" >&2
+echo "[auto-discover-linux.sh] 📋 Parameters: LSSN=$LSSN, Hostname=$HOSTNAME_FROM_PARAM, OS=$OS_FROM_PARAM" >&2
 
 # Function to escape JSON strings
 json_escape() {
@@ -11,6 +29,8 @@ json_escape() {
 # ========================================
 # 1. OS Information
 # ========================================
+echo "[auto-discover-linux.sh] 📋 [Step 1] Collecting OS information..." >&2
+
 if [ -f /etc/os-release ]; then
     . /etc/os-release
     os_name="$NAME"
@@ -20,9 +40,13 @@ else
     os_version=$(uname -r)
 fi
 
+echo "[auto-discover-linux.sh] ✅ [Step 1] OS: $os_name $os_version" >&2
+
 # ========================================
 # 2. CPU Information
 # ========================================
+echo "[auto-discover-linux.sh] 📋 [Step 2] Collecting CPU information..." >&2
+
 if command -v lscpu &> /dev/null; then
     cpu_model=$(lscpu | grep "Model name:" | sed 's/Model name:\s*//')
     cpu_cores=$(lscpu | grep "^CPU(s):" | awk '{print $2}')
@@ -31,29 +55,31 @@ else
     cpu_cores=$(grep -c "^processor" /proc/cpuinfo)
 fi
 
+echo "[auto-discover-linux.sh] ✅ [Step 2] CPU: $cpu_model ($cpu_cores cores)" >&2
+
 # ========================================
 # 3. Memory Information
 # ========================================
+echo "[auto-discover-linux.sh] 📋 [Step 3] Collecting Memory information..." >&2
+
 memory_total_kb=$(grep MemTotal /proc/meminfo | awk '{print $2}')
 memory_gb=$((memory_total_kb / 1024 / 1024))
+
+echo "[auto-discover-linux.sh] ✅ [Step 3] Memory: ${memory_gb}GB" >&2
 
 # ========================================
 # 4. Hostname
 # ========================================
+echo "[auto-discover-linux.sh] 📋 [Step 4] Collecting Hostname..." >&2
+
 hostname=$(hostname)
+
+echo "[auto-discover-linux.sh] ✅ [Step 4] Hostname: $hostname" >&2
 
 # ========================================
 # 5. Network Interfaces (OS-aware collection)
 # ========================================
-network_json=""
-
-# Detect OS distribution for network collection strategy
-if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS_ID="$ID"
-else
-    OS_ID="unknown"
-fi
+echo "[auto-discover-linux.sh] 📋 [Step 5] Collecting Network interfaces..." >&2
 
 # Modern Linux (Ubuntu 16.04+, CentOS 7+, Debian 8+)
 if command -v ip &> /dev/null; then
@@ -266,8 +292,22 @@ done < <(ip -4 addr show | grep inet | grep -v "127.0.0.1" | awk '{print $2}' | 
 agent_version="1.80"
 
 # ========================================
-# Generate Final JSON
+# [로깅] Generate Final JSON
 # ========================================
+echo "[auto-discover-linux.sh] 📋 [Step Final] Generating JSON output..." >&2
+echo "[auto-discover-linux.sh] 📊 [Statistics] OS: $os_name $os_version | CPU: $cpu_cores cores | Memory: ${memory_gb}GB | Hostname: $hostname" >&2
+echo "[auto-discover-linux.sh] 🌐 [Network] IPv4_Local: $ipv4_local | IPv4_Global: $ipv4_global" >&2
+
+# JSON 크기 예측 (로깅용)
+network_count=$(echo "[$network_json]" | tr ',' '\n' | wc -l)
+software_count=$(echo "[$software_json]" | tr ',' '\n' | wc -l)
+services_count=$(echo "[$services_json]" | tr ',' '\n' | wc -l)
+
+echo "[auto-discover-linux.sh] 📦 [Inventory] Networks: ~$network_count | Software: ~$software_count | Services: ~$services_count" >&2
+
+# JSON 생성 시작
+echo "[auto-discover-linux.sh] ⏱️  Generating JSON..." >&2
+
 cat <<EOF
 {
   "hostname": "$hostname",
@@ -284,3 +324,9 @@ cat <<EOF
   "services": [$services_json]
 }
 EOF
+
+# JSON 생성 완료
+DISCOVER_END_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+echo "[auto-discover-linux.sh] ✅ COMPLETED at $DISCOVER_END_TIME (PID=$DISCOVER_SCRIPT_PID)" >&2
+echo "[auto-discover-linux.sh] 🕒 Total execution time: from $DISCOVER_START_TIME to $DISCOVER_END_TIME" >&2
+

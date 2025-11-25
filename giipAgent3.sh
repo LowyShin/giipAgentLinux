@@ -268,6 +268,100 @@ if [ "${gateway_mode}" = "1" ]; then
 	init_complete_details="{\"db_connectivity\":\"will_verify\",\"server_count\":0}"
 	save_execution_log "gateway_init" "$init_complete_details"
 	
+	# ================================================================
+	# [NEW] Auto-Discover Phase (before Gateway processing)
+	# ================================================================
+	log_message "INFO" "[5.2] Starting auto-discover phase..."
+	
+	# [로깅 #1] auto-discover 시작 알림
+	echo "[giipAgent3.sh] 🟢 [5.2] Starting auto-discover-linux.sh execution" >&2
+	
+	auto_discover_script="${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh"
+	if [ ! -f "$auto_discover_script" ]; then
+		log_message "WARN" "auto-discover script not found: $auto_discover_script"
+		kvs_put "lssn" "${lssn}" "auto_discover_init" "{\"status\":\"failed\",\"reason\":\"script_not_found\",\"path\":\"${auto_discover_script}\"}"
+		echo "[giipAgent3.sh] ⚠️ [5.2.1] auto-discover-linux.sh NOT FOUND at $auto_discover_script" >&2
+	else
+		# [로깅 #2] auto-discover 실행 시작
+		kvs_put "lssn" "${lssn}" "auto_discover_init" "{\"status\":\"starting\",\"script_path\":\"${auto_discover_script}\",\"lssn\":${lssn},\"hostname\":\"${hn}\"}"
+		echo "[giipAgent3.sh] ✅ [5.2.1] auto-discover-linux.sh found, executing..." >&2
+		
+		# [로깅 #3] 실행 환경 정보
+		echo "[giipAgent3.sh] 📋 [5.2.2] Environment: LSSN=${lssn}, Hostname=${hn}, OS=${os}, PID=$$" >&2
+		
+		# 임시 결과 파일 생성
+		auto_discover_result_file="/tmp/auto_discover_result_$$.json"
+		auto_discover_log_file="/tmp/auto_discover_log_$$.log"
+		
+		# Timeout 설정 (60초)
+		timeout_seconds=60
+		
+		# [로깅 #4] auto-discover 실행 시작 시간
+		execute_start_time=$(date '+%Y-%m-%d %H:%M:%S')
+		echo "[giipAgent3.sh] ⏱️ [5.2.3] Execution started at: ${execute_start_time}" >&2
+		
+		# Auto-discover 실행 (timeout 적용, 에러 캡처)
+		if timeout "$timeout_seconds" bash "$auto_discover_script" "$lssn" "$hn" "$os" > "$auto_discover_result_file" 2> "$auto_discover_log_file"; then
+			auto_discover_exit_code=$?
+			execute_end_time=$(date '+%Y-%m-%d %H:%M:%S')
+			
+			# [로깅 #5] auto-discover 성공
+			echo "[giipAgent3.sh] ✅ [5.2.4] auto-discover-linux.sh completed successfully (exit_code: $auto_discover_exit_code)" >&2
+			echo "[giipAgent3.sh] 🕒 [5.2.5] Execution ended at: ${execute_end_time}" >&2
+			
+			# 결과 파일 크기 확인
+			result_size=$(wc -c < "$auto_discover_result_file" 2>/dev/null || echo "0")
+			echo "[giipAgent3.sh] 📊 [5.2.6] Result file size: ${result_size} bytes" >&2
+			
+			# 결과 파일이 있으면 DB에 저장
+			if [ -s "$auto_discover_result_file" ]; then
+				# 결과를 읽고 KVS에 저장
+				auto_discover_json=$(cat "$auto_discover_result_file")
+				
+				# [로깅 #6] 결과 저장
+				kvs_put "lssn" "${lssn}" "auto_discover_result" "{\"status\":\"success\",\"result_size\":${result_size},\"sample\":\"$(echo "$auto_discover_json" | head -c 100 | tr '\n' ' ')...\"}"
+				echo "[giipAgent3.sh] 💾 [5.2.7] auto-discover result saved to KVS" >&2
+				
+				# 상세 결과 로그 저장 (첫 500자)
+				auto_discover_summary=$(echo "$auto_discover_json" | head -c 500)
+				kvs_put "lssn" "${lssn}" "auto_discover_full_result" "$auto_discover_json"
+				echo "[giipAgent3.sh] 📝 [5.2.8] auto-discover full result saved" >&2
+			else
+				echo "[giipAgent3.sh] ⚠️ [5.2.7] Result file is empty" >&2
+				kvs_put "lssn" "${lssn}" "auto_discover_result" "{\"status\":\"empty_result\",\"reason\":\"no_output\"}"
+			fi
+		else
+			auto_discover_exit_code=$?
+			execute_end_time=$(date '+%Y-%m-%d %H:%M:%S')
+			
+			# [로깅 #7] auto-discover 실패
+			if [ $auto_discover_exit_code -eq 124 ]; then
+				echo "[giipAgent3.sh] ❌ [5.2.4] auto-discover-linux.sh TIMEOUT (timeout after ${timeout_seconds}s)" >&2
+				kvs_put "lssn" "${lssn}" "auto_discover_result" "{\"status\":\"timeout\",\"timeout_seconds\":${timeout_seconds},\"end_time\":\"${execute_end_time}\"}"
+			else
+				echo "[giipAgent3.sh] ❌ [5.2.4] auto-discover-linux.sh failed with exit_code: $auto_discover_exit_code" >&2
+				kvs_put "lssn" "${lssn}" "auto_discover_result" "{\"status\":\"failed\",\"exit_code\":${auto_discover_exit_code},\"end_time\":\"${execute_end_time}\"}"
+			fi
+			
+			# 에러 로그 캡처
+			if [ -s "$auto_discover_log_file" ]; then
+				error_log_lines=$(wc -l < "$auto_discover_log_file")
+				error_log_preview=$(head -c 500 "$auto_discover_log_file")
+				echo "[giipAgent3.sh] 📋 [5.2.5] Error log (${error_log_lines} lines): $error_log_preview" >&2
+				kvs_put "lssn" "${lssn}" "auto_discover_error_log" "{\"error_lines\":${error_log_lines},\"preview\":\"$(echo "$error_log_preview" | tr '\n' '|' | head -c 200)\"}"
+			fi
+		fi
+		
+		# 임시 파일 정리
+		rm -f "$auto_discover_result_file" "$auto_discover_log_file"
+		echo "[giipAgent3.sh] 🧹 [5.2.9] Temporary files cleaned up" >&2
+	fi
+	
+	# ================================================================
+	# [로깅 #8] auto-discover 단계 완료
+	echo "[giipAgent3.sh] 🟢 [5.2.end] Auto-discover phase completed" >&2
+	kvs_put "lssn" "${lssn}" "auto_discover_complete" "{\"status\":\"complete\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+	
 	# Gateway main loop (run once per execution, cron will re-run)
 	log_message "INFO" "Starting Gateway cycle..."
 	

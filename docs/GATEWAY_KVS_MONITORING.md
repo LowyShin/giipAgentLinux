@@ -104,54 +104,85 @@ Gateway 서버가 KVS에 저장하는 상태 정보를 조회하는 방법입니
   }
   ```
 
-## SQL로 KVS 조회
+## 스크립트로 KVS 조회
+
+⚠️ **KVS 조회는 반드시 스크립트를 사용해야 합니다 (SQL 직접 조회 금지)**
 
 ### Gateway 시작 상태 확인
-```sql
-SELECT 
-    kKey,
-    kFactor,
-    kRegdt
-FROM tKVS WITH(NOLOCK)
-WHERE kType = 'gateway_status'
-  AND kKey = 'gateway_71240_startup'
-ORDER BY kRegdt DESC;
+**스크립트**: [`giipdb/mgmt/query-gateway-startup-status.ps1`](../../giipdb/mgmt/query-gateway-startup-status.ps1)
+
+```powershell
+# 기본 조회 (LSSN 71240)
+pwsh .\mgmt\query-gateway-startup-status.ps1
+
+# 특정 LSSN 조회
+pwsh .\mgmt\query-gateway-startup-status.ps1 -Lssn 71174
+
+# CSV로 내보내기
+pwsh .\mgmt\query-gateway-startup-status.ps1 -Lssn 71240 -ExportCsv
 ```
 
 ### 최근 Heartbeat 결과
-```sql
-SELECT 
-    kKey,
-    kFactor,
-    kRegdt
-FROM tKVS WITH(NOLOCK)
-WHERE kType = 'gateway_heartbeat'
-  AND kKey LIKE 'gateway_71240_%'
-ORDER BY kRegdt DESC;
+**스크립트**: [`giipdb/mgmt/query-gateway-heartbeat-results.ps1`](../../giipdb/mgmt/query-gateway-heartbeat-results.ps1)
+
+```powershell
+# 기본 조회 (최근 10개)
+pwsh .\mgmt\query-gateway-heartbeat-results.ps1
+
+# 특정 LSSN 조회
+pwsh .\mgmt\query-gateway-heartbeat-results.ps1 -Lssn 71174
+
+# 요약 모드 (kFactor별 집계)
+pwsh .\mgmt\query-gateway-heartbeat-results.ps1 -Lssn 71240 -Summary
+
+# 특정 기간만 조회 (최근 2시간)
+pwsh .\mgmt\query-gateway-heartbeat-results.ps1 -Lssn 71240 -Hours 2
+
+# CSV로 내보내기
+pwsh .\mgmt\query-gateway-heartbeat-results.ps1 -Lssn 71240 -ExportCsv
 ```
 
 ### 특정 서버 체크 이력
-```sql
-SELECT 
-    kFactor,
-    kRegdt
-FROM tKVS WITH(NOLOCK)
-WHERE kType = 'gateway_heartbeat'
-  AND kKey = 'gateway_71240_server_71221'  -- p-cnsldb01m의 LSSN
-ORDER BY kRegdt DESC;
+**스크립트**: [`giipdb/mgmt/query-gateway-server-check-history.ps1`](../../giipdb/mgmt/query-gateway-server-check-history.ps1)
+
+```powershell
+# 기본 조회 (Gateway 71240, 서버 71221의 체크 이력)
+pwsh .\mgmt\query-gateway-server-check-history.ps1 -GatewayLssn 71240 -ServerLssn 71221
+
+# 더 많은 레코드 조회 (최근 50개)
+pwsh .\mgmt\query-gateway-server-check-history.ps1 -GatewayLssn 71240 -ServerLssn 71221 -Top 50
+
+# 성공한 체크만 조회
+pwsh .\mgmt\query-gateway-server-check-history.ps1 -GatewayLssn 71240 -ServerLssn 71221 -StatusFilter "success"
+
+# 실패한 체크만 조회
+pwsh .\mgmt\query-gateway-server-check-history.ps1 -GatewayLssn 71240 -ServerLssn 71221 -StatusFilter "failed"
+
+# CSV로 내보내기
+pwsh .\mgmt\query-gateway-server-check-history.ps1 -GatewayLssn 71240 -ServerLssn 71221 -ExportCsv
 ```
 
 ### 모든 Gateway 상태 요약
-```sql
-SELECT 
-    kKey,
-    JSON_VALUE(kFactor, '$.status') AS status,
-    JSON_VALUE(kFactor, '$.timestamp') AS last_update,
-    kFactor
-FROM tKVS WITH(NOLOCK)
-WHERE kType IN ('gateway_status', 'gateway_heartbeat')
-  AND kKey LIKE 'gateway_71240_%'
-ORDER BY kRegdt DESC;
+**스크립트**: [`giipdb/mgmt/query-gateway-status-summary.ps1`](../../giipdb/mgmt/query-gateway-status-summary.ps1)
+
+```powershell
+# 기본 조회 (LSSN 71240)
+pwsh .\mgmt\query-gateway-status-summary.ps1
+
+# 특정 LSSN 조회
+pwsh .\mgmt\query-gateway-status-summary.ps1 -Lssn 71174
+
+# 요약 모드 (kType별 집계)
+pwsh .\mgmt\query-gateway-status-summary.ps1 -Lssn 71240 -Summary
+
+# 특정 기간만 조회 (최근 2시간)
+pwsh .\mgmt\query-gateway-status-summary.ps1 -Lssn 71240 -Hours 2
+
+# 더 많은 레코드 조회 (최근 100개)
+pwsh .\mgmt\query-gateway-status-summary.ps1 -Lssn 71240 -Top 100
+
+# CSV로 내보내기
+pwsh .\mgmt\query-gateway-status-summary.ps1 -Lssn 71240 -ExportCsv
 ```
 
 ## API로 KVS 조회
@@ -214,48 +245,65 @@ curl -X POST "https://giipfaw.azurewebsites.net/api/giipApiSk2?code=YOUR_CODE" \
 ## 디버깅 체크리스트
 
 ### 1. Gateway가 시작되었는지 확인
-```sql
-SELECT TOP 1 * FROM tKVS 
-WHERE kKey = 'gateway_71240_startup' 
-ORDER BY kRegdt DESC;
+**스크립트**: `query-gateway-startup-status.ps1`
+
+```powershell
+pwsh .\mgmt\query-gateway-startup-status.ps1 -Lssn 71240
 ```
+
 - ❌ 결과 없음: Gateway가 시작되지 않음
 - ✅ 최근 데이터: Gateway 정상 시작
 
 ### 2. Heartbeat가 트리거되었는지 확인
-```sql
-SELECT TOP 1 * FROM tKVS 
-WHERE kKey = 'gateway_71240_heartbeat_trigger' 
-ORDER BY kRegdt DESC;
+**스크립트**: `query-gateway-heartbeat-results.ps1`
+
+```powershell
+pwsh .\mgmt\query-gateway-heartbeat-results.ps1 -Lssn 71240 -Top 5
 ```
+
 - ❌ 결과 없음: Heartbeat 간격이 아직 도달하지 않음 (5분 대기)
 - ✅ 최근 데이터: Heartbeat 트리거됨
 
 ### 3. Heartbeat가 실행되었는지 확인
-```sql
-SELECT TOP 1 * FROM tKVS 
-WHERE kKey = 'gateway_71240_heartbeat_status' 
-ORDER BY kRegdt DESC;
+**스크립트**: `query-gateway-heartbeat-results.ps1`
+
+```powershell
+# kKey가 'gateway_71240_heartbeat_status'인 레코드만 조회하려면
+# query-gateway-status-summary.ps1 사용 후 필터링하거나
+# 직접 DB에서 조회할 수 있습니다
+pwsh .\mgmt\query-gateway-heartbeat-results.ps1 -Lssn 71240 -Top 10
 ```
+
 - ❌ 결과 없음: Heartbeat 스크립트 없음 또는 실행 실패
 - ✅ 최근 데이터: Heartbeat 실행 중
 
 ### 4. 서버 체크 결과 확인
-```sql
-SELECT TOP 10 * FROM tKVS 
-WHERE kType = 'gateway_heartbeat' 
-  AND kKey LIKE 'gateway_71240_server_%'
-ORDER BY kRegdt DESC;
+**스크립트**: `query-gateway-server-check-history.ps1`
+
+```powershell
+# 특정 서버의 체크 이력 조회
+pwsh .\mgmt\query-gateway-server-check-history.ps1 -GatewayLssn 71240 -ServerLssn 71221
+
+# 모든 서버의 최근 결과를 요약하려면
+pwsh .\mgmt\query-gateway-heartbeat-results.ps1 -Lssn 71240 -Summary
 ```
+
 - ❌ 결과 없음: 서버 목록이 비어있거나 SSH 연결 모두 실패
 - ✅ success 데이터: 정상 체크 완료
 - ⚠️ failed 데이터: SSH 연결 실패 (에러 메시지 확인)
 
 ### 5. 에러 확인
-```sql
-SELECT * FROM tKVS 
-WHERE kKey LIKE 'gateway_71240_%error%'
-ORDER BY kRegdt DESC;
+**스크립트**: [`giipdb/mgmt/query-gateway-error-status.ps1`](../../giipdb/mgmt/query-gateway-error-status.ps1)
+
+```powershell
+# 최근 24시간 에러 확인
+pwsh .\mgmt\query-gateway-error-status.ps1 -Lssn 71240
+
+# 최근 6시간 에러만 확인
+pwsh .\mgmt\query-gateway-error-status.ps1 -Lssn 71240 -Hours 6
+
+# 에러 타입별 집계
+pwsh .\mgmt\query-gateway-error-status.ps1 -Lssn 71240 -Summary
 ```
 
 ## 모니터링 대시보드 (향후 구현)
