@@ -1,17 +1,24 @@
-# kvsput.sh API Specification
+# kvsput.sh API Specification (레거시 - KVS_STORAGE_STANDARD.md로 이동)
+
+> ⚠️ **이 문서는 구 버전(kvsput.sh) 스펙입니다**  
+> 👉 **[KVS_STORAGE_STANDARD.md](KVS_STORAGE_STANDARD.md) - 최신 표준 참조**
+
+---
 
 > **📚 관련 문서:**
-> - [Azure Function Endpoints & Code](../../giipdb/docs/AZURE_FUNCTION_ENDPOINTS.md) - **Function Code 확인 (필수!)**
-> - [Azure Function 인증 가이드](../../giipdb/docs/AZURE_FUNCTION_AUTH_GUIDE.md) - 401 에러 해결
+> - **[KVS_STORAGE_STANDARD.md](KVS_STORAGE_STANDARD.md)** - ⭐ **공식 KVS 저장 표준**
+> - [Azure Function Endpoints & Code](../../giipdb/docs/AZURE_FUNCTION_ENDPOINTS.md) - Function Code 확인
 > - [giipapi 규칙](../../giipfaw/docs/giipapi_rules.md) - API 호출 표준
-> - [giipApiSk2 패턴](../../giipfaw/docs/GIIPAPISK2_API_PATTERN.md) - 호출 패턴 상세
 
-⚠️ **개발 룰 필독!**: `giipfaw/docs/giipapi_rules.md`
+---
 
-**[필수] 모든 변수값(파라미터)은 반드시 jsondata 필드에 JSON 문자열로 만들어 전달해야 하며, text 필드에는 프로시저명과 파라미터 이름만 포함해야 합니다.**
+## 📝 kvsput.sh란?
 
-## Overview
-`kvsput.sh`는 JSON 데이터를 GIIP KVS (Key-Value Store) 시스템에 업로드하는 유틸리티입니다.
+`kvsput.sh`는 JSON 파일을 KVS 시스템에 업로드하는 구 버전 유틸리티입니다.
+
+- **상태**: 레거시 (호환성 유지)
+- **권장**: 새 개발에서는 `lib/kvs.sh` 사용
+- **소스**: 유지 (기존 스크립트 호환성)
 
 ---
 

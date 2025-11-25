@@ -332,7 +332,8 @@ SELECT SKey, SKStatus FROM tSecretKey WHERE SKey='$sk'
 - [LIB_FUNCTIONS_REFERENCE.md](./LIB_FUNCTIONS_REFERENCE.md) - lib 함수 상세 레퍼런스
 - [DATABASE_HEALTH_CHECK_FEATURE.md](./DATABASE_HEALTH_CHECK_FEATURE.md) - DB 헬스 체크 기능 명세
 - [GATEWAY_UNIFIED_GUIDE.md](./GATEWAY_UNIFIED_GUIDE.md) - Gateway 통합 가이드
-- [KVSPUT_USAGE_GUIDE.md](./KVSPUT_USAGE_GUIDE.md) - KVS 저장 API 사용법
+- [KVS_STORAGE_STANDARD.md](./KVS_STORAGE_STANDARD.md) - 🌟 KVS 저장 표준 (lib/kvs.sh 기반)
+- [KVSPUT_USAGE_GUIDE.md](./KVSPUT_USAGE_GUIDE.md) - KVS 저장 API 사용법 (구 버전, 참고용)
 
 ---
 

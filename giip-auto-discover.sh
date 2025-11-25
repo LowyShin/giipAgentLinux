@@ -158,6 +158,7 @@ else
 fi
 
 # Upload network diagnostic data to KVS for debugging
+# 📚 참조: docs/KVSPUT_API_SPECIFICATION.md - KVS JSON 저장 에러 해결
 KVSPUT_SCRIPT="${SCRIPT_DIR}/giipscripts/kvsput.sh"
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Checking KVS upload conditions:" >> "$LOG_FILE"
@@ -228,12 +229,14 @@ if [ $HTTP_CODE -eq 0 ]; then
         # ====================================================================
         if [ -f "$KVSPUT_SCRIPT" ]; then
             API_RESPONSE_JSON="${TEMP_JSON%.json}-api-response.json"
+            # ✅ 참조: KVSPUT_API_SPECIFICATION.md - JSON은 jq를 사용하여 생성
+            API_RESP_ESCAPED=$(echo "$RESPONSE" | jq -c .)
             cat > "$API_RESPONSE_JSON" <<EOF
 {
   "timestamp": "$(date -Iseconds)",
   "hostname": "$(hostname)",
   "status": "success",
-  "api_response": $(echo "$RESPONSE" | jq -Rs . 2>/dev/null || echo "\"$RESPONSE\""),
+  "api_response": $API_RESP_ESCAPED,
   "action": "$ACTION"
 }
 EOF
@@ -249,6 +252,7 @@ EOF
         # ====================================================================
         if [ -f "$KVSPUT_SCRIPT" ]; then
             ERROR_JSON="${TEMP_JSON%.json}-api-auth-error.json"
+            API_RESP_ESCAPED=$(echo "$RESPONSE" | jq -c .)
             cat > "$ERROR_JSON" <<EOF
 {
   "timestamp": "$(date -Iseconds)",
@@ -256,7 +260,7 @@ EOF
   "status": "error",
   "error_type": "authentication_failed",
   "rstval": "$RSTVAL",
-  "api_response": $(echo "$RESPONSE" | jq -Rs . 2>/dev/null || echo "\"$RESPONSE\"")
+  "api_response": $API_RESP_ESCAPED
 }
 EOF
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading API auth error to KVS..." >> "$LOG_FILE"
@@ -271,6 +275,7 @@ EOF
         # ====================================================================
         if [ -f "$KVSPUT_SCRIPT" ]; then
             WARN_JSON="${TEMP_JSON%.json}-api-warn.json"
+            API_RESP_ESCAPED=$(echo "$RESPONSE" | jq -c .)
             cat > "$WARN_JSON" <<EOF
 {
   "timestamp": "$(date -Iseconds)",
@@ -279,7 +284,7 @@ EOF
   "error_type": "unexpected_response_code",
   "rstval": "$RSTVAL",
   "action": "$ACTION",
-  "api_response": $(echo "$RESPONSE" | jq -Rs . 2>/dev/null || echo "\"$RESPONSE\"")
+  "api_response": $API_RESP_ESCAPED
 }
 EOF
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading API unexpected response to KVS..." >> "$LOG_FILE"
@@ -309,6 +314,8 @@ else
     # Upload error diagnostic to KVS
     if [ -f "$KVSPUT_SCRIPT" ]; then
         ERROR_JSON="${TEMP_JSON%.json}-api-call-error.json"
+        # ✅ 참조: KVSPUT_API_SPECIFICATION.md - 응답을 JSON 객체로 변환
+        API_RESP_ESCAPED=$(echo "$RESPONSE" | jq -Rs .)
         cat > "$ERROR_JSON" <<EOF
 {
   "timestamp": "$(date -Iseconds)",
@@ -317,7 +324,7 @@ else
   "error_type": "api_call_failed",
   "http_code": $HTTP_CODE,
   "api_url": "$API_URL",
-  "response": $(echo "$RESPONSE" | jq -Rs . 2>/dev/null || echo "\"$RESPONSE\"")
+  "response": $API_RESP_ESCAPED
 }
 EOF
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Uploading API call error diagnostic to KVS..." >> "$LOG_FILE"

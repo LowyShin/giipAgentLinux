@@ -10,6 +10,8 @@ Infrastructure Discovery 데이터 수집 실패 문제를 진단하기 위해 *
 
 **목표**: "수집 안되고 있어. 어디서 문제가 생겼는지 tKVS에 로깅해서 네가 문제를 분석해봐"
 
+> 📌 **표준 참고**: 모든 KVS 저장은 [KVS_STORAGE_STANDARD.md](KVS_STORAGE_STANDARD.md)의 `lib/kvs.sh` 기반 표준을 따릅니다.
+
 ## ✅ 구현 완료 사항
 
 ### 1. 핵심 로깅 함수 (`_log_to_kvs`)

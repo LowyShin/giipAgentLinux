@@ -4,6 +4,8 @@
 
 **Database Management** 페이지에서 등록한 데이터베이스들을 Gateway 서버가 자동으로 Health Check하고 결과를 KVS(giipagent factor)에 저장하는 기능 추가
 
+> 📌 **표준 참고**: 모든 KVS 저장은 [KVS_STORAGE_STANDARD.md](KVS_STORAGE_STANDARD.md)의 `lib/kvs.sh` 기반 표준을 따릅니다.
+
 ---
 
 ## ✅ 구현 내용

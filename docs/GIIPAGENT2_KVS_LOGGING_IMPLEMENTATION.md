@@ -6,6 +6,8 @@
 **작업자**: AI Assistant  
 **목적**: giipAgent2.sh 실행 시 모든 활동을 KVS의 "giipagent" factor에 저장하여 실행 내역 추적 및 디버깅 지원
 
+> 📌 **참고**: 새로운 KVS 저장은 [KVS_STORAGE_STANDARD.md](KVS_STORAGE_STANDARD.md)의 `lib/kvs.sh` 기반 표준을 따릅니다.
+
 ---
 
 ## 📋 작업 요약

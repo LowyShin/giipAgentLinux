@@ -345,6 +345,8 @@ EOF
 if [ -f "$INSTALL_DIR/giipscripts/kvsput.sh" ]; then
     bash $INSTALL_DIR/giipscripts/kvsput.sh /tmp/gateway_setup_result.json "gateway_setup"
 fi
+
+> 📌 **참고**: 새로운 코드는 [KVS_STORAGE_STANDARD.md](./KVS_STORAGE_STANDARD.md)의 `lib/kvs.sh` 기반 `kvs_put()` 함수를 사용하세요.
 ```
 
 **tMgmtScript 등록 SQL**:
@@ -437,6 +439,8 @@ EOF
 if [ -f "$INSTALL_DIR/giipscripts/kvsput.sh" ]; then
     bash $INSTALL_DIR/giipscripts/kvsput.sh /tmp/gateway_refresh_result.json "gateway_refresh"
 fi
+
+> 📌 **참고**: 새로운 코드는 [KVS_STORAGE_STANDARD.md](./KVS_STORAGE_STANDARD.md)의 `lib/kvs.sh` 기반 `kvs_put()` 함수를 사용하세요.
 
 echo "===== Refresh Completed ====="
 ```

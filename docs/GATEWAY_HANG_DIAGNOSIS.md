@@ -31,9 +31,10 @@
 |--------|------|
 | **[GIIPAGENT3_SPECIFICATION.md](GIIPAGENT3_SPECIFICATION.md)** | giipAgent3.sh 전체 사양 및 실행 흐름 |
 | **[GATEWAY_IMPLEMENTATION_SUMMARY.md](GATEWAY_IMPLEMENTATION_SUMMARY.md)** | Gateway 구현 상세 |
+| **[KVS_STORAGE_STANDARD.md](KVS_STORAGE_STANDARD.md)** | 🌟 KVS 저장 표준 (lib/kvs.sh 기반) |
 | **[KVS_STANDARD_USAGE.md](KVS_STANDARD_USAGE.md)** | KVS 함수 사용법 (로깅 확인용) |
 | **[KVS_LOGGING_DIAGNOSIS_GUIDE.md](KVS_LOGGING_DIAGNOSIS_GUIDE.md)** | KVS 로그 읽는 방법 (문제 진단용) |
-| **[KVSPUT_USAGE_GUIDE.md](KVSPUT_USAGE_GUIDE.md)** | kvsput API 호출 방법 |
+| **[KVSPUT_USAGE_GUIDE.md](KVSPUT_USAGE_GUIDE.md)** | kvsput API 호출 방법 (구 버전, 참고용) |
 | **[SSH_CONNECTION_LOGGER.md](SSH_CONNECTION_LOGGER.md)** | SSH 실행 로깅 |
 
 > ✅ **위의 필수 읽기 문서를 모두 읽은 후에 아래 내용 읽기**

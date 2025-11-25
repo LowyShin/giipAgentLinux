@@ -41,6 +41,7 @@ pwsh .\mgmt\check-latest.ps1 -Lssn 71240
 | **[AUTO_DISCOVER_LOGGING_DIAGNOSIS.md](AUTO_DISCOVER_LOGGING_DIAGNOSIS.md)** | 진단 방법 문서 | 원인 분석 및 3가지 옵션 제시 |
 | **[GATEWAY_HANG_DIAGNOSIS.md](GATEWAY_HANG_DIAGNOSIS.md)** | 최상위 진입점 | 필수 읽기 문서 목록 |
 | **[GATEWAY_KVS_MONITORING.md](GATEWAY_KVS_MONITORING.md)** | KVS 모니터링 | 로깅 결과 확인 도구 |
+| **[KVS_STORAGE_STANDARD.md](KVS_STORAGE_STANDARD.md)** | 🌟 KVS 저장 표준 | kvs_put() 함수 및 사용 규칙 |
 | **[giipAgent3.sh](../../giipAgentLinux/giipAgent3.sh)** | 실제 코드 | 로깅 구현 위치 (라인 ~250-330) |
 | **[auto-discover-linux.sh](../../giipAgentLinux/giipscripts/auto-discover-linux.sh)** | 실제 코드 | 로깅 구현 위치 (라인 ~1-30, ~280-320) |
 
