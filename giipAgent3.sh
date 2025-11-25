@@ -277,17 +277,18 @@ if [ "${gateway_mode}" = "1" ]; then
 	# [로깅 #1] auto-discover 시작 알림
 	echo "[giipAgent3.sh] 🟢 [5.2] Starting auto-discover-linux.sh execution" >&2
 	
-	# auto-discover-linux.sh 경로 (두 가지 경로 모두 지원)
-	auto_discover_script="${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh"
+	# auto-discover-linux.sh 경로 (lib/giipscripts 또는 giipscripts)
+	# 실제 서버 구조에 맞게 순서 변경
+	auto_discover_script="${SCRIPT_DIR}/lib/giipscripts/auto-discover-linux.sh"
 	if [ ! -f "$auto_discover_script" ]; then
-		# Fallback: lib 폴더 내부 경로 시도
-		auto_discover_script="${SCRIPT_DIR}/lib/giipscripts/auto-discover-linux.sh"
+		# Fallback: 로컬 개발 환경
+		auto_discover_script="${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh"
 	fi
 	
 	echo "[giipAgent3.sh] 📍 DEBUG: auto_discover_script path: $auto_discover_script (exists: $([ -f "$auto_discover_script" ] && echo 'YES' || echo 'NO'))" >&2
 	if [ ! -f "$auto_discover_script" ]; then
-		log_message "WARN" "auto-discover script not found: $auto_discover_script"
-		kvs_put "lssn" "${lssn}" "auto_discover_init" "{\"status\":\"failed\",\"reason\":\"script_not_found\",\"path\":\"${auto_discover_script}\",\"tried_paths\":[\"${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh\",\"${SCRIPT_DIR}/lib/giipscripts/auto-discover-linux.sh\"]}"
+		log_message "WARN" "auto-discover script not found in both paths"
+		kvs_put "lssn" "${lssn}" "auto_discover_init" "{\"status\":\"failed\",\"reason\":\"script_not_found\",\"path\":\"${auto_discover_script}\"}"
 		echo "[giipAgent3.sh] ⚠️ [5.2.1] auto-discover-linux.sh NOT FOUND at $auto_discover_script" >&2
 	else
 		# [로깅 #2] auto-discover 실행 시작
