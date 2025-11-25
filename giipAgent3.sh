@@ -277,7 +277,9 @@ if [ "${gateway_mode}" = "1" ]; then
 	# [로깅 #1] auto-discover 시작 알림
 	echo "[giipAgent3.sh] 🟢 [5.2] Starting auto-discover-linux.sh execution" >&2
 	
+	# 올바른 경로: giipAgent3.sh와 같은 디렉토리의 giipscripts 폴더
 	auto_discover_script="${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh"
+	echo "[giipAgent3.sh] 📍 DEBUG: auto_discover_script path: $auto_discover_script" >&2
 	if [ ! -f "$auto_discover_script" ]; then
 		log_message "WARN" "auto-discover script not found: $auto_discover_script"
 		kvs_put "lssn" "${lssn}" "auto_discover_init" "{\"status\":\"failed\",\"reason\":\"script_not_found\",\"path\":\"${auto_discover_script}\"}"
