@@ -536,5 +536,22 @@ fi
 # Cleanup and Exit
 # ============================================================================
 
+# Clean up temporary files created by this script execution
+# Only clean files from this specific PID to avoid deleting files from other running instances
+current_pid=$$
+rm -f /tmp/auto_discover_debug_${current_pid}.log 2>/dev/null
+rm -f /tmp/auto_discover_result_${current_pid}.json 2>/dev/null
+rm -f /tmp/auto_discover_log_${current_pid}.log 2>/dev/null
+rm -f /tmp/kvs_put_init_${current_pid}.log 2>/dev/null
+rm -f /tmp/kvs_kValue_auto_discover_result_${current_pid}.json 2>/dev/null
+rm -f /tmp/kvs_kValue_auto_discover_servers_${current_pid}.json 2>/dev/null
+rm -f /tmp/kvs_kValue_auto_discover_networks_${current_pid}.json 2>/dev/null
+rm -f /tmp/kvs_kValue_auto_discover_services_${current_pid}.json 2>/dev/null
+rm -f /tmp/kvs_put_auto_discover_result_${current_pid}.log 2>/dev/null
+rm -f /tmp/kvs_put_auto_discover_servers_${current_pid}.log 2>/dev/null
+rm -f /tmp/kvs_put_auto_discover_networks_${current_pid}.log 2>/dev/null
+rm -f /tmp/kvs_put_auto_discover_services_${current_pid}.log 2>/dev/null
+rm -f /tmp/gateway_stderr_${current_pid}.log 2>/dev/null
+
 log_message "INFO" "GIIP Agent V${sv} completed"
 exit 0
