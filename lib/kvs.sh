@@ -168,8 +168,11 @@ save_execution_log() {
 kvs_put() {
 	# Clean up old kvs_put temp files BEFORE creating new ones
 	rm -f /tmp/kvs_put_response_* /tmp/kvs_put_stderr_* 2>/dev/null
-	# Also clean up old kValue files created by giipAgent3.sh (auto_discover data files)
+	# Also clean up old kValue files and log files created by giipAgent3.sh (auto_discover data files)
 	rm -f /tmp/kvs_kValue_auto_discover_* 2>/dev/null
+	rm -f /tmp/kvs_put_auto_discover_* 2>/dev/null
+	rm -f /tmp/kvs_put_services_*.log 2>/dev/null
+	rm -f /tmp/kvs_put_init_*.log 2>/dev/null
 	
 	local ktype=$1
 	local kkey=$2
