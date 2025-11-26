@@ -2,13 +2,9 @@
 
 ![GIIP Logo](https://giipasp.azurewebsites.net/logo.png)
 
-**Last Updated**: 2025-10-30 00:41 KST - Git Auto-Sync + Auto-Discovery Integration Active
+**Last Updated**: 2025-11-26 - Clean Architecture & Directory Organization 🎯
 
-# GIIP Agent for Linux
-
-![GIIP Logo](https://giipasp.azurewebsites.net/logo.png)
-
-**Last Updated**: 2025-01-10 - Modular Architecture (v3.0) 🎉
+**Version**: 3.0 (Modular Architecture)
 
 > **🚨 FOR AI AGENTS: Configuration File Warning**
 > 
@@ -51,10 +47,67 @@
 - [Agent Installation Guide](../giipdb/docs/AGENT_INSTALLATION_GUIDE.md) - Linux/Windows 에이전트 설치
 - [Test Server Installation](../giipdb/docs/TEST_SERVER_INSTALLATION.md) - 테스트 환경 구축
 
-### Security
-- [Security Checklist](../giipdb/docs/SECURITY_CHECKLIST.md) - 보안 점검 항목
+## 📁 폴더 구조 (v3.0 Clean Architecture)
 
-### Deployment Options
+```
+giipAgentLinux/
+├── 📄 giipAgent.sh           ✅ 핵심: 기존 에이전트
+├── 📄 giipAgent3.sh          ✅ 핵심: 개선된 에이전트 (권장)
+├── 📄 giipAgent.cnf          ✅ 핵심: 설정 파일 (템플릿)
+├── 📄 README.md              ✅ 핵심: 이 문서
+│
+├── 📁 docs/                  문서 (가이드, 설명서)
+│   ├── *.md                  아키텍처, 설정, 가이드 등
+│   └── README.md
+│
+├── 📁 lib/                   라이브러리 (핵심 함수 모음)
+│   ├── *.sh                  공통 함수, KVS API 등
+│   └── README.md
+│
+├── 📁 giipscripts/           기본 스크립트 (auto-discover 등)
+│   └── README.md
+│
+├── 📁 scripts/               유틸리티 스크립트 (진단, 모니터링, 동기화)
+│   ├── check-*.sh
+│   ├── collect-*.sh
+│   ├── diagnose-*.sh
+│   ├── run-*.sh
+│   ├── sync-*.sh
+│   └── README.md
+│
+├── 📁 tests/                 테스트 스크립트 (개발, 검증용)
+│   ├── test-*.sh
+│   ├── test-*.ps1
+│   └── README.md
+│
+├── 📁 gateway/               Gateway 모드 스크립트
+│   ├── giipAgentGateway.sh
+│   ├── giipAgentGateway-heartbeat.sh
+│   ├── *.csv.template
+│   ├── GATEWAY_*.md
+│   ├── README_GATEWAY*.md
+│   └── README.md
+│
+├── 📁 cqe/                   CQE (명령 큐) 관련 스크립트
+│   ├── giipCQE.sh
+│   ├── giipCQECtrl.sh
+│   ├── CQE_TEST_GUIDE.md
+│   └── README.md
+│
+└── 📁 admin/                 관리자용 스크립트 (설치, 등록, 유지보수)
+    ├── install-*.sh
+    ├── giip*.sh
+    └── README.md
+```
+
+### 📌 시작하기
+
+1. **표준 설치**: `giipAgent3.sh` 실행
+2. **Gateway 설정**: `gateway/` 폴더 참고
+3. **문제 해결**: `docs/` 폴더의 가이드 참고
+4. **스크립트 설명**: 각 폴더의 `README.md` 참고
+
+---
 
 - **Standard Agent**: Install directly on each server (standard installation)
 - **Gateway Agent**: Install on bastion/gateway server to manage multiple remote servers via SSH
