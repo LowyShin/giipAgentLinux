@@ -14,18 +14,7 @@ sv="3.00"
 # Initialize Script Paths
 # ============================================================================
 
-# Get the directory where this script is located
-SCRIPT_LOCATION="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-# If running from repo root (e.g., bash ./giipAgentLinux/giipAgent3.sh)
-# SCRIPT_DIR should point to the giipAgentLinux directory
-if [ "$(basename "$SCRIPT_LOCATION")" = "giipAgentLinux" ]; then
-	SCRIPT_DIR="$SCRIPT_LOCATION"
-else
-	# If running from giipAgentLinux directory (e.g., bash ./giipAgent3.sh)
-	SCRIPT_DIR="$SCRIPT_LOCATION"
-fi
-
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 LIB_DIR="${SCRIPT_DIR}/lib"
 
 # ============================================================================
