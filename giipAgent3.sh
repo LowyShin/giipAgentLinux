@@ -562,6 +562,7 @@ cleanup_old_temp_files "auto_discover_log_*.log"
 cleanup_old_temp_files "auto_discover_services_*.json"
 cleanup_old_temp_files "auto_discover_servers_*.json"
 cleanup_old_temp_files "auto_discover_networks_*.json"
+cleanup_old_temp_files "discovery_kvs_log_*.txt"
 cleanup_old_temp_files "kvs_put_init_*.log"
 cleanup_old_temp_files "kvs_kValue_auto_discover_result_*.json"
 cleanup_old_temp_files "kvs_kValue_auto_discover_servers_*.json"
@@ -571,6 +572,9 @@ cleanup_old_temp_files "kvs_put_auto_discover_result_*.log"
 cleanup_old_temp_files "kvs_put_auto_discover_servers_*.log"
 cleanup_old_temp_files "kvs_put_auto_discover_networks_*.log"
 cleanup_old_temp_files "kvs_put_auto_discover_services_*.log"
+
+# Clean up old kvs_post_data.txt (from old kvs.sh implementations)
+rm -f /tmp/kvs_post_data.txt 2>/dev/null
 cleanup_old_temp_files "gateway_stderr_*.log"
 
 log_message "INFO" "GIIP Agent V${sv} completed"
