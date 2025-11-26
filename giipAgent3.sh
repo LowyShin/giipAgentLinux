@@ -293,13 +293,19 @@ if [ "${gateway_mode}" = "1" ]; then
 	fi
 	
 	# STEP-2: Script Path Check (auto-discover 스크립트 파일 검증)
-	auto_discover_script="${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh"
+	# Handle case where SCRIPT_DIR might already include /lib
+	auto_discover_base_dir="$SCRIPT_DIR"
+	if [[ "$auto_discover_base_dir" == */lib ]]; then
+		auto_discover_base_dir="${auto_discover_base_dir%/lib}"
+	fi
+	
+	auto_discover_script="${auto_discover_base_dir}/giipscripts/auto-discover-linux.sh"
 	
 	log_auto_discover_step "STEP-2" "Script Path Check" "auto_discover_step_2_scriptpath" "{\"path\":\"${auto_discover_script}\",\"exists\":$([ -f \"$auto_discover_script\" ] && echo 'true' || echo 'false')}"
 	log_auto_discover_validation "STEP-2" "script_file_exists" "$([ -f \"$auto_discover_script\" ] && echo 'PASS' || echo 'FAIL')" "{\"path\":\"${auto_discover_script}\"}"
 	
 	if [ ! -f "$auto_discover_script" ]; then
-		log_auto_discover_error "STEP-2" "SCRIPT_NOT_FOUND" "auto-discover script not found" "{\"searched_path\":\"${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh\"}"
+		log_auto_discover_error "STEP-2" "SCRIPT_NOT_FOUND" "auto-discover script not found" "{\"searched_path\":\"${auto_discover_script}\",\"base_dir\":\"${auto_discover_base_dir}\"}"
 		return 1
 	fi
 	
