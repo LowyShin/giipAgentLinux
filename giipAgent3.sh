@@ -536,22 +536,39 @@ fi
 # Cleanup and Exit
 # ============================================================================
 
-# Clean up temporary files created by this script execution
-# Only clean files from this specific PID to avoid deleting files from other running instances
+# Clean up temporary files created by PREVIOUS script executions
+# Only delete files that are NOT from the current PID
 current_pid=$$
-rm -f /tmp/auto_discover_debug_${current_pid}.log 2>/dev/null
-rm -f /tmp/auto_discover_result_${current_pid}.json 2>/dev/null
-rm -f /tmp/auto_discover_log_${current_pid}.log 2>/dev/null
-rm -f /tmp/kvs_put_init_${current_pid}.log 2>/dev/null
-rm -f /tmp/kvs_kValue_auto_discover_result_${current_pid}.json 2>/dev/null
-rm -f /tmp/kvs_kValue_auto_discover_servers_${current_pid}.json 2>/dev/null
-rm -f /tmp/kvs_kValue_auto_discover_networks_${current_pid}.json 2>/dev/null
-rm -f /tmp/kvs_kValue_auto_discover_services_${current_pid}.json 2>/dev/null
-rm -f /tmp/kvs_put_auto_discover_result_${current_pid}.log 2>/dev/null
-rm -f /tmp/kvs_put_auto_discover_servers_${current_pid}.log 2>/dev/null
-rm -f /tmp/kvs_put_auto_discover_networks_${current_pid}.log 2>/dev/null
-rm -f /tmp/kvs_put_auto_discover_services_${current_pid}.log 2>/dev/null
-rm -f /tmp/gateway_stderr_${current_pid}.log 2>/dev/null
+
+# Function to safely delete old files (not from current process)
+cleanup_old_temp_files() {
+	local pattern=$1
+	for file in /tmp/${pattern}; do
+		if [ -f "$file" ]; then
+			# Extract the PID from the filename (assumes format: prefix_${PID}.ext)
+			local file_pid=$(echo "$file" | sed -E 's/.*_([0-9]+)\.(log|json)$/\1/')
+			# Only delete if PID doesn't match current process
+			if [ "$file_pid" != "$current_pid" ] && [ "$file_pid" != "${pattern}" ]; then
+				rm -f "$file" 2>/dev/null
+			fi
+		fi
+	done
+}
+
+# Clean up old files from previous executions
+cleanup_old_temp_files "auto_discover_debug_*.log"
+cleanup_old_temp_files "auto_discover_result_*.json"
+cleanup_old_temp_files "auto_discover_log_*.log"
+cleanup_old_temp_files "kvs_put_init_*.log"
+cleanup_old_temp_files "kvs_kValue_auto_discover_result_*.json"
+cleanup_old_temp_files "kvs_kValue_auto_discover_servers_*.json"
+cleanup_old_temp_files "kvs_kValue_auto_discover_networks_*.json"
+cleanup_old_temp_files "kvs_kValue_auto_discover_services_*.json"
+cleanup_old_temp_files "kvs_put_auto_discover_result_*.log"
+cleanup_old_temp_files "kvs_put_auto_discover_servers_*.log"
+cleanup_old_temp_files "kvs_put_auto_discover_networks_*.log"
+cleanup_old_temp_files "kvs_put_auto_discover_services_*.log"
+cleanup_old_temp_files "gateway_stderr_*.log"
 
 log_message "INFO" "GIIP Agent V${sv} completed"
 exit 0
