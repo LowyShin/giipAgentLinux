@@ -84,9 +84,6 @@ save_execution_log() {
 	
 	local post_data="text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}"
 	
-	# Clean up old kvs_exec temp files (keep only the current batch)
-	rm -f /tmp/kvs_exec_post_* /tmp/kvs_exec_response_* /tmp/kvs_exec_stderr_* 2>/dev/null
-	
 	# Debug: Save POST data to file for inspection with specific naming
 	local timestamp_ms=$(date +%s%N | cut -b1-13)
 	local post_data_file="/tmp/kvs_exec_post_${timestamp_ms}.txt"
@@ -166,14 +163,6 @@ save_execution_log() {
 # Example: kvs_put "lssn" "71174" "test" '{"status":"ok"}'
 # CRITICAL: kValue MUST be a raw JSON object, not an escaped string
 kvs_put() {
-	# Clean up old kvs_put temp files BEFORE creating new ones
-	rm -f /tmp/kvs_put_response_* /tmp/kvs_put_stderr_* 2>/dev/null
-	# Also clean up old kValue files and log files created by giipAgent3.sh (auto_discover data files)
-	rm -f /tmp/kvs_kValue_auto_discover_* 2>/dev/null
-	rm -f /tmp/kvs_put_auto_discover_* 2>/dev/null
-	rm -f /tmp/kvs_put_services_*.log 2>/dev/null
-	rm -f /tmp/kvs_put_init_*.log 2>/dev/null
-	
 	local ktype=$1
 	local kkey=$2
 	local kfactor=$3
@@ -204,9 +193,6 @@ kvs_put() {
 	local encoded_text=$(printf '%s' "$text" | jq -sRr '@uri')
 	local encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri')
 	local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
-	
-	# Clean up old kvs_put temp files (keep only the current batch)
-	rm -f /tmp/kvs_put_response_* /tmp/kvs_put_stderr_* 2>/dev/null
 	
 	# Call API with response capture for debugging
 	# Use specific naming pattern for easier cleanup: kvs_put_response_<timestamp>
