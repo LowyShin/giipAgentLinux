@@ -22,7 +22,7 @@
 
 ### 🆕 Architecture & Design (v3.0)
 - **[Modular Architecture Guide](docs/MODULAR_ARCHITECTURE.md)** - 리팩토링된 구조 설명 (v3.0) 🆕
-- **[SSH Connection Module Guide](SSH_CONNECTION_MODULE_GUIDE.md)** - 🆕 SSH 연결 테스트 별도 모듈 사용 가이드
+- **[SSH Connection Module Guide](docs/SSH_CONNECTION_MODULE_GUIDE.md)** - 🆕 SSH 연결 테스트 별도 모듈 사용 가이드
 - [Auto-Discovery Architecture](docs/AUTO_DISCOVERY_ARCHITECTURE.md) - 파일 구조와 실행 흐름 상세 설명
 - [Service Package Filter](docs/SERVICE_PACKAGE_FILTER.md) - 소프트웨어 필터링 규칙
 - **[giipAgent3.sh Specification](docs/GIIPAGENT3_SPECIFICATION.md)** - giipAgent3.sh 실행 조건, 동작 흐름, KVS 저장 로직 완전 문서화 🆕
@@ -36,8 +36,8 @@
 - **[⚠️ Gateway Configuration Philosophy](docs/GATEWAY_CONFIG_PHILOSOPHY.md)** - **필독! DB as Single Source of Truth** 🔥
 - **[⚠️ Config Addition Checklist](docs/CHECKLIST_BEFORE_ADDING_CONFIG.md)** - **설정 추가 전 필수 확인사항** 🚨
 - **[Gateway Setup Guide](docs/GATEWAY_SETUP_GUIDE.md)** - 실제 환경 설정 가이드 (실무 중심)
-- [Gateway README](README_GATEWAY.md) - Gateway Agent 전체 매뉴얼
-- [Gateway Quick Start (KR)](GATEWAY_QUICKSTART_KR.md) - 빠른 시작 가이드
+- [Gateway README](gateway/README_GATEWAY.md) - Gateway Agent 전체 매뉴얼
+- [Gateway Quick Start (KR)](gateway/GATEWAY_QUICKSTART_KR.md) - 빠른 시작 가이드
 - [Gateway Implementation Summary](docs/GATEWAY_IMPLEMENTATION_SUMMARY.md) - 기술적 구현 세부사항
 
 ### API & Integration
@@ -114,7 +114,7 @@ giipAgentLinux/
   - 🆕 **Web UI Configuration**: No more manual SSH configuration!
   - See [docs/GATEWAY_AUTO_CONFIGURATION.md](docs/GATEWAY_AUTO_CONFIGURATION.md) for details
   - See [docs/GATEWAY_USAGE_GUIDE.md](docs/GATEWAY_USAGE_GUIDE.md) for usage guide
-  - See [README_GATEWAY.md](README_GATEWAY.md) for traditional setup
+  - See [gateway/README_GATEWAY.md](gateway/README_GATEWAY.md) for traditional setup
 
 For Windows version: https://github.com/LowyShin/giipAgentWin
 
@@ -154,7 +154,7 @@ GIIP Agent is an intelligent monitoring and management agent that:
   - 🆕 **Web UI Configuration**: No more manual SSH configuration!
   - See [docs/GATEWAY_AUTO_CONFIGURATION.md](docs/GATEWAY_AUTO_CONFIGURATION.md) for details
   - See [docs/GATEWAY_USAGE_GUIDE.md](docs/GATEWAY_USAGE_GUIDE.md) for usage guide
-  - See [README_GATEWAY.md](README_GATEWAY.md) for traditional setup
+  - See [gateway/README_GATEWAY.md](gateway/README_GATEWAY.md) for traditional setup
 
 For Windows version: https://github.com/LowyShin/giipAgentWin
 
@@ -203,8 +203,8 @@ For Windows version: https://github.com/LowyShin/giipAgentWin
 
 ### Gateway & Remote Control
 - **[Gateway Setup Guide](docs/GATEWAY_SETUP_GUIDE.md)** - 실제 환경 설정 가이드 (실무 중심)
-- [Gateway README](README_GATEWAY.md) - Gateway Agent 전체 매뉴얼
-- [Gateway Quick Start (KR)](GATEWAY_QUICKSTART_KR.md) - 빠른 시작 가이드
+- [Gateway README](gateway/README_GATEWAY.md) - Gateway Agent 전체 매뉴얼
+- [Gateway Quick Start (KR)](gateway/GATEWAY_QUICKSTART_KR.md) - 빠른 시작 가이드
 - [Gateway Implementation Summary](docs/GATEWAY_IMPLEMENTATION_SUMMARY.md) - 기술적 구현 세부사항
 
 ### API & Integration
