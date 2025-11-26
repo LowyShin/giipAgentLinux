@@ -294,15 +294,12 @@ if [ "${gateway_mode}" = "1" ]; then
 	
 	# STEP-2: Script Path Check (auto-discover 스크립트 파일 검증)
 	auto_discover_script="${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh"
-	if [ ! -f "$auto_discover_script" ]; then
-		auto_discover_script="${SCRIPT_DIR}/lib/giipscripts/auto-discover-linux.sh"
-	fi
 	
 	log_auto_discover_step "STEP-2" "Script Path Check" "auto_discover_step_2_scriptpath" "{\"path\":\"${auto_discover_script}\",\"exists\":$([ -f \"$auto_discover_script\" ] && echo 'true' || echo 'false')}"
 	log_auto_discover_validation "STEP-2" "script_file_exists" "$([ -f \"$auto_discover_script\" ] && echo 'PASS' || echo 'FAIL')" "{\"path\":\"${auto_discover_script}\"}"
 	
 	if [ ! -f "$auto_discover_script" ]; then
-		log_auto_discover_error "STEP-2" "SCRIPT_NOT_FOUND" "auto-discover script not found" "{\"searched_path_1\":\"${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh\",\"searched_path_2\":\"${SCRIPT_DIR}/lib/giipscripts/auto-discover-linux.sh\"}"
+		log_auto_discover_error "STEP-2" "SCRIPT_NOT_FOUND" "auto-discover script not found" "{\"searched_path\":\"${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh\"}"
 		return 1
 	fi
 	
@@ -378,9 +375,12 @@ if [ "${gateway_mode}" = "1" ]; then
 	# STEP-7: Complete Marker (auto_discover_complete KVS 저장)
 	log_auto_discover_step "STEP-7" "Store Complete Marker" "auto_discover_step_7_complete" "{\"status\":\"completed\"}"
 	
+	# Initialize kvs_put_complete_code before using it
+	kvs_put_complete_code=0
+	
 	# ✅ PROHIBITED_ACTION_13 준수: 이전 단계 실패 여부 확인 후 최종 상태 결정
 	local final_status="PASSED"
-	if [ $kvs_put_init_result -ne 0 ] || [ $kvs_put_result_code -ne 0 ] || [ $kvs_put_complete_code -ne 0 ]; then
+	if [ $kvs_put_init_result -ne 0 ] || [ $kvs_put_result_code -ne 0 ]; then
 		final_status="FAILED"
 	fi
 	
@@ -405,22 +405,6 @@ if [ "${gateway_mode}" = "1" ]; then
 	
 	# Final Summary - ✅ PROHIBITED_ACTION_13 준수: 실제 최종 상태 기록
 	log_auto_discover_step "COMPLETE" "Auto-Discover Phase Complete" "auto_discover_complete" "{\"all_steps\":\"${final_status}\"}"
-				kvs_put "lssn" "${lssn}" "auto_discover_result" "{\"status\":\"failed\",\"exit_code\":${auto_discover_exit_code},\"end_time\":\"${execute_end_time}\"}"
-			fi
-			
-			# 에러 로그 캡처
-			if [ -s "$auto_discover_log_file" ]; then
-				error_log_lines=$(wc -l < "$auto_discover_log_file")
-				error_log_preview=$(head -c 500 "$auto_discover_log_file")
-				echo "[giipAgent3.sh] 📋 [5.2.5] Error log (${error_log_lines} lines): $error_log_preview" >&2
-				kvs_put "lssn" "${lssn}" "auto_discover_error_log" "{\"error_lines\":${error_log_lines},\"preview\":\"$(echo "$error_log_preview" | tr '\n' '|' | head -c 200)\"}"
-			fi
-		fi
-		
-		# 임시 파일 정리
-		rm -f "$auto_discover_result_file" "$auto_discover_log_file"
-		echo "[giipAgent3.sh] 🧹 [5.2.9] Temporary files cleaned up" >&2
-	fi
 	
 	# ================================================================
 	# [로깅 #8] auto-discover 단계 완료
