@@ -163,6 +163,12 @@ kvs_put() {
 	local kfactor=$3
 	local kvalue_json=$4
 	
+	# ✅ Validate kvalue_json is not empty (prevent invalid JSON)
+	if [ -z "$kvalue_json" ] || [ "$kvalue_json" = "null" ]; then
+		echo "[KVS-Put] ⚠️  Skipping: kvalue_json is empty or null for kFactor=$kfactor" >&2
+		return 1
+	fi
+	
 	# Validate required variables
 	if [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
 		echo "[KVS-Put] ⚠️  Missing required variables (sk, apiaddrv2)" >&2
