@@ -438,11 +438,6 @@ if [ "${gateway_mode}" = "1" ]; then
 	fi
 	
 	log_auto_discover_step "STEP-6" "Store Result to KVS" "auto_discover_step_6_store_result" "{\"status\":\"completed\",\"kValues_saved_to\":\"/tmp/kvs_kValue_auto_discover_*_$$.json\"}"
-		# ✅ PROHIBITED_ACTION_13 준수: 실패 시 오류 정보 KVS 저장 후 단계 종료
-		local failure_error=$(tail -10 /tmp/kvs_put_result_$$.log 2>/dev/null | tr '\n' ';')
-		kvs_put "lssn" "${lssn}" "auto_discover_error_log" "{\"step\":\"STEP-6\",\"type\":\"KVS_STORAGE_FAILURE\",\"message\":\"Failed to store result to KVS\",\"exit_code\":${kvs_put_result_code},\"error_details\":\"${failure_error}\"}"
-		return 1
-	fi
 	
 	# STEP-7: Complete Marker (auto_discover_complete KVS 저장)
 	log_auto_discover_step "STEP-7" "Store Complete Marker" "auto_discover_step_7_complete" "{\"status\":\"completed\"}"
