@@ -369,16 +369,32 @@ if [ "${gateway_mode}" = "1" ]; then
 	if [ $kvs_put_result_code -ne 0 ]; then
 		local result_error=$(tail -5 /tmp/kvs_put_result_$$.log 2>/dev/null | tr '\n' ' ')
 		log_auto_discover_error "STEP-6" "KVS_PUT_RESULT_FAILED" "Failed to store auto_discover_result" "{\"exit_code\":${kvs_put_result_code},\"error_detail\":\"${result_error}\"}"
+		# ✅ PROHIBITED_ACTION_13 준수: 실패 시 오류 정보 KVS 저장 후 단계 종료
+		local failure_error=$(tail -10 /tmp/kvs_put_result_$$.log 2>/dev/null | tr '\n' ';')
+		kvs_put "lssn" "${lssn}" "auto_discover_error_log" "{\"step\":\"STEP-6\",\"type\":\"KVS_STORAGE_FAILURE\",\"message\":\"Failed to store result to KVS\",\"exit_code\":${kvs_put_result_code},\"error_details\":\"${failure_error}\"}"
+		return 1
 	fi
 	
 	# STEP-7: Complete Marker (auto_discover_complete KVS 저장)
 	log_auto_discover_step "STEP-7" "Store Complete Marker" "auto_discover_step_7_complete" "{\"status\":\"completed\"}"
 	
-	local complete_data="{\"status\":\"completed\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"all_steps_passed\":true}"
+	# ✅ PROHIBITED_ACTION_13 준수: 이전 단계 실패 여부 확인 후 최종 상태 결정
+	local final_status="PASSED"
+	if [ $kvs_put_init_result -ne 0 ] || [ $kvs_put_result_code -ne 0 ] || [ $kvs_put_complete_code -ne 0 ]; then
+		final_status="FAILED"
+	fi
+	
+	local complete_data="{\"status\":\"completed\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"all_steps_passed\":$([ \"$final_status\" = \"PASSED\" ] && echo 'true' || echo 'false'),\"final_status\":\"${final_status}\"}"
 	kvs_put "lssn" "${lssn}" "auto_discover_complete" "$complete_data" 2>&1 | tee -a /tmp/kvs_put_complete_$$.log
 	kvs_put_complete_code=$?
 	
 	log_auto_discover_validation "STEP-7" "kvs_put_auto_discover_complete" "$([ $kvs_put_complete_code -eq 0 ] && echo 'PASS' || echo 'FAIL')" "{\"exit_code\":${kvs_put_complete_code}}"
+	
+	# ✅ PROHIBITED_ACTION_13 준수: 최종 저장 실패 시 오류 기록
+	if [ $kvs_put_complete_code -ne 0 ]; then
+		local complete_error=$(tail -5 /tmp/kvs_put_complete_$$.log 2>/dev/null | tr '\n' ' ')
+		log_auto_discover_error "STEP-7" "KVS_PUT_COMPLETE_FAILED" "Failed to store auto_discover_complete" "{\"exit_code\":${kvs_put_complete_code},\"error_detail\":\"${complete_error}\"}"
+	fi
 	
 	# Cleanup temp files
 	rm -f /tmp/kvs_put_init_$$.log /tmp/kvs_put_result_$$.log /tmp/kvs_put_complete_$$.log /tmp/auto_discover_result_$$.json /tmp/auto_discover_log_$$.log
@@ -387,8 +403,8 @@ if [ "${gateway_mode}" = "1" ]; then
 		return 1
 	fi
 	
-	# Final Summary
-	log_auto_discover_step "COMPLETE" "Auto-Discover Phase Complete" "auto_discover_complete" "{\"all_steps\":\"PASSED\"}"
+	# Final Summary - ✅ PROHIBITED_ACTION_13 준수: 실제 최종 상태 기록
+	log_auto_discover_step "COMPLETE" "Auto-Discover Phase Complete" "auto_discover_complete" "{\"all_steps\":\"${final_status}\"}"
 				kvs_put "lssn" "${lssn}" "auto_discover_result" "{\"status\":\"failed\",\"exit_code\":${auto_discover_exit_code},\"end_time\":\"${execute_end_time}\"}"
 			fi
 			
