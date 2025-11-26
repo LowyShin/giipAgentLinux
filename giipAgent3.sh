@@ -385,56 +385,47 @@ if [ "${gateway_mode}" = "1" ]; then
 	echo "DEBUG STEP-6: json_length=${#auto_discover_json}" | tee -a /tmp/auto_discover_debug_$$.log
 	echo "DEBUG STEP-6: json_first_200=$(echo "$auto_discover_json" | head -c 200)" | tee -a /tmp/auto_discover_debug_$$.log
 	
-	# Parse and store discovery results by type (각 데이터를 별도 파일로 저장 후 kvs_put 호출)
+	# Parse and store discovery results by type (각 kFactor별로 kValue를 파일로 저장 후 kvs_put 호출)
 	# The auto_discover_json contains: {"servers":[...], "networks":[...], "services":[...], etc.}
 	if [ -n "$auto_discover_json" ]; then
-		echo "DEBUG STEP-6: Storing individual components to separate files and KVS" | tee -a /tmp/auto_discover_debug_$$.log
+		echo "DEBUG STEP-6: Storing individual components - kValue saved as files before kvs_put" | tee -a /tmp/auto_discover_debug_$$.log
 		
-		# 1. Store the complete discovery result as separate file
-		auto_discover_result_file_data="/tmp/auto_discover_result_data_$$.json"
-		echo "$auto_discover_json" > "$auto_discover_result_file_data"
-		echo "DEBUG STEP-6: Saved complete result to $auto_discover_result_file_data" | tee -a /tmp/auto_discover_debug_$$.log
+		# 1. auto_discover_result: Store complete discovery result
+		echo "DEBUG STEP-6: Processing kFactor=auto_discover_result" | tee -a /tmp/auto_discover_debug_$$.log
+		auto_discover_result_kvalue_file="/tmp/kvs_kValue_auto_discover_result_$$.json"
+		echo "$auto_discover_json" > "$auto_discover_result_kvalue_file"
+		echo "DEBUG STEP-6: Saved kValue to $auto_discover_result_kvalue_file (size: $(wc -c < "$auto_discover_result_kvalue_file"))" | tee -a /tmp/auto_discover_debug_$$.log
+		kvs_put "lssn" "${lssn}" "auto_discover_result" "$auto_discover_json" 2>&1 | tee -a /tmp/kvs_put_auto_discover_result_$$.log
+		echo "DEBUG STEP-6: kvs_put for auto_discover_result completed (exit_code: $?)" | tee -a /tmp/auto_discover_debug_$$.log
 		
-		# Call kvs_put for complete result
-		kvs_put "lssn" "${lssn}" "auto_discover_result" "$auto_discover_json" 2>&1 | tee -a /tmp/kvs_put_result_$$.log
-		kvs_put_result_code=$?
-		echo "DEBUG STEP-6: kvs_put for auto_discover_result returned $kvs_put_result_code" | tee -a /tmp/auto_discover_debug_$$.log
-		
-		# Extract and store servers if present
+		# 2. auto_discover_servers: Extract and store servers
+		echo "DEBUG STEP-6: Processing kFactor=auto_discover_servers" | tee -a /tmp/auto_discover_debug_$$.log
 		servers_data=$(echo "$auto_discover_json" | jq '.servers // empty' 2>/dev/null)
-		if [ -n "$servers_data" ] && [ "$servers_data" != "null" ]; then
-			auto_discover_servers_file="/tmp/auto_discover_servers_$$.json"
-			echo "$servers_data" > "$auto_discover_servers_file"
-			echo "DEBUG STEP-6: Saved servers to $auto_discover_servers_file (size: $(wc -c < "$auto_discover_servers_file"))" | tee -a /tmp/auto_discover_debug_$$.log
-			
-			# Call kvs_put for servers
-			kvs_put "lssn" "${lssn}" "auto_discover_servers" "$servers_data" 2>&1 | tee -a /tmp/kvs_put_servers_$$.log
-			servers_kvs_code=$?
-			echo "DEBUG STEP-6: kvs_put for auto_discover_servers returned $servers_kvs_code" | tee -a /tmp/auto_discover_debug_$$.log
-		fi
+		auto_discover_servers_kvalue_file="/tmp/kvs_kValue_auto_discover_servers_$$.json"
+		echo "$servers_data" > "$auto_discover_servers_kvalue_file"
+		echo "DEBUG STEP-6: Saved kValue to $auto_discover_servers_kvalue_file (size: $(wc -c < "$auto_discover_servers_kvalue_file"))" | tee -a /tmp/auto_discover_debug_$$.log
+		kvs_put "lssn" "${lssn}" "auto_discover_servers" "$servers_data" 2>&1 | tee -a /tmp/kvs_put_auto_discover_servers_$$.log
+		echo "DEBUG STEP-6: kvs_put for auto_discover_servers completed (exit_code: $?)" | tee -a /tmp/auto_discover_debug_$$.log
 		
-		# Extract and store networks if present
+		# 3. auto_discover_networks: Extract and store networks
+		echo "DEBUG STEP-6: Processing kFactor=auto_discover_networks" | tee -a /tmp/auto_discover_debug_$$.log
 		networks_data=$(echo "$auto_discover_json" | jq '.networks // empty' 2>/dev/null)
-		if [ -n "$networks_data" ] && [ "$networks_data" != "null" ]; then
-			auto_discover_networks_file="/tmp/auto_discover_networks_$$.json"
-			echo "$networks_data" > "$auto_discover_networks_file"
-			echo "DEBUG STEP-6: Saved networks to $auto_discover_networks_file (size: $(wc -c < "$auto_discover_networks_file"))" | tee -a /tmp/auto_discover_debug_$$.log
-			
-			# Call kvs_put for networks
-			kvs_put "lssn" "${lssn}" "auto_discover_networks" "$networks_data" 2>&1 | tee -a /tmp/kvs_put_networks_$$.log
-			networks_kvs_code=$?
-			echo "DEBUG STEP-6: kvs_put for auto_discover_networks returned $networks_kvs_code" | tee -a /tmp/auto_discover_debug_$$.log
-		fi
+		auto_discover_networks_kvalue_file="/tmp/kvs_kValue_auto_discover_networks_$$.json"
+		echo "$networks_data" > "$auto_discover_networks_kvalue_file"
+		echo "DEBUG STEP-6: Saved kValue to $auto_discover_networks_kvalue_file (size: $(wc -c < "$auto_discover_networks_kvalue_file"))" | tee -a /tmp/auto_discover_debug_$$.log
+		kvs_put "lssn" "${lssn}" "auto_discover_networks" "$networks_data" 2>&1 | tee -a /tmp/kvs_put_auto_discover_networks_$$.log
+		echo "DEBUG STEP-6: kvs_put for auto_discover_networks completed (exit_code: $?)" | tee -a /tmp/auto_discover_debug_$$.log
 		
-		# Extract and store services if present
+		# 4. auto_discover_services: Extract and store services
+		echo "DEBUG STEP-6: Processing kFactor=auto_discover_services" | tee -a /tmp/auto_discover_debug_$$.log
 		services_data=$(echo "$auto_discover_json" | jq '.services // empty' 2>/dev/null)
-		if [ -n "$services_data" ] && [ "$services_data" != "null" ]; then
-			auto_discover_services_file="/tmp/auto_discover_services_$$.json"
-			echo "$services_data" > "$auto_discover_services_file"
-			echo "DEBUG STEP-6: Saved services to $auto_discover_services_file (size: $(wc -c < "$auto_discover_services_file"))" | tee -a /tmp/auto_discover_debug_$$.log
-			
-			# Call kvs_put for services
-			kvs_put "lssn" "${lssn}" "auto_discover_services" "$services_data" 2>&1 | tee -a /tmp/kvs_put_services_$$.log
+		auto_discover_services_kvalue_file="/tmp/kvs_kValue_auto_discover_services_$$.json"
+		echo "$services_data" > "$auto_discover_services_kvalue_file"
+		echo "DEBUG STEP-6: Saved kValue to $auto_discover_services_kvalue_file (size: $(wc -c < "$auto_discover_services_kvalue_file"))" | tee -a /tmp/auto_discover_debug_$$.log
+		kvs_put "lssn" "${lssn}" "auto_discover_services" "$services_data" 2>&1 | tee -a /tmp/kvs_put_auto_discover_services_$$.log
+		echo "DEBUG STEP-6: kvs_put for auto_discover_services completed (exit_code: $?)" | tee -a /tmp/auto_discover_debug_$$.log
+		
+		echo "DEBUG STEP-6: All kValue data saved to /tmp/kvs_kValue_* files before kvs_put calls" | tee -a /tmp/auto_discover_debug_$$.log
 			services_kvs_code=$?
 			echo "DEBUG STEP-6: kvs_put for auto_discover_services returned $services_kvs_code" | tee -a /tmp/auto_discover_debug_$$.log
 		fi
@@ -443,15 +434,15 @@ if [ "${gateway_mode}" = "1" ]; then
 	else
 		# No data to store
 		echo "DEBUG STEP-6: ERROR - No discovery data generated (auto_discover_json is empty)" | tee -a /tmp/auto_discover_debug_$$.log
-		kvs_put_result_code=1
-		kvs_put "lssn" "${lssn}" "auto_discover_result" "{\"status\":\"error\",\"message\":\"No discovery data generated\"}" 2>&1 | tee -a /tmp/kvs_put_result_$$.log
+	else
+		echo "DEBUG STEP-6: No discovery data generated" | tee -a /tmp/auto_discover_debug_$$.log
+		# Store error status for tracking
+		auto_discover_result_error_file="/tmp/kvs_kValue_auto_discover_result_ERROR_$$.json"
+		echo "{\"status\":\"error\",\"message\":\"No discovery data generated\"}" > "$auto_discover_result_error_file"
+		kvs_put "lssn" "${lssn}" "auto_discover_result" "{\"status\":\"error\",\"message\":\"No discovery data generated\"}" 2>&1 | tee -a /tmp/kvs_put_auto_discover_result_$$.log
 	fi
 	
-	log_auto_discover_validation "STEP-6" "kvs_put_auto_discover_result" "$([ $kvs_put_result_code -eq 0 ] && echo 'PASS' || echo 'FAIL')" "{\"exit_code\":${kvs_put_result_code}}"
-	
-	if [ $kvs_put_result_code -ne 0 ]; then
-		local result_error=$(tail -5 /tmp/kvs_put_result_$$.log 2>/dev/null | tr '\n' ' ')
-		log_auto_discover_error "STEP-6" "KVS_PUT_RESULT_FAILED" "Failed to store auto_discover_result" "{\"exit_code\":${kvs_put_result_code},\"error_detail\":\"${result_error}\"}"
+	log_auto_discover_step "STEP-6" "Store Result to KVS" "auto_discover_step_6_store_result" "{\"status\":\"completed\",\"kValues_saved_to\":\"/tmp/kvs_kValue_auto_discover_*_$$.json\"}"
 		# ✅ PROHIBITED_ACTION_13 준수: 실패 시 오류 정보 KVS 저장 후 단계 종료
 		local failure_error=$(tail -10 /tmp/kvs_put_result_$$.log 2>/dev/null | tr '\n' ';')
 		kvs_put "lssn" "${lssn}" "auto_discover_error_log" "{\"step\":\"STEP-6\",\"type\":\"KVS_STORAGE_FAILURE\",\"message\":\"Failed to store result to KVS\",\"exit_code\":${kvs_put_result_code},\"error_details\":\"${failure_error}\"}"

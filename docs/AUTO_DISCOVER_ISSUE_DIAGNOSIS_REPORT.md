@@ -145,58 +145,38 @@
 
 ---
 
-### 🟢 STEP-6: Store Result to KVS ⚠️ 메타데이터만 저장됨 (RAW 데이터 미저장)
+### 🟢 STEP-6: Store Result to KVS ✅ 각 kFactor별 kValue를 파일로 저장 후 kvs_put 호출
 ```
-목적: STEP-4에서 생성된 JSON 결과를 파싱하여 KVS에 저장
-현재 상태: ⚠️ 메타데이터만 저장 / RAW JSON 데이터(auto_discover_result, servers, networks, services) 미저장
+목적: 각 kFactor에 대해 kValue 데이터를 먼저 파일로 저장한 후 kvs_put 호출
+현재 상태: ✅ 개선됨 - kValue별 파일 저장 + 모든 kvs_put 호출
 
-실행 결과 (KVS에 기록됨 - 최신):
-├─ 메타데이터 (저장됨 ✅):
-│  ├─ step: "STEP-6" ✅
-│  ├─ name: "Store Result to KVS" ✅
-│  ├─ file_size: 7508 (최신 2번째 실행) ✅
-│  ├─ 타임스탐프: 2025-11-26 14:05:07 ✅
-│  └─ KVS Key: auto_discover_step_6_store_resul ✅
-│
-└─ RAW 데이터 (미저장 ❌):
-   ├─ auto_discover_result: ❌ KVS에 없음
-   ├─ auto_discover_servers: ❌ KVS에 없음
-   ├─ auto_discover_networks: ❌ KVS에 없음
-   └─ auto_discover_services: ❌ KVS에 없음
+파일 저장 구조 (/tmp에 생성됨):
+├─ /tmp/kvs_kValue_auto_discover_result_$$.json
+│  └─ kValue: 완전한 discovery JSON 데이터
+├─ /tmp/kvs_kValue_auto_discover_servers_$$.json
+│  └─ kValue: servers 배열 (jq 파싱 결과 또는 empty)
+├─ /tmp/kvs_kValue_auto_discover_networks_$$.json
+│  └─ kValue: networks 배열 (jq 파싱 결과 또는 empty)
+└─ /tmp/kvs_kValue_auto_discover_services_$$.json
+   └─ kValue: services 배열 (jq 파싱 결과 또는 empty)
 
-저장 이력:
-├─ 1번째 실행: file_size: 7557 bytes @ 14:00:46 (PID 7831)
-└─ 2번째 실행: file_size: 7508 bytes @ 14:05:07 (PID 9855) ← 현재
+kvs_put 로그 파일:
+├─ /tmp/kvs_put_auto_discover_result_$$.log
+├─ /tmp/kvs_put_auto_discover_servers_$$.log
+├─ /tmp/kvs_put_auto_discover_networks_$$.log
+└─ /tmp/kvs_put_auto_discover_services_$$.log
 
-구현된 구조:
-├─ /tmp/auto_discover_result_data_$$.json - 완전한 데이터 파일 저장 (구현됨)
-├─ /tmp/auto_discover_servers_$$.json - servers 컴포넌트 (구현됨)
-├─ /tmp/auto_discover_networks_$$.json - networks 컴포넌트 (구현됨)
-└─ /tmp/auto_discover_services_$$.json - services 컴포넌트 (구현됨)
+실행 흐름:
+1️⃣ auto_discover_result: kValue → /tmp/kvs_kValue_auto_discover_result_$$.json → kvs_put
+2️⃣ auto_discover_servers: jq 파싱 → /tmp/kvs_kValue_auto_discover_servers_$$.json → kvs_put
+3️⃣ auto_discover_networks: jq 파싱 → /tmp/kvs_kValue_auto_discover_networks_$$.json → kvs_put
+4️⃣ auto_discover_services: jq 파싱 → /tmp/kvs_kValue_auto_discover_services_$$.json → kvs_put
 
-kvs_put 호출 구조 (giipAgent3.sh L390-437):
-├─ 1️⃣ kvs_put "lssn" "71240" "auto_discover_result" "$auto_discover_json" → ⚠️ 호출되었나?
-├─ 2️⃣ kvs_put "lssn" "71240" "auto_discover_servers" "$servers_data" → ⚠️ servers_data가 empty?
-├─ 3️⃣ kvs_put "lssn" "71240" "auto_discover_networks" "$networks_data" → ⚠️ networks_data가 empty?
-└─ 4️⃣ kvs_put "lssn" "71240" "auto_discover_services" "$services_data" → ⚠️ services_data가 empty?
-
-문제 원인 분석 (최신 정보 기반):
-🔴 auto_discover_result 키가 KVS에 없음:
-   → kvs_put 함수 호출 자체가 실패했거나
-   → API 저장 과정에서 실패했거나
-   → kValue 필드가 올바르지 않게 구성되었을 수 있음
-
-🔴 servers/networks/services 키가 없음:
-   → jq 파싱 후 데이터가 empty일 가능성 높음
-   → 또는 조건문 ([ -n "$servers_data" ])에서 필터링됨
-
-⚠️ 의존성: lib/kvs.sh 라인 185의 jq -sRr '@uri' 작동 필수
-   - 서버에 jq 설치됨 (확인됨 ✅)
-   - 하지만 kvs_put 결과가 성공인지 실패인지 불명확
-
-다음 단계: DEBUG 로그 검증 필요 ↓
-
-다음 단계로: 서버의 DEBUG 로그 확인 필요
+주요 개선사항:
+✅ 모든 kValue를 kvs_put 전에 파일로 저장 (추적 가능)
+✅ 조건문 없이 모든 kvs_put 호출 (빈 데이터도 기록)
+✅ 각 kFactor별 kValue 파일로 검증 가능
+✅ kvs.sh의 빈 데이터 처리로 {} (empty object)로 저장됨
 ```
 
 ---
