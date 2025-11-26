@@ -295,11 +295,22 @@ if [ "${gateway_mode}" = "1" ]; then
 	# STEP-2: Script Path Check (auto-discover 스크립트 파일 검증)
 	# Handle case where SCRIPT_DIR might already include /lib
 	auto_discover_base_dir="$SCRIPT_DIR"
+	
+	# DEBUG: Log path stripping process
+	echo "DEBUG STEP-2: SCRIPT_DIR=$SCRIPT_DIR" | tee -a /tmp/auto_discover_debug_$$.log
+	echo "DEBUG STEP-2: initial auto_discover_base_dir=$auto_discover_base_dir" | tee -a /tmp/auto_discover_debug_$$.log
+	
 	if [[ "$auto_discover_base_dir" == */lib ]]; then
 		auto_discover_base_dir="${auto_discover_base_dir%/lib}"
+		echo "DEBUG STEP-2: lib stripped, new auto_discover_base_dir=$auto_discover_base_dir" | tee -a /tmp/auto_discover_debug_$$.log
 	fi
 	
 	auto_discover_script="${auto_discover_base_dir}/giipscripts/auto-discover-linux.sh"
+	
+	# DEBUG: Final paths
+	echo "DEBUG STEP-2: final auto_discover_script=$auto_discover_script" | tee -a /tmp/auto_discover_debug_$$.log
+	echo "DEBUG STEP-2: file_exists=$([ -f "$auto_discover_script" ] && echo 'true' || echo 'false')" | tee -a /tmp/auto_discover_debug_$$.log
+	[ -f "$auto_discover_script" ] && echo "DEBUG STEP-2: ls -la $auto_discover_script: $(ls -la "$auto_discover_script" 2>&1)" | tee -a /tmp/auto_discover_debug_$$.log
 	
 	log_auto_discover_step "STEP-2" "Script Path Check" "auto_discover_step_2_scriptpath" "{\"path\":\"${auto_discover_script}\",\"exists\":$([ -f \"$auto_discover_script\" ] && echo 'true' || echo 'false')}"
 	log_auto_discover_validation "STEP-2" "script_file_exists" "$([ -f \"$auto_discover_script\" ] && echo 'PASS' || echo 'FAIL')" "{\"path\":\"${auto_discover_script}\"}"
@@ -362,8 +373,17 @@ if [ "${gateway_mode}" = "1" ]; then
 	# STEP-6: Store Result to KVS (auto_discover_result KVS 저장)
 	log_auto_discover_step "STEP-6" "Store Result to KVS" "auto_discover_step_6_store_result" "{\"file_size\":${result_size}}"
 	
+	# DEBUG: Log file details
+	echo "DEBUG STEP-6: result_file=$auto_discover_result_file" | tee -a /tmp/auto_discover_debug_$$.log
+	echo "DEBUG STEP-6: file_exists=$([ -f "$auto_discover_result_file" ] && echo 'true' || echo 'false')" | tee -a /tmp/auto_discover_debug_$$.log
+	echo "DEBUG STEP-6: file_size=$([ -f "$auto_discover_result_file" ] && stat -f%z "$auto_discover_result_file" 2>/dev/null || stat -c%s "$auto_discover_result_file" 2>/dev/null || echo 'unknown')" | tee -a /tmp/auto_discover_debug_$$.log
+	
 	# Read the actual discovery result data
 	auto_discover_json=$(cat "$auto_discover_result_file")
+	
+	# DEBUG: Log json content
+	echo "DEBUG STEP-6: json_length=${#auto_discover_json}" | tee -a /tmp/auto_discover_debug_$$.log
+	echo "DEBUG STEP-6: json_first_200=$(echo "$auto_discover_json" | head -c 200)" | tee -a /tmp/auto_discover_debug_$$.log
 	
 	# Parse and store discovery results by type
 	# The auto_discover_json contains: {"servers":[...], "networks":[...], "services":[...], etc.}
