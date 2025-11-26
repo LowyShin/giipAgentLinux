@@ -362,10 +362,41 @@ if [ "${gateway_mode}" = "1" ]; then
 	# STEP-6: Store Result to KVS (auto_discover_result KVS 저장)
 	log_auto_discover_step "STEP-6" "Store Result to KVS" "auto_discover_step_6_store_result" "{\"file_size\":${result_size}}"
 	
+	# Read the actual discovery result data
 	auto_discover_json=$(cat "$auto_discover_result_file")
-	local result_data="{\"status\":\"success\",\"result_size\":${result_size},\"execution_time\":\"${execute_start_time} to ${execute_end_time}\"}"
-	kvs_put "lssn" "${lssn}" "auto_discover_result" "$result_data" 2>&1 | tee -a /tmp/kvs_put_result_$$.log
-	kvs_put_result_code=$?
+	
+	# Parse and store discovery results by type
+	# The auto_discover_json contains: {"servers":[...], "networks":[...], "services":[...], etc.}
+	if [ -n "$auto_discover_json" ]; then
+		# Store the complete discovery result
+		kvs_put "lssn" "${lssn}" "auto_discover_result" "$auto_discover_json" 2>&1 | tee -a /tmp/kvs_put_result_$$.log
+		kvs_put_result_code=$?
+		
+		# If result is large, also try to store parsed components
+		if [ $kvs_put_result_code -eq 0 ]; then
+			# Extract and store servers if present
+			servers_data=$(echo "$auto_discover_json" | jq '.servers // empty' 2>/dev/null)
+			if [ -n "$servers_data" ] && [ "$servers_data" != "null" ]; then
+				kvs_put "lssn" "${lssn}" "auto_discover_servers" "$servers_data" 2>&1 | tee -a /tmp/kvs_put_servers_$$.log
+			fi
+			
+			# Extract and store networks if present
+			networks_data=$(echo "$auto_discover_json" | jq '.networks // empty' 2>/dev/null)
+			if [ -n "$networks_data" ] && [ "$networks_data" != "null" ]; then
+				kvs_put "lssn" "${lssn}" "auto_discover_networks" "$networks_data" 2>&1 | tee -a /tmp/kvs_put_networks_$$.log
+			fi
+			
+			# Extract and store services if present
+			services_data=$(echo "$auto_discover_json" | jq '.services // empty' 2>/dev/null)
+			if [ -n "$services_data" ] && [ "$services_data" != "null" ]; then
+				kvs_put "lssn" "${lssn}" "auto_discover_services" "$services_data" 2>&1 | tee -a /tmp/kvs_put_services_$$.log
+			fi
+		fi
+	else
+		# No data to store
+		kvs_put_result_code=1
+		kvs_put "lssn" "${lssn}" "auto_discover_result" "{\"status\":\"error\",\"message\":\"No discovery data generated\"}" 2>&1 | tee -a /tmp/kvs_put_result_$$.log
+	fi
 	
 	log_auto_discover_validation "STEP-6" "kvs_put_auto_discover_result" "$([ $kvs_put_result_code -eq 0 ] && echo 'PASS' || echo 'FAIL')" "{\"exit_code\":${kvs_put_result_code}}"
 	
