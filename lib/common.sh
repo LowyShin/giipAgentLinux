@@ -223,6 +223,77 @@ build_api_url() {
 }
 
 # ============================================================================
+# Auto-Discover Logging Functions (단계별 상세 진단)
+# ============================================================================
+
+# Function: Log auto-discover step with KVS storage
+# Usage: log_auto_discover_step <step_num> <step_name> <kfactor> <json_data>
+# Example: log_auto_discover_step "STEP-1" "Config Check" "auto_discover_config_check" "{...}"
+log_auto_discover_step() {
+	local step_num="$1"
+	local step_name="$2"
+	local kfactor="$3"
+	local json_data="$4"
+	local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+	
+	# Console logging (with timestamp and step number)
+	echo "[AUTO-DISCOVER] ${step_num} ${timestamp} 🔍 ${step_name}" >&2
+	
+	# KVS logging (if variables are available)
+	if [ -n "${lssn}" ] && [ -n "${sk}" ] && [ -n "${apiaddrv2}" ]; then
+		# Wrap json_data with timestamp and step info if not already wrapped
+		local wrapped_data="{\"step\":\"${step_num}\",\"name\":\"${step_name}\",\"timestamp\":\"${timestamp}\",\"data\":${json_data}}"
+		kvs_put "lssn" "${lssn}" "${kfactor}" "${wrapped_data}" 2>&1
+	fi
+}
+
+# Function: Log auto-discover error with detailed context
+# Usage: log_auto_discover_error <step_num> <error_type> <error_msg> <context_json>
+# Example: log_auto_discover_error "STEP-2" "kvs_put_failed" "Connection timeout" "{\"url\":\"...\",\"timeout\":30}"
+log_auto_discover_error() {
+	local step_num="$1"
+	local error_type="$2"
+	local error_msg="$3"
+	local context_json="$4"
+	local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+	
+	# Console logging (prominent error marker)
+	echo "[AUTO-DISCOVER] ${step_num} ${timestamp} ❌ ERROR: ${error_type}" >&2
+	echo "[AUTO-DISCOVER] ${step_num} ${timestamp} 📝 Message: ${error_msg}" >&2
+	echo "[AUTO-DISCOVER] ${step_num} ${timestamp} 🔧 Context: ${context_json}" >&2
+	
+	# KVS logging to error_log kfactor
+	if [ -n "${lssn}" ] && [ -n "${sk}" ] && [ -n "${apiaddrv2}" ]; then
+		local error_data="{\"step\":\"${step_num}\",\"type\":\"${error_type}\",\"message\":\"${error_msg}\",\"timestamp\":\"${timestamp}\",\"context\":${context_json}}"
+		kvs_put "lssn" "${lssn}" "auto_discover_error_log" "${error_data}" 2>&1
+	fi
+}
+
+# Function: Log auto-discover validation result
+# Usage: log_auto_discover_validation <step_num> <check_name> <result> <detail_json>
+# Example: log_auto_discover_validation "STEP-1" "sk_variable" "PASS" "{\"length\":32}"
+log_auto_discover_validation() {
+	local step_num="$1"
+	local check_name="$2"
+	local result="$3"  # PASS or FAIL
+	local detail_json="$4"
+	local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+	local icon="✅"
+	
+	if [ "$result" = "FAIL" ]; then
+		icon="❌"
+	fi
+	
+	# Console logging
+	echo "[AUTO-DISCOVER] ${step_num} ${timestamp} ${icon} Validation: ${check_name} = ${result}" >&2
+	
+	# Log details if provided
+	if [ -n "${detail_json}" ]; then
+		echo "[AUTO-DISCOVER] ${step_num} ${timestamp}    Details: ${detail_json}" >&2
+	fi
+}
+
+# ============================================================================
 # Export Functions
 # ============================================================================
 
@@ -234,3 +305,7 @@ export -f detect_os
 export -f error_handler
 export -f init_log_dir
 export -f build_api_url
+export -f log_auto_discover_step
+export -f log_auto_discover_error
+export -f log_auto_discover_validation
+
