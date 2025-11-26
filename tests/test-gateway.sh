@@ -7,16 +7,18 @@ echo "GIIP Agent Gateway Test Script"
 echo "======================================"
 echo ""
 
-# Load configuration
-if [ ! -f "./giipAgent.cnf" ]; then
+# Load configuration (tests 폴더에서 실행하므로 상위 폴더 참조)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+if [ ! -f "${SCRIPT_DIR}/../giipAgent.cnf" ]; then
 	echo "❌ Error: giipAgent.cnf not found"
-	echo "   Run this script from giipAgentGateway installation directory"
+	echo "   Expected location: ${SCRIPT_DIR}/../giipAgent.cnf"
 	exit 1
 fi
 
-. ./giipAgent.cnf
+. "${SCRIPT_DIR}/../giipAgent.cnf"
 
-echo "✓ Configuration loaded"
+echo "✓ Configuration loaded from: ${SCRIPT_DIR}/../giipAgent.cnf"
 echo ""
 
 # Check server list

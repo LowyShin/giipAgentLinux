@@ -1,8 +1,9 @@
 #!/bin/bash
 # Simple KVS API test to isolate the issue
 
-# Load configuration
-source giipAgent.cnf
+# Load configuration (tests 폴더에서 실행하므로 상위 폴더 참조)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+source "${SCRIPT_DIR}/../giipAgent.cnf"
 
 # Build simple test data
 kvalue='{"test":"simple","number":123}'

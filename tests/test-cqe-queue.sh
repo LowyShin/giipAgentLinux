@@ -1,8 +1,16 @@
 #!/bin/bash
 # Test CQE Queue retrieval with both old and new API
 
-# Load configuration
-. ./giipAgent.cnf
+# Load configuration (tests 폴더에서 실행하므로 상위 폴더 참조)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+if [ ! -f "${SCRIPT_DIR}/../giipAgent.cnf" ]; then
+	echo "❌ Error: giipAgent.cnf not found"
+	echo "   Expected location: ${SCRIPT_DIR}/../giipAgent.cnf"
+	exit 1
+fi
+
+. "${SCRIPT_DIR}/../giipAgent.cnf"
 
 echo "=========================================="
 echo "CQE Queue Test Script"

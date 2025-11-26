@@ -17,8 +17,8 @@ Gateway Agent는 방화벽이나 네트워크 제한으로 인해 직접 인터�
 
 ```bash
 cd ~/giipAgentLinux
-chmod +x install-gateway.sh
-./install-gateway.sh
+chmod +x admin/install-gateway.sh
+./admin/install-gateway.sh
 ```
 
 ### 2. 수동 설치
@@ -29,9 +29,9 @@ mkdir -p ~/giipAgentGateway
 cd ~/giipAgentGateway
 
 # 파일 복사
-cp ~/giipAgentLinux/giipAgentGateway.sh .
+cp ~/giipAgentLinux/gateway/giipAgentGateway.sh .
 cp ~/giipAgentLinux/giipAgent.cnf.template giipAgent.cnf
-cp ~/giipAgentLinux/giipAgentGateway_servers.csv.template giipAgentGateway_servers.csv
+cp ~/giipAgentLinux/gateway/giipAgentGateway_servers.csv.template giipAgentGateway_servers.csv
 
 # 실행 권한 부여
 chmod +x giipAgentGateway.sh

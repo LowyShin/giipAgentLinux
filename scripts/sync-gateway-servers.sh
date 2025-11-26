@@ -3,13 +3,16 @@
 # This script fetches server configurations including encrypted passwords
 # and creates the giipAgentGateway_servers.csv file
 
-# Load configuration
-if [ ! -f "./giipAgent.cnf" ]; then
+# Load configuration (scripts 폴더에서 실행하므로 상위 폴더 참조)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+if [ ! -f "${SCRIPT_DIR}/../giipAgent.cnf" ]; then
     echo "Error: giipAgent.cnf not found"
+    echo "Expected location: ${SCRIPT_DIR}/../giipAgent.cnf"
     exit 1
 fi
 
-. ./giipAgent.cnf
+. "${SCRIPT_DIR}/../giipAgent.cnf"
 
 # Check required tools
 if ! command -v sqlcmd &> /dev/null; then
@@ -110,6 +113,6 @@ echo "   - Do not commit to git"
 echo "   - Regenerate regularly to sync with database"
 echo ""
 echo "Next steps:"
-echo "1. Install sshpass (if using password auth): sudo ./install-sshpass.sh"
+echo "1. Install sshpass (if using password auth): sudo ../admin/install-sshpass.sh"
 echo "2. Test connection: ssh user@host"
-echo "3. Start gateway agent: ./giipAgentGateway.sh"
+echo "3. Start gateway agent: ../gateway/giipAgentGateway.sh"

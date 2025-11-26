@@ -1,8 +1,9 @@
 #!/bin/bash
 # Test ManagedDatabaseHealthUpdate API Call
 
-# Load config
-source ../giipAgent.cnf
+# Load config (tests 폴더에서 실행하므로 상위 폴더 참조)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+source "${SCRIPT_DIR}/../giipAgent.cnf"
 
 echo "===== Testing ManagedDatabaseHealthUpdate API ====="
 echo ""
