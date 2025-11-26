@@ -544,10 +544,10 @@ current_pid=$$
 cleanup_old_temp_files() {
 	local pattern=$1
 	for file in /tmp/${pattern}; do
-		if [ -f "$file" ]; then
+		if [ -f "$file" ] && [ -s "$file" ]; then
 			# Extract the PID from the filename (assumes format: prefix_${PID}.ext)
-			local file_pid=$(echo "$file" | sed -E 's/.*_([0-9]+)\.(log|json)$/\1/')
-			# Only delete if PID doesn't match current process
+			local file_pid=$(echo "$file" | sed -E 's/.*_([0-9]+)\.(log|json|txt)$/\1/')
+			# Only delete if PID doesn't match current process and file is NOT empty
 			if [ "$file_pid" != "$current_pid" ] && [ "$file_pid" != "${pattern}" ]; then
 				rm -f "$file" 2>/dev/null
 			fi
