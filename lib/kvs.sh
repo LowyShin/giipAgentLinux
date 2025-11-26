@@ -181,10 +181,8 @@ kvs_put() {
 	
 	# ✅ Follow giipapi_rules.md
 	local text="KVSPut kType kKey kFactor"
-	# Convert kvalue_json to JSON string (escape special characters for safe transmission)
-	# This ensures the kValue is stored as a string in KVS, not as raw JSON object
-	local kvalue_escaped=$(printf '%s' "$kvalue_json" | jq -R -s '.')
-	local jsondata="{\"kType\":\"${ktype}\",\"kKey\":\"${kkey}\",\"kFactor\":\"${kfactor}\",\"kValue\":${kvalue_escaped}}"
+	# kValue must be RAW JSON object (NOT escaped string) - as per API contract
+	local jsondata="{\"kType\":\"${ktype}\",\"kKey\":\"${kkey}\",\"kFactor\":\"${kfactor}\",\"kValue\":${kvalue_json}}"
 	
 	# URL-encode all POST parameters (wget --post-data does NOT auto-encode)
 	local encoded_text=$(printf '%s' "$text" | jq -sRr '@uri')
