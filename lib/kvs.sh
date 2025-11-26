@@ -48,6 +48,9 @@ save_execution_log() {
 		return 1
 	fi
 	
+	# Clean up old kvs_exec temp files BEFORE creating new ones
+	rm -f /tmp/kvs_exec_post_* /tmp/kvs_exec_response_* /tmp/kvs_exec_stderr_* 2>/dev/null
+	
 	local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 	local hostname=$(hostname)
 	local mode="${gateway_mode}"
@@ -81,16 +84,21 @@ save_execution_log() {
 	
 	local post_data="text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}"
 	
-	# Debug: Save POST data to file for inspection
-	echo "$post_data" > /tmp/kvs_post_data.txt
+	# Clean up old kvs_exec temp files (keep only the current batch)
+	rm -f /tmp/kvs_exec_post_* /tmp/kvs_exec_response_* /tmp/kvs_exec_stderr_* 2>/dev/null
+	
+	# Debug: Save POST data to file for inspection with specific naming
+	local timestamp_ms=$(date +%s%N | cut -b1-13)
+	local post_data_file="/tmp/kvs_exec_post_${timestamp_ms}.txt"
+	echo "$post_data" > "$post_data_file"
 	echo "[KVS-Debug] POST data length: ${#post_data}" >&2
-	echo "[KVS-Debug] POST data saved to /tmp/kvs_post_data.txt" >&2
+	echo "[KVS-Debug] POST data saved to $post_data_file" >&2
 	
 	# Call API (using giipApiSk2 with token parameter)
 	# Note: jsondata is URL-encoded to prevent special characters from breaking POST data
 	# Save response to temp file for debugging
-	local response_file=$(mktemp)
-	local stderr_file=$(mktemp)
+	local response_file="/tmp/kvs_exec_response_${timestamp_ms}"
+	local stderr_file="/tmp/kvs_exec_stderr_${timestamp_ms}"
 	wget -O "$response_file" \
 		--post-data="$post_data" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
@@ -105,7 +113,7 @@ save_execution_log() {
 		if [ -n "$LogFileName" ]; then
 			echo "[KVS-Log] ✅ Saved: ${event_type}" >> "$LogFileName"
 		fi
-		rm -f "$response_file" "$stderr_file"
+		rm -f "$response_file" "$stderr_file" "$post_data_file"
 	else
 		# Log error with API response and HTTP details
 		local api_response=$(cat "$response_file" 2>/dev/null)
@@ -124,7 +132,7 @@ save_execution_log() {
 			echo "[KVS-Log] ⚠️  API Response: ${api_response}" >> "$LogFileName"
 			echo "[KVS-Log] ⚠️  Request jsondata: ${jsondata:0:150}..." >> "$LogFileName"
 		fi
-		rm -f "$response_file" "$stderr_file"
+		rm -f "$response_file" "$stderr_file" "$post_data_file"
 		
 		# Log error to database
 		log_error "KVS logging failed: ${event_type}" "KVSError" "save_execution_log at lib/kvs.sh, exit_code=${exit_code}, http_status=${http_status}, response=${api_response}"
@@ -158,6 +166,11 @@ save_execution_log() {
 # Example: kvs_put "lssn" "71174" "test" '{"status":"ok"}'
 # CRITICAL: kValue MUST be a raw JSON object, not an escaped string
 kvs_put() {
+	# Clean up old kvs_put temp files BEFORE creating new ones
+	rm -f /tmp/kvs_put_response_* /tmp/kvs_put_stderr_* 2>/dev/null
+	# Also clean up old kValue files created by giipAgent3.sh (auto_discover data files)
+	rm -f /tmp/kvs_kValue_auto_discover_* 2>/dev/null
+	
 	local ktype=$1
 	local kkey=$2
 	local kfactor=$3
@@ -189,9 +202,15 @@ kvs_put() {
 	local encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri')
 	local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
 	
+	# Clean up old kvs_put temp files (keep only the current batch)
+	rm -f /tmp/kvs_put_response_* /tmp/kvs_put_stderr_* 2>/dev/null
+	
 	# Call API with response capture for debugging
-	local response_file=$(mktemp)
-	local stderr_file=$(mktemp)
+	# Use specific naming pattern for easier cleanup: kvs_put_response_<timestamp>
+	local timestamp_ms=$(date +%s%N | cut -b1-13)
+	local response_file="/tmp/kvs_put_response_${timestamp_ms}"
+	local stderr_file="/tmp/kvs_put_stderr_${timestamp_ms}"
+	
 	wget -O "$response_file" \
 		--post-data="text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
@@ -215,6 +234,9 @@ kvs_put() {
 # Function: Save Gateway status to KVS (backward compatibility)
 # Usage: save_gateway_status "startup|error|sync" "{\"status\":\"...\"}"
 save_gateway_status() {
+	# Clean up old kvs temp files BEFORE creating new ones
+	rm -f /tmp/kvs_put_response_* /tmp/kvs_put_stderr_* 2>/dev/null
+	
 	local status_type=$1
 	local status_json=$2
 	
@@ -245,6 +267,9 @@ save_gateway_status() {
 # Usage: save_dpa_data "db_name" '{"slow_queries":[...]}'
 # kFactor: sqlnetinv (compatible with existing dpa-put-*.sh scripts)
 save_dpa_data() {
+	# Clean up old kvs_put temp files BEFORE creating new ones
+	rm -f /tmp/kvs_put_response_* /tmp/kvs_put_stderr_* 2>/dev/null
+	
 	local db_name=$1
 	local dpa_json=$2
 	

@@ -426,16 +426,11 @@ if [ "${gateway_mode}" = "1" ]; then
 		echo "DEBUG STEP-6: kvs_put for auto_discover_services completed (exit_code: $?)" | tee -a /tmp/auto_discover_debug_$$.log
 		
 		echo "DEBUG STEP-6: All kValue data saved to /tmp/kvs_kValue_* files before kvs_put calls" | tee -a /tmp/auto_discover_debug_$$.log
-			services_kvs_code=$?
-			echo "DEBUG STEP-6: kvs_put for auto_discover_services returned $services_kvs_code" | tee -a /tmp/auto_discover_debug_$$.log
-		fi
 		
 		echo "DEBUG STEP-6: All components stored to separate files and kvs_put calls completed" | tee -a /tmp/auto_discover_debug_$$.log
 	else
 		# No data to store
 		echo "DEBUG STEP-6: ERROR - No discovery data generated (auto_discover_json is empty)" | tee -a /tmp/auto_discover_debug_$$.log
-	else
-		echo "DEBUG STEP-6: No discovery data generated" | tee -a /tmp/auto_discover_debug_$$.log
 		# Store error status for tracking
 		auto_discover_result_error_file="/tmp/kvs_kValue_auto_discover_result_ERROR_$$.json"
 		echo "{\"status\":\"error\",\"message\":\"No discovery data generated\"}" > "$auto_discover_result_error_file"
