@@ -163,10 +163,10 @@ kvs_put() {
 	local kfactor=$3
 	local kvalue_json=$4
 	
-	# ✅ Validate kvalue_json is not empty (prevent invalid JSON)
+	# ✅ Handle empty kvalue_json - record as empty/null for tracking
 	if [ -z "$kvalue_json" ] || [ "$kvalue_json" = "null" ]; then
-		echo "[KVS-Put] ⚠️  Skipping: kvalue_json is empty or null for kFactor=$kfactor" >&2
-		return 1
+		echo "[KVS-Put] ⚠️  Warning: kvalue_json is empty or null for kFactor=$kfactor - recording as empty object" >&2
+		kvalue_json="{}"  # Store empty object instead of skipping
 	fi
 	
 	# Validate required variables

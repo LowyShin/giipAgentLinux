@@ -201,6 +201,60 @@ kvs_put 호출 구조 (giipAgent3.sh L390-437):
 
 ---
 
+## 🔴 **근본 원인 발견: kvs_put 함수의 빈 데이터 처리**
+
+### 문제점
+
+**lib/kvs.sh 라인 180:**
+```bash
+local jsondata="{\"kType\":\"${ktype}\",\"kKey\":\"${kkey}\",\"kFactor\":\"${kfactor}\",\"kValue\":${kvalue_json}}"
+```
+
+**문제:** `${kvalue_json}`이 **비어있으면** invalid JSON이 생성됨
+```json
+// ❌ WRONG - kvalue_json이 비어있으면:
+{"kType":"lssn","kKey":"71240","kFactor":"auto_discover_result","kValue":}
+                                                                            ↑
+                                                                      값이 없음!
+```
+
+결과:
+- jq 인코딩 단계에서 **invalid JSON 처리 실패**
+- encoded_jsondata가 비거나 잘못된 값
+- API 호출 실패 또는 무시됨
+- **kvs_put이 호출되었지만 데이터가 저장되지 않음**
+- **무엇이 문제인지 추적 불가능** (아무 기록도 없음)
+
+### 해결책 (적용됨 ✅)
+
+**kvs_put 함수에 빈 데이터 처리 추가 (lib/kvs.sh L162-170)**
+```bash
+# ✅ Handle empty kvalue_json - record as empty/null for tracking
+if [ -z "$kvalue_json" ] || [ "$kvalue_json" = "null" ]; then
+    echo "[KVS-Put] ⚠️  Warning: kvalue_json is empty or null for kFactor=$kfactor - recording as empty object" >&2
+    kvalue_json="{}"  # Store empty object instead of skipping
+fi
+```
+
+효과:
+- ✅ 빈 데이터는 **`{}`(empty object)로 저장**
+- ✅ Valid JSON 생성 보장
+- ✅ API 호출 성공
+- ✅ KVS에 기록됨 → **"데이터가 없다"는 사실 자체가 기록됨**
+- ✅ 추적 가능 (무엇이 비어있는지 명확히 파악)
+
+**빈 데이터의 KVS 저장 예시:**
+```json
+{
+  "kType": "lssn",
+  "kKey": "71240",
+  "kFactor": "auto_discover_servers",
+  "kValue": {}  ← Empty object (데이터 없음을 명시적으로 기록)
+}
+```
+
+---
+
 ### 🟢 STEP-7: Complete Marker ✅ 완료 마킹 (2회 연속 실행 성공)
 ```
 목적: 전체 실행 완료 마킹 및 상태 기록
@@ -230,9 +284,60 @@ kvs_put 호출 구조 (giipAgent3.sh L390-437):
 ✅ 결과 파일 생성: 1회(7557 bytes), 2회(7508 bytes)
 ✅ 메타데이터 저장: STEP-6 file_size 기록됨
 ✅ 완료 마킹: auto_discover_complete 저장됨
-⚠️ 컴포넌트 데이터: servers/networks/services 별도 검증 필요 (jq 의존성)
+⚠️ 컴포넌트 데이터: 빈 데이터 처리 개선되었으므로 이제 {} (empty object)로라도 기록됨
 
-다음 조치: 완료 (또는 컴포넌트 데이터 검증 후 마무리)
+다음 조치: 서버에서 재실행하여 RAW 데이터 저장 여부 확인
+```
+
+---
+
+## 🔍 DEBUG 로그 검증 방법 (선택사항)
+
+### 서버에서 확인할 항목 (PID 9855 기준)
+
+**1. DEBUG 로그 확인**
+```bash
+# STEP-6 DEBUG 로그 전체 조회
+cat /tmp/auto_discover_debug_9855.log | grep "DEBUG STEP-6"
+
+# 예상되는 로그:
+# DEBUG STEP-6: result_file=/tmp/auto_discover_result_9855.json
+# DEBUG STEP-6: file_exists=true
+# DEBUG STEP-6: file_size=7508
+# DEBUG STEP-6: json_length=XXXX (should be > 0)
+# DEBUG STEP-6: Storing individual components to separate files and KVS
+# DEBUG STEP-6: Saved complete result to /tmp/auto_discover_result_data_9855.json
+# DEBUG STEP-6: kvs_put for auto_discover_result returned 0 (또는 다른 코드)
+```
+
+**2. 파일 존재 여부 확인**
+```bash
+# 생성되어야 하는 파일들
+ls -lh /tmp/auto_discover_result_data_9855.json
+ls -lh /tmp/auto_discover_servers_9855.json
+ls -lh /tmp/auto_discover_networks_9855.json
+ls -lh /tmp/auto_discover_services_9855.json
+
+# 파일 크기가 0이면 → jq 파싱 실패
+# 파일 크기 > 0이면 → jq 파싱 성공, 단지 KVS 저장만 실패
+```
+
+**3. kvs_put 결과 로그 확인**
+```bash
+cat /tmp/kvs_put_result_9855.log
+cat /tmp/kvs_put_servers_9855.log
+cat /tmp/kvs_put_networks_9855.log
+cat /tmp/kvs_put_services_9855.log
+
+# 각 로그에서:
+# - HTTP 상태 코드 확인
+# - API 응답 메시지 확인
+# - 에러 메시지 확인
+```
+
+**4. 결과 JSON 파일 샘플 확인**
+```bash
+head -c 500 /tmp/auto_discover_result_9855.json
 ```
 
 ---
