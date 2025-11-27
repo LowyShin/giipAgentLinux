@@ -413,7 +413,72 @@ After:  Gateway LSChkdt = 21:04:40 (최신)      ✅
 
 ## 실행 흐름
 
-### Gateway 모드
+### ⭐ 실행 모드 구조 (2025-11-27 최신화)
+
+**중요**: 이 구조는 매우 자주 실수로 변경되어 왔습니다. **절대 수정하지 말 것!**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ giipAgent3.sh 실행 시작                                      │
+└─────────────────────────────────────────────────────────────┘
+              ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 1️⃣  DB에서 is_gateway 값 조회                                │
+│     (LSvrGetConfig API)                                      │
+└─────────────────────────────────────────────────────────────┘
+              ↓
+        gateway_mode = ?
+       /              \
+      /                \
+   is_gateway=1      is_gateway=0
+    (gateway)        (normal)
+     /                  \
+    /                    \
+   ✅ ─────────────┐   ┌──────────────── ✅
+   │              │   │
+   │  Gateway     │   │  Normal Mode
+   │  Mode 실행   │   │  (항상 실행)
+   │  (선택)      │   │
+   │              │   │
+   └──────────────┤   │
+                  │   │
+         test_ssh │   │ run_normal_mode
+         _from_   │   │
+         gateway_ │   │
+         json.sh  │   │
+                  │   │
+                  └──────────┐
+                             │
+            ┌────────────────┘
+            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ Shutdown Log 기록                                            │
+│ mode = "gateway+normal" (if is_gateway=1)                   │
+│ mode = "normal" (if is_gateway=0)                           │
+└─────────────────────────────────────────────────────────────┘
+            ↓
+┌─────────────────────────────────────────────────────────────┐
+│ 스크립트 종료                                               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**핵심 규칙 (CRITICAL - 이 규칙을 깨뜨리지 말 것)**:
+
+| 항목 | 규칙 | 이유 |
+|------|------|------|
+| **구조** | `if` 문 (else ❌) | Gateway와 Normal 모드 모두 독립적으로 실행 |
+| **Normal 모드** | **항상 실행** | 모든 서버는 자신의 큐를 처리해야 함 |
+| **Gateway 모드** | **조건부 실행** | is_gateway=1일 때만 Remote 서버 SSH 테스트 |
+| **실행 순서** | Gateway → Normal | Gateway 테스트 먼저, 그 다음 자신의 큐 처리 |
+| **Shutdown log** | `fi` 다음 (중복 제거) | 모드별 중복 로깅 제거, 한 번만 기록 |
+
+**절대 하면 안 될 것들**:
+- ❌ `if-else` 구조로 변경 (한 모드만 실행되게 됨)
+- ❌ Normal 모드를 Gateway 하위에 종속시킴
+- ❌ Gateway와 Normal 모드 각각에 shutdown log 작성 (중복)
+- ❌ Normal mode를 선택적 실행으로 변경
+
+### Gateway 모드 + Normal 모드 (both)
 
 ```
 giipAgent3.sh (메인)
@@ -422,80 +487,104 @@ load_config() [common.sh]
   ↓
 fetch DB config (is_gateway 조회)
   ↓
-gateway_mode = 1 감지
+🟢 [Gateway Mode - if is_gateway=1]
+  ├─ load: gateway_api.sh, lib/target_list.sh, lib/cleanup.sh
+  ├─ get_gateway_servers() → /tmp/gateway_servers_$$.json
+  ├─ display_target_servers() → 대상 서버 목록 표시
+  └─ test_ssh_from_gateway_json.sh → SSH 테스트 수행
   ↓
-load: db_clients.sh, gateway.sh
+🟢 [Normal Mode - 항상 실행]
+  ├─ load: normal.sh
+  ├─ run_normal_mode()
+  │  ├─ fetch_queue() ← CQEQueueGet API 호출
+  │  │  └─ LSChkdt 자동 업데이트
+  │  └─ execute_script()
+  └─ (자신의 큐 처리)
   ↓
-save_execution_log "startup" [gateway.sh]
-  ↓
-check_sshpass()
-  ↓
-[5.3.1] 🆕 Gateway 자신의 큐 처리 (CQEQueueGet API 호출)
-  ├─ fetch_queue() [normal.sh]
-  ├─ 자신의 큐 실행
-  └─ LSChkdt 자동 업데이트 ✅
-  ↓
-process_gateway_servers()
-  ├─ [5.4] Remote 서버 목록 조회
-  ├─ [5.9] SSH 테스트 수행
-  └─ [5.10] RemoteServerSSHTest API (Remote 서버 LSChkdt 업데이트)
-  ↓
-check_managed_databases()
-  ↓
-log_message "Gateway cycle completed"
+🟢 [Shutdown Log - fi 다음에 한 번만]
+  ├─ mode = "gateway+normal" (if is_gateway=1)
+  └─ mode = "normal" (if is_gateway=0)
 ```
 
-#### Gateway 자신의 큐 처리
+**구현 코드** (giipAgent3.sh 275-309라인):
 
-**이전 (문제)**:
-- Gateway는 Remote 서버들만 관리
-- 자신의 큐를 처리하지 않음
-- CQEQueueGet API 호출 없음
-- LSChkdt가 업데이트되지 않음
-
-**근본 원인**:
-1. `gateway.sh`는 `normal.sh` 모듈을 로드하지 않음
-2. 따라서 `fetch_queue()` 함수가 없음
-3. [5.3.1] 코드에서 `type fetch_queue` 체크 실패
-4. Gateway 큐 체크 로직이 실행되지 않음
-
-**해결 방법**:
-
-1. **모듈 로드 추가** (gateway.sh 줄 34):
 ```bash
-# Load normal mode queue fetching module (for Gateway self-queue processing)
-if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh" ]; then
-    . "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh"
+# Run gateway mode if enabled
+if [ "${gateway_mode}" = "1" ]; then
+    # GATEWAY MODE BLOCK
+    # ... gateway 관련 코드 ...
+fi
+
+# ========================================================================
+# NORMAL MODE - Always executed
+# ========================================================================
+
+log_message "INFO" "Running in NORMAL MODE"
+
+# Load normal mode library
+if [ -f "${LIB_DIR}/normal.sh" ]; then
+    . "${LIB_DIR}/normal.sh"
+    
+    # Run normal mode (single execution)
+    run_normal_mode "$lssn" "$hn" "$os"
 else
-    # Stub function fallback
-    fetch_queue() {
-        echo "[gateway.sh] ⚠️  WARNING: fetch_queue stub called (normal.sh not loaded)" >&2
-        return 1
-    }
+    log_message "WARN" "normal.sh not found, skipping normal mode"
 fi
+
+# ============================================================================
+# Shutdown Log and Completion
+# ============================================================================
+
+# Record execution shutdown log (공통 로깅)
+save_execution_log "shutdown" "{\"mode\":\"$([ "$gateway_mode" = "1" ] && echo "gateway+normal" || echo "normal")\",\"status\":\"normal_exit\"}"
+
+log_message "INFO" "GIIP Agent V${sv} completed"
+exit 0
 ```
 
-2. **Gateway 큐 처리 로직** (gateway.sh의 process_gateway_servers() 함수 시작):
+**흐름 다이어그램 (Mermaid)**:
+
+```mermaid
+graph TD
+    A["giipAgent3.sh<br/>실행 시작"] --> B["DB 조회<br/>is_gateway = ?"]
+    B --> C{"is_gateway<br/>=1?"}
+    C -->|YES| D["[Gateway Mode]<br/>SSH 테스트<br/>get_gateway_servers<br/>test_ssh_from_gateway_json.sh"]
+    C -->|NO| E["[스킵]"]
+    D --> F["[Normal Mode]<br/>항상 실행<br/>run_normal_mode<br/>자신의 큐 처리"]
+    E --> F
+    F --> G["[Shutdown Log]<br/>fi 다음에<br/>모드 기록"]
+    G --> H["exit 0"]
+```
+
+### 이전 에러 (2025-11-27 이전)
+
+**❌ 잘못된 구조 1**: else 사용
 ```bash
-# [5.3.1] 🟢 Gateway 자신의 큐 처리 (CQEQueueGet API 호출 → LSChkdt 자동 업데이트)
-if type fetch_queue >/dev/null 2>&1; then
-    fetch_queue "$lssn" "$hn" "$os" "$gateway_queue_file"
-    if [ -s "$gateway_queue_file" ]; then
-        bash "$gateway_queue_file"
-        local script_result=$?
-        gateway_log "🟢" "[5.3.1-COMPLETED]" "Gateway 자신의 큐 실행 완료"
-    fi
-    rm -f "$gateway_queue_file"
+if [ "$gateway_mode" = "1" ]; then
+    # Gateway Mode
+else
+    # Normal Mode
+fi
+# 문제: is_gateway=1이면 Normal Mode가 실행 안 됨!
+```
+
+**❌ 잘못된 구조 2**: 각각 shutdown log 작성
+```bash
+if [ "$gateway_mode" = "1" ]; then
+    # ... gateway code ...
+    save_execution_log "shutdown" "{\"mode\":\"gateway\"}"  # ❌ 중복 1
+else
+    # ... normal code ...
+    save_execution_log "shutdown" "{\"mode\":\"normal\"}"   # ❌ 중복 2
 fi
 ```
 
-**결과**:
-- Gateway도 자신의 LSChkdt가 최신으로 업데이트됨
-- Gateway 자신의 작업도 처리 가능
-- Normal Mode와 동일한 메커니즘 사용 (일관성)
-- CQEQueueGet API 호출 → pApiCQEQueueGetbySk SP 자동 실행 → `LSChkdt = GETDATE()`
+**✅ 올바른 구조** (현재):
+- `if` 문 사용 (else 없음)
+- Normal Mode는 if 외부에서 항상 실행
+- Shutdown log는 `fi` 다음에 한 번만
 
-### Normal 모드
+### Normal 모드 (is_gateway=0)
 
 ```
 giipAgent3.sh (메인)
@@ -505,6 +594,8 @@ load_config() [common.sh]
 fetch DB config (is_gateway 조회)
   ↓
 gateway_mode = 0 감지
+  ↓
+[Gateway Mode 스킵]
   ↓
 load: normal.sh
   ↓
@@ -517,38 +608,51 @@ fetch_queue() [normal.sh] ← CQEQueueGet API 호출
   ↓
 execute_script() [normal.sh] ← 큐 실행
   ↓
-save_execution_log "shutdown" [normal.sh]
+save_execution_log "shutdown" [공통]
 ```
 
 **Note**: CQEQueueGet API 호출 시 tLSvr의 LSChkdt가 자동으로 GETDATE()로 업데이트됨
 
 ---
 
-## 🚨 AI Agent 작업 규칙 (2025-11-22 최신화)
+## 🚨 AI Agent 작업 규칙 (2025-11-27 최신화)
 
 ### ⚠️ 가장 흔한 에러 & 해결 방법
 
-#### 1️⃣ **[5.3.1] Gateway 큐 체크가 실행 안 됨**
+#### 1️⃣ **"Normal Mode가 실행 안 됨"**
 
 **증상**:
-- Gateway의 LSChkdt가 업데이트 안 됨
-- stderr에 `[5.3.1-WARN] "fetch_queue 함수 미로드"` 로그 출력
+- is_gateway=1인 서버에서 정상 모드가 실행 안 됨
+- SSH 테스트만 수행되고 정상 작업(큐 처리) 미실행
 
 **원인**:
-- ❌ gateway.sh에서 normal.sh를 로드하지 않음
-- ❌ fetch_queue() 함수가 정의되지 않음
-- ❌ `if type fetch_queue` 체크 실패
+- ❌ if-else 구조 사용
+- ❌ else 블록에 Normal Mode를 넣음
+- ❌ 따라서 is_gateway=1이면 else 블록이 실행 안 됨
 
 **해결**:
-- ✅ gateway.sh 줄 34에 normal.sh 로드 명령 반드시 추가:
-```bash
-# Load normal mode queue fetching module (for Gateway self-queue processing)
-if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh" ]; then
-    . "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh"
-else
-    fetch_queue() { return 1; }  # Stub
-fi
-```
+- ✅ if 문만 사용 (else ❌)
+- ✅ Normal Mode는 if 외부에서 독립적으로 실행
+- ✅ 항상 실행되어야 함 (조건 없음)
+
+#### 2️⃣ **"Shutdown log가 두 번 기록됨"**
+
+**증상**:
+- KVS에 같은 shutdown 로그가 2번 나타남
+- JSON의 mode 값이 다름 ("gateway" vs "normal")
+
+**원인**:
+- ❌ Gateway 블록 내에 `save_execution_log "shutdown" ...` 있음
+- ❌ Normal 블록 내에도 `save_execution_log "shutdown" ...` 있음
+- ❌ 두 블록 모두 실행되면서 2번 기록
+
+**해결**:
+- ✅ shutdown log를 `fi` 다음에 **한 번만** 작성
+- ✅ 모드는 `[ "$gateway_mode" = "1" ]`로 동적 판단
+  ```bash
+  save_execution_log "shutdown" "{\"mode\":\"$([ "$gateway_mode" = "1" ] && echo "gateway+normal" || echo "normal")\",\"status\":\"normal_exit\"}"
+  ```
+
 
 **검증**:
 ```bash
