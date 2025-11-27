@@ -492,6 +492,13 @@ main() {
 	log_message "INFO" "Server count: ${server_count}"
 	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 	
+	echo ""
+	echo "DEBUG: RAW JSON FILE CONTENT:" >&2
+	cat "$json_file" >&2
+	echo ""
+	echo "DEBUG: END OF RAW JSON" >&2
+	echo ""
+	
 	# Parse JSON and extract servers
 	local actual_server_count=0
 	declare -a server_list
@@ -508,6 +515,12 @@ main() {
 		# Extract to temp file first to preserve array in main shell
 		local temp_servers="/tmp/servers_to_test_$$.jsonl"
 		jq -c '.data[]? // .[]? // .' "$json_file" 2>/dev/null > "$temp_servers"
+		
+		echo ""
+		echo "DEBUG: EXTRACTED SERVERS FROM JQ:" >&2
+		cat "$temp_servers" >&2
+		echo "DEBUG: END OF EXTRACTED SERVERS" >&2
+		echo ""
 		
 		local list_count=0
 		while IFS= read -r server_json; do
