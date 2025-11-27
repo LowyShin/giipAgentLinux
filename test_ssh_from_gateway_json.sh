@@ -533,8 +533,17 @@ main() {
 		print_info "Found ${#server_list[@]} server(s) in array"
 		print_info ""
 		
+		# Check if array has servers
+		if [ ${#server_list[@]} -eq 0 ]; then
+			print_error "ERROR: No servers in array! Servers were not properly saved."
+			log_message "ERROR" "Server array is empty after first pass"
+			return 1
+		fi
+		
 		# Step 8.2: Second pass - test connections
+		echo "DEBUG: Starting for loop with ${#server_list[@]} servers" >&2
 		for server_json in "${server_list[@]}"; do
+			echo "DEBUG: In loop iteration" >&2
 			((TOTAL_SERVERS++))
 			((actual_server_count++))
 			
@@ -547,9 +556,13 @@ main() {
 			local ssh_key_path=$(echo "$server_json" | jq -r '.ssh_key_path // empty' 2>/dev/null)
 			local ssh_password=$(echo "$server_json" | jq -r '.ssh_password // empty' 2>/dev/null)
 			
+			echo "DEBUG: About to call test_ssh_connection for server $actual_server_count: $hostname" >&2
+			print_info "Processing server $actual_server_count: $hostname"
 			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn"
+			echo "DEBUG: Returned from test_ssh_connection for server $actual_server_count" >&2
 			
 		done
+		echo "DEBUG: Exited for loop" >&2
 	else
 		# Fallback: use grep for JSON parsing
 		print_warning "jq not found, using grep fallback for JSON parsing"
