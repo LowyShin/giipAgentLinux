@@ -243,7 +243,26 @@ log_auto_discover_step() {
 	if [ -n "${lssn}" ] && [ -n "${sk}" ] && [ -n "${apiaddrv2}" ]; then
 		# Wrap json_data with timestamp and step info if not already wrapped
 		local wrapped_data="{\"step\":\"${step_num}\",\"name\":\"${step_name}\",\"timestamp\":\"${timestamp}\",\"data\":${json_data}}"
-		kvs_put "lssn" "${lssn}" "${kfactor}" "${wrapped_data}" 2>&1
+		
+		# DEBUG: Log parameters
+		echo "[AUTO-DISCOVER] ${step_num} DEBUG: lssn=${lssn}, sk_length=${#sk}, kfactor=${kfactor}, data_length=${#json_data}" >&2
+		
+		# Call kvs_put and capture output
+		local kvs_output=$(kvs_put "lssn" "${lssn}" "${kfactor}" "${wrapped_data}" 2>&1)
+		local kvs_exit_code=$?
+		
+		# Log the result
+		echo "[AUTO-DISCOVER] ${step_num} kvs_put result: exit_code=${kvs_exit_code}" >&2
+		echo "[AUTO-DISCOVER] ${step_num} kvs_put output:" >&2
+		echo "$kvs_output" | sed 's/^/  [AUTO-DISCOVER] /' >&2
+		
+		if [ $kvs_exit_code -eq 0 ]; then
+			echo "[AUTO-DISCOVER] ${step_num} ✅ kvs_put SUCCESS for kFactor=${kfactor}" >&2
+		else
+			echo "[AUTO-DISCOVER] ${step_num} ❌ kvs_put FAILED with exit_code=${kvs_exit_code} for kFactor=${kfactor}" >&2
+		fi
+	else
+		echo "[AUTO-DISCOVER] ${step_num} ⚠️  WARNING: Missing required variables (lssn=${lssn}, sk_length=${#sk}, apiaddrv2_length=${#apiaddrv2})" >&2
 	fi
 }
 
