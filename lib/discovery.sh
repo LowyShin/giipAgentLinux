@@ -24,7 +24,7 @@ if ! declare -f kvs_put >/dev/null 2>&1; then
 fi
 
 # 설정
-DISCOVERY_SCRIPT_LOCAL="$(dirname "$0")/../giipscripts/auto-discover-linux.sh"
+DISCOVERY_SCRIPT_LOCAL="${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh"
 DISCOVERY_INTERVAL=21600  # 6시간 (초 단위)
 DISCOVERY_STATE_FILE="${DISCOVERY_STATE_FILE:-/tmp/giip_discovery_state}"
 LOG_FILE="${LOG_FILE:-/var/log/giipagent.log}"
