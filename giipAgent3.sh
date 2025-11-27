@@ -430,72 +430,37 @@ if [ "${gateway_mode}" = "1" ]; then
 	
 	log_auto_discover_step "STEP-6" "Store Result to KVS" "auto_discover_step_6_store_result" "{\"status\":\"completed\",\"kValues_saved_to\":\"/tmp/kvs_kValue_auto_discover_*_$$.json\"}"
 	
-	# STEP-7: Store All Data to KVS (파일에서 읽어서 kvs_put)
-	log_auto_discover_step "STEP-7" "Store Discovery Data to KVS" "auto_discover_step_7_complete" "{\"status\":\"storing_data\"}"
+	# STEP-6 직접 kvs_put: 파일들을 KVS에 저장 (파일명 먼저, 그 다음 내용)
+	echo "[AUTO-DISCOVER] STEP-6: Direct kvs_put - Storing files to KVS" >&2
 	
-	echo "[AUTO-DISCOVER] STEP-7: Reading /tmp/kvs_kValue_auto_discover_*.json files and storing to KVS" >&2
-	
-	# Store auto_discover_result
 	if [ -f "/tmp/kvs_kValue_auto_discover_result_$$.json" ]; then
-		echo "[AUTO-DISCOVER] STEP-7: Processing auto_discover_result" >&2
-		# 먼저 파일명 저장
-		local result_file_info="{\"file\":\"/tmp/kvs_kValue_auto_discover_result_$$.json\",\"status\":\"file_exists\"}"
-		kvs_put "lssn" "${lssn}" "auto_discover_result_file_info" "$result_file_info" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
-		echo "[AUTO-DISCOVER] STEP-7-1: kvs_put for result_file_info completed" >&2
-		# 그 다음 실제 내용 저장
 		result_data=$(cat "/tmp/kvs_kValue_auto_discover_result_$$.json" 2>/dev/null)
 		kvs_put "lssn" "${lssn}" "auto_discover_result" "$result_data" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
-		echo "[AUTO-DISCOVER] STEP-7-1: kvs_put for auto_discover_result completed" >&2
-	else
-		echo "[AUTO-DISCOVER] STEP-7: WARNING - auto_discover_result file not found" >&2
+		echo "[AUTO-DISCOVER] STEP-6: auto_discover_result kvs_put completed" >&2
 	fi
 	
-	# Store auto_discover_servers
 	if [ -f "/tmp/kvs_kValue_auto_discover_servers_$$.json" ]; then
-		echo "[AUTO-DISCOVER] STEP-7: Processing auto_discover_servers" >&2
-		# 먼저 파일명 저장
-		local servers_file_info="{\"file\":\"/tmp/kvs_kValue_auto_discover_servers_$$.json\",\"status\":\"file_exists\"}"
-		kvs_put "lssn" "${lssn}" "auto_discover_servers_file_info" "$servers_file_info" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
-		echo "[AUTO-DISCOVER] STEP-7-2: kvs_put for servers_file_info completed" >&2
-		# 그 다음 실제 내용 저장
 		servers_data=$(cat "/tmp/kvs_kValue_auto_discover_servers_$$.json" 2>/dev/null)
 		kvs_put "lssn" "${lssn}" "auto_discover_servers" "$servers_data" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
-		echo "[AUTO-DISCOVER] STEP-7-2: kvs_put for auto_discover_servers completed" >&2
-	else
-		echo "[AUTO-DISCOVER] STEP-7: WARNING - auto_discover_servers file not found" >&2
+		echo "[AUTO-DISCOVER] STEP-6: auto_discover_servers kvs_put completed" >&2
 	fi
 	
-	# Store auto_discover_networks
 	if [ -f "/tmp/kvs_kValue_auto_discover_networks_$$.json" ]; then
-		echo "[AUTO-DISCOVER] STEP-7: Processing auto_discover_networks" >&2
-		# 먼저 파일명 저장
-		local networks_file_info="{\"file\":\"/tmp/kvs_kValue_auto_discover_networks_$$.json\",\"status\":\"file_exists\"}"
-		kvs_put "lssn" "${lssn}" "auto_discover_networks_file_info" "$networks_file_info" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
-		echo "[AUTO-DISCOVER] STEP-7-3: kvs_put for networks_file_info completed" >&2
-		# 그 다음 실제 내용 저장
 		networks_data=$(cat "/tmp/kvs_kValue_auto_discover_networks_$$.json" 2>/dev/null)
 		kvs_put "lssn" "${lssn}" "auto_discover_networks" "$networks_data" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
-		echo "[AUTO-DISCOVER] STEP-7-3: kvs_put for auto_discover_networks completed" >&2
-	else
-		echo "[AUTO-DISCOVER] STEP-7: WARNING - auto_discover_networks file not found" >&2
+		echo "[AUTO-DISCOVER] STEP-6: auto_discover_networks kvs_put completed" >&2
 	fi
 	
-	# Store auto_discover_services
 	if [ -f "/tmp/kvs_kValue_auto_discover_services_$$.json" ]; then
-		echo "[AUTO-DISCOVER] STEP-7: Processing auto_discover_services" >&2
-		# 먼저 파일명 저장
-		local services_file_info="{\"file\":\"/tmp/kvs_kValue_auto_discover_services_$$.json\",\"status\":\"file_exists\"}"
-		kvs_put "lssn" "${lssn}" "auto_discover_services_file_info" "$services_file_info" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
-		echo "[AUTO-DISCOVER] STEP-7-4: kvs_put for services_file_info completed" >&2
-		# 그 다음 실제 내용 저장
 		services_data=$(cat "/tmp/kvs_kValue_auto_discover_services_$$.json" 2>/dev/null)
 		kvs_put "lssn" "${lssn}" "auto_discover_services" "$services_data" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
-		echo "[AUTO-DISCOVER] STEP-7-4: kvs_put for auto_discover_services completed" >&2
-	else
-		echo "[AUTO-DISCOVER] STEP-7: WARNING - auto_discover_services file not found" >&2
+		echo "[AUTO-DISCOVER] STEP-6: auto_discover_services kvs_put completed" >&2
 	fi
 	
-	echo "[AUTO-DISCOVER] STEP-7: All discovery data stored to KVS" >&2
+	# STEP-7: Store All Data to KVS (확인 메시지만)
+	log_auto_discover_step "STEP-7" "Store Discovery Data to KVS" "auto_discover_step_7_complete" "{\"status\":\"storing_data\"}"
+	
+	echo "[AUTO-DISCOVER] STEP-7: All discovery data stored to KVS via STEP-6" >&2
 	
 	# Final Complete Marker
 	log_auto_discover_step "STEP-7" "Store Complete Marker" "auto_discover_step_7_complete" "{\"status\":\"completed\"}"
