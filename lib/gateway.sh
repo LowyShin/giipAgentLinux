@@ -656,6 +656,14 @@ process_gateway_servers() {
 		fetch_queue "$lssn" "$hn" "$os" "$gateway_queue_file"
 		if [ -s "$gateway_queue_file" ]; then
 			gateway_log "🟢" "[5.3.1-EXECUTE]" "Gateway 자신의 큐 존재, 스크립트 실행"
+			
+			# Fix DOS/Windows line endings before execution
+			if command -v dos2unix >/dev/null 2>&1; then
+				dos2unix "$gateway_queue_file" 2>/dev/null
+			else
+				sed -i 's/\r$//' "$gateway_queue_file" 2>/dev/null
+			fi
+			
 			bash "$gateway_queue_file"
 			local script_result=$?
 			gateway_log "🟢" "[5.3.1-COMPLETED]" "Gateway 자신의 큐 실행 완료" "\"result\":${script_result}"
