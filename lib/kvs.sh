@@ -214,11 +214,11 @@ kvs_put() {
 	
 	# Print result to both stdout and stderr
 	if [ $exit_code -eq 0 ]; then
-		echo "[KVS-Put] ✅ SUCCESS: kFactor=$kfactor, kValue_length=${#kvalue_json}, HTTP: $http_status"
-		echo "[KVS-Put] ✅ SUCCESS: kFactor=$kfactor, kValue_length=${#kvalue_json}, HTTP: $http_status" >&2
+		echo "[KVS-Put] ✅ SUCCESS: kType=$ktype, kKey=$kkey, kFactor=$kfactor, kValue_length=${#kvalue_json}, HTTP: $http_status"
+		echo "[KVS-Put] ✅ SUCCESS: kType=$ktype, kKey=$kkey, kFactor=$kfactor, kValue_length=${#kvalue_json}, HTTP: $http_status" >&2
 	else
-		echo "[KVS-Put] ❌ FAILED: kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status, response: $api_response"
-		echo "[KVS-Put] ❌ FAILED: kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status, response: $api_response" >&2
+		echo "[KVS-Put] ❌ FAILED: kType=$ktype, kKey=$kkey, kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status, response: $api_response"
+		echo "[KVS-Put] ❌ FAILED: kType=$ktype, kKey=$kkey, kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status, response: $api_response" >&2
 	fi
 	
 	rm -f "$response_file" "$stderr_file"
