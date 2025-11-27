@@ -6,6 +6,30 @@
 # Rule: Follow giipapi_rules.md - text contains parameter names only, jsondata contains actual values
 
 # ⚠️ ⚠️ ⚠️ CRITICAL - DO NOT MODIFY WITHOUT EXPLICIT AUTHORIZATION ⚠️ ⚠️ ⚠️
+# 
+# 🔒 ABSOLUTE RULES (절대 지켜야 할 규칙) - NEVER BREAK THESE:
+#
+# 1. 🚫 사용자 허락 없이 kvs.sh 사양을 변경하면 안 됨
+#    - API Contract 변경 금지
+#    - 함수 시그니처 변경 금지
+#    - JSON 구조 변경 금지
+#    - 에러 처리 로직 변경 금지
+#    → 반드시 사용자 명시적 승인 필요
+#
+# 2. 🔄 kValue는 어떤 값이 들어가도 에러 없이 raw data로 저장
+#    - JSON 객체도 가능: '{"key":"value"}'
+#    - 일반 텍스트도 가능: 'Error message'
+#    - 숫자도 가능: '12345'
+#    - 특수문자도 가능: '含む特殊文字'
+#    - 화면 표시 텍스트도 가능
+#    - 어떤 값이든 그대로 저장됨 (에러 없음)
+#    → 이것이 설계의 핵심 원칙
+#
+# 3. ✅ 호출 코드에서만 데이터를 처리할 것
+#    - kvs_put()은 받은 값을 그대로 저장하기만 함
+#    - 데이터 검증/변환은 호출 코드에서 담당
+#    - kvs.sh는 절대 로직을 추가하지 말 것
+#
 # This library is used across the entire giipAgent system:
 #   - giipAgent3.sh (main agent)
 #   - check-process-flood.sh
@@ -17,6 +41,7 @@
 # MODIFICATION RULE:
 # - DO NOT MODIFY kvs_put() or any function without EXPLICIT user authorization
 # - DO NOT CHANGE the JSON structure or API contract
+# - DO NOT ESCAPE or TRANSFORM kValue (keep it raw)
 # - ANY CHANGE HERE AFFECTS THE ENTIRE SYSTEM
 # - Contact project owner BEFORE making any modifications
 #
@@ -25,19 +50,20 @@
 #   - kType: "lssn" (key type)
 #   - kKey: LSSN value (string)
 #   - kFactor: factor name (string) 
-#   - kValue: RAW JSON object (NOT escaped string)
+#   - kValue: RAW DATA AS-IS (어떤 값이든 그대로 저장)
 #
 # ============================================================================
 # KVS Execution Logging Functions
 # ============================================================================
 
 # Function: Save execution log to KVS (giipagent factor)
-# Usage: save_execution_log "event_type" "{\"details\":\"json\"}"
+# Usage: save_execution_log "event_type" "{\"details\":\"json\"}" OR "event_type" "any text value"
 # Event types: startup, queue_check, script_execution, error, shutdown, gateway_init, heartbeat
 # 
 # ⚠️ API Rules (giipapi_rules.md):
 # - text: Parameter names only (e.g., "KVSPut kType kKey kFactor")
 # - jsondata: Actual values as JSON string
+# ⚠️ 중요: details_json은 JSON이어도 되고 텍스트여도 됨 - 어떤 값이든 처리됨
 save_execution_log() {
 	local event_type=$1
 	local details_json=$2
@@ -56,7 +82,8 @@ save_execution_log() {
 	local mode="${gateway_mode}"
 	[ "$mode" = "1" ] && mode="gateway" || mode="normal"
 	
-	# Build kValue JSON (details_json is already JSON, don't escape)
+	# Build kValue with details_json embedded as raw data (어떤 값이든 그대로 임베드)
+	# details_json이 JSON이면 JSON으로, 텍스트면 텍스트로 그대로 저장됨
 	local kvalue="{\"event_type\":\"${event_type}\",\"timestamp\":\"${timestamp}\",\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"mode\":\"${mode}\",\"version\":\"${sv}\",\"details\":${details_json}}"
 	
 	# Debug: Print the JSON before sending
@@ -186,7 +213,8 @@ kvs_put() {
 	
 	# ✅ Follow giipapi_rules.md
 	local text="KVSPut kType kKey kFactor"
-	# kValue must be RAW JSON object (NOT escaped string) - as per API contract
+	# kValue: raw data as-is (can be JSON, text, numbers, anything)
+	# No escaping - data embedded directly to preserve exact format
 	local jsondata="{\"kType\":\"${ktype}\",\"kKey\":\"${kkey}\",\"kFactor\":\"${kfactor}\",\"kValue\":${kvalue_json}}"
 	
 	# URL-encode all POST parameters (wget --post-data does NOT auto-encode)
