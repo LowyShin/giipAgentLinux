@@ -281,6 +281,24 @@ if [ "${gateway_mode}" = "1" ]; then
 	
 	log_message "INFO" "Running in GATEWAY MODE"
 	
+	# Load gateway API functions to get server list
+	if [ -f "${LIB_DIR}/gateway_api.sh" ]; then
+		. "${LIB_DIR}/gateway_api.sh"
+	else
+		log_message "ERROR" "gateway_api.sh not found"
+		exit 1
+	fi
+	
+	# Get remote servers from API and save to JSON file
+	log_message "INFO" "Fetching remote server list from API..."
+	gateway_servers_file=$(get_gateway_servers)
+	if [ $? -eq 0 ] && [ -f "$gateway_servers_file" ]; then
+		log_message "INFO" "Remote server list saved to: $gateway_servers_file"
+	else
+		log_message "ERROR" "Failed to fetch remote server list from API"
+		exit 1
+	fi
+	
 	# Call SSH test script
 	log_message "INFO" "Calling test_ssh_from_gateway_json.sh..."
 	bash "${SCRIPT_DIR}/test_ssh_from_gateway_json.sh"
