@@ -450,7 +450,8 @@ if [ "${gateway_mode}" = "1" ]; then
 		result_size=$(wc -c < "/tmp/kvs_kValue_auto_discover_result_$$.json" 2>/dev/null || echo "0")
 		if [ "$result_size" -eq 0 ]; then
 			echo "[AUTO-DISCOVER] STEP-6: auto_discover_result file is empty, uploading file_info only" >&2
-			kvs_put "lssn" "${lssn}" "auto_discover_result_file_info" "{\"file\":\"/tmp/kvs_kValue_auto_discover_result_$$.json\",\"size\":0,\"status\":\"empty\"}" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
+			local result_file_info="{\"file\":\"/tmp/kvs_kValue_auto_discover_result_$$.json\",\"size\":0,\"status\":\"empty\"}"
+			kvs_put "lssn" "${lssn}" "auto_discover_result_file_info" "$result_file_info" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
 		else
 			result_data=$(cat "/tmp/kvs_kValue_auto_discover_result_$$.json" 2>/dev/null)
 			echo "[AUTO-DISCOVER] STEP-6: Uploading auto_discover_result (${result_size} bytes)" >&2
@@ -462,7 +463,8 @@ if [ "${gateway_mode}" = "1" ]; then
 		servers_size=$(wc -c < "/tmp/kvs_kValue_auto_discover_servers_$$.json" 2>/dev/null || echo "0")
 		if [ "$servers_size" -eq 0 ]; then
 			echo "[AUTO-DISCOVER] STEP-6: auto_discover_servers file is empty, uploading file_info only" >&2
-			kvs_put "lssn" "${lssn}" "auto_discover_servers_file_info" "{\"file\":\"/tmp/kvs_kValue_auto_discover_servers_$$.json\",\"size\":0,\"status\":\"empty\"}" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
+			local servers_file_info="{\"file\":\"/tmp/kvs_kValue_auto_discover_servers_$$.json\",\"size\":0,\"status\":\"empty\"}"
+			kvs_put "lssn" "${lssn}" "auto_discover_servers_file_info" "$servers_file_info" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
 		else
 			servers_data=$(cat "/tmp/kvs_kValue_auto_discover_servers_$$.json" 2>/dev/null)
 			echo "[AUTO-DISCOVER] STEP-6: Uploading auto_discover_servers (${servers_size} bytes)" >&2
@@ -474,7 +476,8 @@ if [ "${gateway_mode}" = "1" ]; then
 		networks_size=$(wc -c < "/tmp/kvs_kValue_auto_discover_networks_$$.json" 2>/dev/null || echo "0")
 		if [ "$networks_size" -eq 0 ]; then
 			echo "[AUTO-DISCOVER] STEP-6: auto_discover_networks file is empty, uploading file_info only" >&2
-			kvs_put "lssn" "${lssn}" "auto_discover_networks_file_info" "{\"file\":\"/tmp/kvs_kValue_auto_discover_networks_$$.json\",\"size\":0,\"status\":\"empty\"}" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
+			local networks_file_info="{\"file\":\"/tmp/kvs_kValue_auto_discover_networks_$$.json\",\"size\":0,\"status\":\"empty\"}"
+			kvs_put "lssn" "${lssn}" "auto_discover_networks_file_info" "$networks_file_info" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
 		else
 			networks_data=$(cat "/tmp/kvs_kValue_auto_discover_networks_$$.json" 2>/dev/null)
 			echo "[AUTO-DISCOVER] STEP-6: Uploading auto_discover_networks (${networks_size} bytes)" >&2
@@ -486,7 +489,8 @@ if [ "${gateway_mode}" = "1" ]; then
 		services_size=$(wc -c < "/tmp/kvs_kValue_auto_discover_services_$$.json" 2>/dev/null || echo "0")
 		if [ "$services_size" -eq 0 ]; then
 			echo "[AUTO-DISCOVER] STEP-6: auto_discover_services file is empty, uploading file_info only" >&2
-			kvs_put "lssn" "${lssn}" "auto_discover_services_file_info" "{\"file\":\"/tmp/kvs_kValue_auto_discover_services_$$.json\",\"size\":0,\"status\":\"empty\"}" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
+			local services_file_info="{\"file\":\"/tmp/kvs_kValue_auto_discover_services_$$.json\",\"size\":0,\"status\":\"empty\"}"
+			kvs_put "lssn" "${lssn}" "auto_discover_services_file_info" "$services_file_info" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
 		else
 			services_data=$(cat "/tmp/kvs_kValue_auto_discover_services_$$.json" 2>/dev/null)
 			echo "[AUTO-DISCOVER] STEP-6: Uploading auto_discover_services (${services_size} bytes)" >&2
