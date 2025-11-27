@@ -97,19 +97,21 @@ test_ssh_connection() {
 	local ssh_key_path="$5"
 	local ssh_password="$6"
 	local lssn="$7"
+test_ssh_connection() {
+	local hostname="$1"
+	local ssh_host="$2"
+	local ssh_user="$3"
+	local ssh_port="${4:-22}"
+	local ssh_key_path="$5"
+	local ssh_password="$6"
+	local lssn="$7"
 	
 	local test_result="PENDING"
 	local error_msg=""
-	local connection_time=0
 	
 	# Build SSH command
 	local ssh_cmd="ssh"
 	local ssh_opts="-o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
-	
-	print_info "[Server #$((TOTAL_SERVERS))] Testing: ${hostname}"
-	echo "  ├─ Address: ${ssh_host}:${ssh_port}"
-	echo "  ├─ User: ${ssh_user}"
-	echo "  └─ LSSN: ${lssn}"
 	
 	# ========================================================================
 	# EXCEPTION HANDLING: Parameter validation
@@ -118,8 +120,7 @@ test_ssh_connection() {
 	# Validate hostname
 	if [ -z "$hostname" ] || [ "$hostname" = "null" ]; then
 		error_msg="hostname is empty or null"
-		print_warning "  └─ SKIPPED: ${error_msg}"
-		log_message "SKIP" "hostname empty | LSSN:${lssn}"
+		print_error "  └─ ✗ ${hostname:-NONE} - SKIPPED"
 		echo "{\"hostname\":\"${hostname:-NONE}\",\"ssh_host\":\"${ssh_host:-NONE}\",\"lssn\":${lssn:-0},\"status\":\"SKIPPED\",\"error\":\"${error_msg}\"}" >> "$RESULT_JSON"
 		((SKIPPED_COUNT++))
 		return 2
@@ -128,8 +129,7 @@ test_ssh_connection() {
 	# Validate ssh_host (CRITICAL - cannot connect without this)
 	if [ -z "$ssh_host" ] || [ "$ssh_host" = "null" ]; then
 		error_msg="ssh_host is empty or null (cannot connect)"
-		print_warning "  └─ SKIPPED: ${error_msg}"
-		log_message "SKIP" "ssh_host empty | hostname:${hostname} | LSSN:${lssn}"
+		print_error "  └─ ✗ ${hostname} - SKIPPED"
 		echo "{\"hostname\":\"${hostname}\",\"ssh_host\":\"${ssh_host:-NONE}\",\"lssn\":${lssn},\"status\":\"SKIPPED\",\"error\":\"${error_msg}\"}" >> "$RESULT_JSON"
 		((SKIPPED_COUNT++))
 		return 2
@@ -138,8 +138,7 @@ test_ssh_connection() {
 	# Validate ssh_user (CRITICAL - cannot connect without this)
 	if [ -z "$ssh_user" ] || [ "$ssh_user" = "null" ]; then
 		error_msg="ssh_user is empty or null (cannot connect)"
-		print_warning "  └─ SKIPPED: ${error_msg}"
-		log_message "SKIP" "ssh_user empty | hostname:${hostname} | ssh_host:${ssh_host} | LSSN:${lssn}"
+		print_error "  └─ ✗ ${hostname} - SKIPPED"
 		echo "{\"hostname\":\"${hostname}\",\"ssh_host\":\"${ssh_host}\",\"ssh_user\":\"${ssh_user:-NONE}\",\"lssn\":${lssn},\"status\":\"SKIPPED\",\"error\":\"${error_msg}\"}" >> "$RESULT_JSON"
 		((SKIPPED_COUNT++))
 		return 2
@@ -147,134 +146,72 @@ test_ssh_connection() {
 	
 	# Validate ssh_port is numeric
 	if ! [[ "$ssh_port" =~ ^[0-9]+$ ]]; then
-		print_warning "  └─ Port invalid (${ssh_port}), using default 22"
-		log_message "WARN" "Invalid port ${ssh_port}, using default 22 | hostname:${hostname}"
 		ssh_port="22"
 	fi
 	
 	# Validate ssh_port range
 	if [ "$ssh_port" -lt 1 ] || [ "$ssh_port" -gt 65535 ]; then
-		print_warning "  └─ Port out of range (${ssh_port}), using default 22"
-		log_message "WARN" "Port out of range ${ssh_port}, using default 22 | hostname:${hostname}"
 		ssh_port="22"
 	fi
-	
-	# Initialize results JSON file if needed
-	if [ ! -f "$RESULT_JSON" ]; then
-		echo "{\"test_start\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"servers\":[" > "$RESULT_JSON" 2>/dev/null || {
-			print_error "Cannot write to results JSON file"
-			return 1
-		}
-	fi
-	
-	# ========================================================================
-	# Measure connection time
-	# ========================================================================
-	
-	local start_time=$(date +%s.%N 2>/dev/null || date +%s)
-	local ssh_succeeded=0
 	
 	# ========================================================================
 	# Try SSH connection with different authentication methods
 	# ========================================================================
 	
-	if [ -n "$ssh_key_path" ] && [ "$ssh_key_path" != "null" ]; then
-		# Check if key file exists
-		if [ -f "$ssh_key_path" ]; then
-			print_info "  └─ [1] Trying key-based auth: ${ssh_key_path}"
-			log_message "AUTH" "key_based | file:${ssh_key_path}"
-			
-			# Check key file permissions
-			local key_perms=$(stat -f '%OLp' "$ssh_key_path" 2>/dev/null || stat -c '%a' "$ssh_key_path" 2>/dev/null || echo "unknown")
-			if [[ "$key_perms" != "600" && "$key_perms" != "unknown" ]]; then
-				print_warning "  │   └─ Key file permissions: ${key_perms} (non-standard)"
-			fi
-			
-			# Attempt connection with key
-			if timeout 15 $ssh_cmd $ssh_opts -i "$ssh_key_path" -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'SSH connection successful' && hostname && uname -a" &>/dev/null; then
-				test_result="SUCCESS"
-				ssh_succeeded=1
-				print_success "  └─ ✓ Connected with key auth"
-			else
-				error_msg="SSH key authentication failed"
-				print_warning "  │   └─ Key auth failed, trying next method..."
-			fi
-		else
-			print_warning "  │   └─ Key file not found: ${ssh_key_path}"
+	local ssh_succeeded=0
+	
+	if [ -n "$ssh_key_path" ] && [ "$ssh_key_path" != "null" ] && [ -f "$ssh_key_path" ]; then
+		# Try key-based auth
+		if timeout 15 $ssh_cmd $ssh_opts -i "$ssh_key_path" -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'OK'" &>/dev/null; then
+			test_result="SUCCESS"
+			ssh_succeeded=1
 		fi
 	fi
 	
 	# If key auth failed or not available, try password auth
-	if [ "$ssh_succeeded" -eq 0 ] && [ -n "$ssh_password" ] && [ "$ssh_password" != "null" ]; then
-		# Check if sshpass is available
-		if ! command -v sshpass &> /dev/null; then
-			print_warning "  │   └─ sshpass not installed (password auth skipped)"
-			log_message "SKIP" "sshpass_not_installed | hostname:${hostname}"
-			if [ -z "$error_msg" ]; then
-				error_msg="sshpass not installed"
-			fi
-		else
-			print_info "  └─ [2] Trying password-based auth"
-			log_message "AUTH" "password_based"
-			
-			# Attempt connection with password
-			if timeout 15 sshpass -p "$ssh_password" $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'SSH connection successful' && hostname && uname -a" &>/dev/null; then
-				test_result="SUCCESS"
-				ssh_succeeded=1
-				print_success "  └─ ✓ Connected with password auth"
-			else
-				error_msg="SSH password authentication failed"
-				print_warning "  │   └─ Password auth failed, trying next method..."
-			fi
+	if [ "$ssh_succeeded" -eq 0 ] && [ -n "$ssh_password" ] && [ "$ssh_password" != "null" ] && command -v sshpass &> /dev/null; then
+		# Try password-based auth
+		if timeout 15 sshpass -p "$ssh_password" $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'OK'" &>/dev/null; then
+			test_result="SUCCESS"
+			ssh_succeeded=1
 		fi
 	fi
 	
 	# If all methods failed or unavailable, try default SSH key
 	if [ "$ssh_succeeded" -eq 0 ]; then
-		print_info "  └─ [3] Trying default SSH key from ~/.ssh"
-		log_message "AUTH" "default_key"
-		
-		if timeout 15 $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'SSH connection successful' && hostname && uname -a" &>/dev/null; then
+		if timeout 15 $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'OK'" &>/dev/null; then
 			test_result="SUCCESS"
 			ssh_succeeded=1
-			print_success "  └─ ✓ Connected with default key"
 		else
-			if [ -z "$error_msg" ]; then
-				error_msg="SSH connection with default key failed"
-			fi
-			print_error "  └─ ✗ All authentication methods failed"
+			test_result="FAILED"
 		fi
-	fi
-	
-	# Final status assignment
-	if [ "$ssh_succeeded" -eq 0 ]; then
-		test_result="FAILED"
-		if [ -z "$error_msg" ]; then
-			error_msg="SSH connection failed (no available authentication methods)"
-		fi
-	fi
-	
-	# ========================================================================
-	# Calculate connection time
-	# ========================================================================
-	
-	local end_time=$(date +%s.%N 2>/dev/null || date +%s)
-	
-	if command -v bc &> /dev/null; then
-		connection_time=$(echo "${end_time} - ${start_time}" | bc 2>/dev/null || echo "0")
-	else
-		# Fallback: calculate in bash
-		connection_time=$(echo "scale=3; ${end_time%.*} - ${start_time%.*}" | awk '{print $1}' 2>/dev/null || echo "0")
 	fi
 	
 	# ========================================================================
 	# Log and record results
 	# ========================================================================
 	
-	log_message "SSH_TEST" "${test_result} | hostname:${hostname} | ${ssh_host}:${ssh_port} | user:${ssh_user} | LSSN:${lssn} | Time:${connection_time}s"
+	# Log to file for debugging
+	log_message "SSH_TEST" "${test_result} | hostname:${hostname} | ${ssh_host}:${ssh_port} | user:${ssh_user} | LSSN:${lssn}"
+	
+	# Display simple output
+	case $test_result in
+		SUCCESS)
+			print_success "  └─ ✓ ${hostname} (${ssh_host}:${ssh_port}) - LSSN:${lssn}"
+			((SUCCESS_COUNT++))
+			;;
+		FAILED)
+			print_error "  └─ ✗ ${hostname} (${ssh_host}:${ssh_port}) - LSSN:${lssn}"
+			((FAILURE_COUNT++))
+			;;
+		SKIPPED)
+			print_warning "  └─ ⊘ ${hostname} (${ssh_host}:${ssh_port}) - LSSN:${lssn}"
+			((SKIPPED_COUNT++))
+			;;
+	esac
 	
 	# Append to JSON results (with comma handling)
-	local json_entry="{\"hostname\":\"${hostname}\",\"ssh_host\":\"${ssh_host}\",\"ssh_user\":\"${ssh_user}\",\"ssh_port\":${ssh_port},\"lssn\":${lssn},\"status\":\"${test_result}\",\"connection_time_sec\":${connection_time},\"error\":\"${error_msg}\"}"
+	local json_entry="{\"hostname\":\"${hostname}\",\"ssh_host\":\"${ssh_host}\",\"ssh_user\":\"${ssh_user}\",\"ssh_port\":${ssh_port},\"lssn\":${lssn},\"status\":\"${test_result}\",\"error\":\"${error_msg}\"}"
 	
 	# Remove trailing comma from previous entry if needed
 	if [ -f "$RESULT_JSON" ]; then
@@ -282,34 +219,20 @@ test_ssh_connection() {
 		if [[ "$last_line" == *"}" ]]; then
 			# Add comma to previous entry if it doesn't end with comma
 			if [[ ! "$last_line" == *"}," ]]; then
-				sed -i '$ s/}$/},/' "$RESULT_JSON" 2>/dev/null || echo "Note: Could not add comma to previous entry"
+				sed -i '$ s/}$/},/' "$RESULT_JSON" 2>/dev/null || true
 			fi
 		fi
 	fi
 	
-	echo "$json_entry" >> "$RESULT_JSON" 2>/dev/null || {
-		print_error "Failed to write to results JSON file"
-		return 1
-	}
+	echo "$json_entry" >> "$RESULT_JSON" 2>/dev/null || true
 	
-	# ========================================================================
-	# Update counters
-	# ========================================================================
-	
+	# Return exit code based on result
 	case $test_result in
-		SUCCESS)
-			((SUCCESS_COUNT++))
-			return 0
-			;;
-		FAILED)
-			((FAILURE_COUNT++))
-			return 1
-			;;
-		SKIPPED)
-			((SKIPPED_COUNT++))
-			return 2
-			;;
+		SUCCESS) return 0 ;;
+		FAILED) return 1 ;;
+		SKIPPED) return 2 ;;
 	esac
+}
 }
 
 ################################################################################
@@ -462,8 +385,6 @@ main() {
 	# Step 7: Initialize output files
 	# ============================================================================
 	
-	print_info "Initializing output files..."
-	
 	# Clear old report file
 	> "$REPORT_FILE"
 	
@@ -472,24 +393,13 @@ main() {
 		exit_with_error "Failed to create JSON results file: ${RESULT_JSON}" 1
 	fi
 	
-	print_success "Output files initialized"
-	echo "  Report: ${REPORT_FILE}"
-	echo "  Results: ${RESULT_JSON}"
-	echo ""
-	
 	# ============================================================================
 	# Step 8: Run SSH tests
 	# ============================================================================
 	
-	print_success "Starting SSH connection tests from: ${json_file}"
-	print_info "Report file: ${REPORT_FILE}"
-	print_info "Results JSON: ${RESULT_JSON}"
+	print_success "Starting SSH connection tests"
 	echo ""
-	
-	log_message "START" "SSH Connection Test Started"
-	log_message "INFO" "Source file: ${json_file}"
-	log_message "INFO" "File size: ${file_size} bytes"
-	log_message "INFO" "Server count: ${server_count}"
+	print_info "📋 Target servers:"
 	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 	
 	# Parse JSON and extract servers
@@ -499,11 +409,6 @@ main() {
 	# Try using jq first
 	if command -v jq &> /dev/null; then
 		print_info "Using jq for JSON parsing"
-		
-		# Step 8.1: First pass - collect and display all servers
-		print_info ""
-		print_info "📋 Servers found in JSON file:"
-		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		
 		# Extract to temp file first to preserve array in main shell
 		local temp_servers="/tmp/servers_to_test_$$.jsonl"
@@ -521,27 +426,16 @@ main() {
 			
 			server_list+=("$server_json")
 			list_count=$((list_count + 1))
-			print_info "  ├─ [$list_count] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user} lssn:${lssn}"
+			print_info "  [$list_count] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user}"
 		done < "$temp_servers"
 		rm -f "$temp_servers"
 		
 		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		print_info ""
-		print_info "🔄 Starting connection tests..."
+		print_info "🔄 Testing connection..."
 		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		
-		# Debug: show how many servers in array
-		print_info "Found ${#server_list[@]} server(s) in array"
-		print_info ""
-		
-		# Check if array has servers
-		if [ ${#server_list[@]} -eq 0 ]; then
-			print_error "ERROR: No servers in array! Servers were not properly saved."
-			log_message "ERROR" "Server array is empty after first pass"
-			return 1
-		fi
-		
-		# Step 8.2: Second pass - test connections
+		# Test connections
 		for server_json in "${server_list[@]}"; do
 			((TOTAL_SERVERS++))
 			((actual_server_count++))
@@ -556,16 +450,10 @@ main() {
 			local ssh_password=$(echo "$server_json" | jq -r '.ssh_password // empty' 2>/dev/null) || true
 			
 			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn" || true
-			
 		done
 	else
 		# Fallback: use grep for JSON parsing
 		print_warning "jq not found, using grep fallback for JSON parsing"
-		
-		# Step 8.1: First pass - collect and display all servers
-		print_info ""
-		print_info "📋 Servers found in JSON file:"
-		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		
 		# Extract to temp file first to preserve array in main shell
 		local temp_servers="/tmp/servers_to_test_$$.jsonl"
@@ -583,20 +471,16 @@ main() {
 			
 			server_list+=("$server_json")
 			list_count=$((list_count + 1))
-			print_info "  ├─ [$list_count] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user} lssn:${lssn}"
+			print_info "  [$list_count] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user}"
 		done < "$temp_servers"
 		rm -f "$temp_servers"
 		
 		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		print_info ""
-		print_info "🔄 Starting connection tests..."
+		print_info "🔄 Testing connection..."
 		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		
-		# Debug: show how many servers in array
-		print_info "Found ${#server_list[@]} server(s) in array"
-		print_info ""
-		
-		# Step 8.2: Second pass - test connections
+		# Test connections
 		for server_json in "${server_list[@]}"; do
 			((TOTAL_SERVERS++))
 			((actual_server_count++))
@@ -611,9 +495,8 @@ main() {
 			local ssh_password=$(echo "$server_json" | grep -o '"ssh_password"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/') || true
 			
 			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn" || true
-			
 		done
-	fi
+	
 	
 	# ============================================================================
 	# Step 9: Finalize and summary
@@ -623,31 +506,13 @@ main() {
 	echo "]," >> "$RESULT_JSON"
 	echo "\"test_end\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"summary\":{\"total\":${TOTAL_SERVERS},\"success\":${SUCCESS_COUNT},\"failed\":${FAILURE_COUNT},\"skipped\":${SKIPPED_COUNT},\"actual_processed\":${actual_server_count}}}" >> "$RESULT_JSON"
 	
-	# Print test results
+	# Print summary
 	echo ""
 	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
-	print_info "🧪 Test Results:"
+	print_success "✓ Test completed"
 	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
-	echo ""
-	
-	# Parse and display results
-	if command -v jq &> /dev/null; then
-		jq -r '.servers[] | "[\(.status | if . == "SUCCESS" then "✓" elif . == "FAILED" then "✗" else "⊘" end)] \(.hostname) (\(.ssh_host):\(.ssh_port)) - LSSN:\(.lssn)"' "$RESULT_JSON" 2>/dev/null | while read line; do
-			if [[ "$line" == *"✓"* ]]; then
-				print_success "  $line"
-			elif [[ "$line" == *"✗"* ]]; then
-				print_error "  $line"
-			else
-				print_warning "  $line"
-			fi
-		done
-	fi
-	
-	echo ""
-	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
-	echo ""
-	print_success "✓ Report saved to: ${REPORT_FILE}"
-	print_success "✓ JSON results saved to: ${RESULT_JSON}"
+	print_success "✓ Report: ${REPORT_FILE}"
+	print_success "✓ Results: ${RESULT_JSON}"
 	echo ""
 }
 
