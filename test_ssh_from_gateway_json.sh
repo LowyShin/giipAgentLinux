@@ -105,7 +105,10 @@ test_ssh_connection() {
 	local ssh_cmd="ssh"
 	local ssh_opts="-o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 	
-	print_info "Testing SSH connection to: ${hostname} (${ssh_host}:${ssh_port}) [LSSN:${lssn}]"
+	echo "[Server #$((TOTAL_SERVERS))] Testing: ${hostname}"
+	echo "  └─ Address: ${ssh_host}:${ssh_port}"
+	echo "  └─ User: ${ssh_user}"
+	echo "  └─ LSSN: ${lssn}"
 	
 	# ========================================================================
 	# EXCEPTION HANDLING: Parameter validation
@@ -114,7 +117,7 @@ test_ssh_connection() {
 	# Validate hostname
 	if [ -z "$hostname" ] || [ "$hostname" = "null" ]; then
 		error_msg="hostname is empty or null"
-		print_warning "Skipping: ${error_msg}"
+		print_warning "  └─ SKIPPED: ${error_msg}"
 		log_message "SKIP" "hostname empty | LSSN:${lssn}"
 		echo "{\"hostname\":\"${hostname:-NONE}\",\"ssh_host\":\"${ssh_host:-NONE}\",\"lssn\":${lssn:-0},\"status\":\"SKIPPED\",\"error\":\"${error_msg}\"}" >> "$RESULT_JSON"
 		((SKIPPED_COUNT++))
@@ -124,7 +127,7 @@ test_ssh_connection() {
 	# Validate ssh_host (CRITICAL - cannot connect without this)
 	if [ -z "$ssh_host" ] || [ "$ssh_host" = "null" ]; then
 		error_msg="ssh_host is empty or null (cannot connect)"
-		print_warning "Skipping: ${error_msg}"
+		print_warning "  └─ SKIPPED: ${error_msg}"
 		log_message "SKIP" "ssh_host empty | hostname:${hostname} | LSSN:${lssn}"
 		echo "{\"hostname\":\"${hostname}\",\"ssh_host\":\"${ssh_host:-NONE}\",\"lssn\":${lssn},\"status\":\"SKIPPED\",\"error\":\"${error_msg}\"}" >> "$RESULT_JSON"
 		((SKIPPED_COUNT++))
@@ -134,7 +137,7 @@ test_ssh_connection() {
 	# Validate ssh_user (CRITICAL - cannot connect without this)
 	if [ -z "$ssh_user" ] || [ "$ssh_user" = "null" ]; then
 		error_msg="ssh_user is empty or null (cannot connect)"
-		print_warning "Skipping: ${error_msg}"
+		print_warning "  └─ SKIPPED: ${error_msg}"
 		log_message "SKIP" "ssh_user empty | hostname:${hostname} | ssh_host:${ssh_host} | LSSN:${lssn}"
 		echo "{\"hostname\":\"${hostname}\",\"ssh_host\":\"${ssh_host}\",\"ssh_user\":\"${ssh_user:-NONE}\",\"lssn\":${lssn},\"status\":\"SKIPPED\",\"error\":\"${error_msg}\"}" >> "$RESULT_JSON"
 		((SKIPPED_COUNT++))
@@ -143,14 +146,14 @@ test_ssh_connection() {
 	
 	# Validate ssh_port is numeric
 	if ! [[ "$ssh_port" =~ ^[0-9]+$ ]]; then
-		print_warning "ssh_port is not numeric (${ssh_port}), using default 22"
+		print_warning "  └─ Port invalid (${ssh_port}), using default 22"
 		log_message "WARN" "Invalid port ${ssh_port}, using default 22 | hostname:${hostname}"
 		ssh_port="22"
 	fi
 	
 	# Validate ssh_port range
 	if [ "$ssh_port" -lt 1 ] || [ "$ssh_port" -gt 65535 ]; then
-		print_warning "ssh_port out of range (${ssh_port}), using default 22"
+		print_warning "  └─ Port out of range (${ssh_port}), using default 22"
 		log_message "WARN" "Port out of range ${ssh_port}, using default 22 | hostname:${hostname}"
 		ssh_port="22"
 	fi
@@ -177,27 +180,26 @@ test_ssh_connection() {
 	if [ -n "$ssh_key_path" ] && [ "$ssh_key_path" != "null" ]; then
 		# Check if key file exists
 		if [ -f "$ssh_key_path" ]; then
-			print_info "Using key-based authentication: ${ssh_key_path}"
+			print_info "  └─ [1] Trying key-based auth: ${ssh_key_path}"
 			log_message "AUTH" "key_based | file:${ssh_key_path}"
 			
 			# Check key file permissions
 			local key_perms=$(stat -f '%OLp' "$ssh_key_path" 2>/dev/null || stat -c '%a' "$ssh_key_path" 2>/dev/null || echo "unknown")
 			if [[ "$key_perms" != "600" && "$key_perms" != "unknown" ]]; then
-				print_warning "SSH key file has non-standard permissions (${key_perms}), attempting anyway"
+				print_warning "  │   └─ Key file permissions: ${key_perms} (non-standard)"
 			fi
 			
 			# Attempt connection with key
 			if timeout 15 $ssh_cmd $ssh_opts -i "$ssh_key_path" -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'SSH connection successful' && hostname && uname -a" &>/dev/null; then
 				test_result="SUCCESS"
 				ssh_succeeded=1
-				print_success "Connected successfully to ${hostname} (key auth)"
+				print_success "  └─ ✓ Connected with key auth"
 			else
 				error_msg="SSH key authentication failed"
-				print_error "${error_msg}"
+				print_warning "  │   └─ Key auth failed, trying next method..."
 			fi
 		else
-			print_warning "SSH key file not found: ${ssh_key_path}, trying alternative methods..."
-			log_message "WARN" "key_file_not_found | path:${ssh_key_path}"
+			print_warning "  │   └─ Key file not found: ${ssh_key_path}"
 		fi
 	fi
 	
@@ -205,41 +207,41 @@ test_ssh_connection() {
 	if [ "$ssh_succeeded" -eq 0 ] && [ -n "$ssh_password" ] && [ "$ssh_password" != "null" ]; then
 		# Check if sshpass is available
 		if ! command -v sshpass &> /dev/null; then
-			print_warning "sshpass not found, cannot test password-based authentication"
+			print_warning "  │   └─ sshpass not installed (password auth skipped)"
 			log_message "SKIP" "sshpass_not_installed | hostname:${hostname}"
 			if [ -z "$error_msg" ]; then
 				error_msg="sshpass not installed"
 			fi
 		else
-			print_info "Using password-based authentication"
+			print_info "  └─ [2] Trying password-based auth"
 			log_message "AUTH" "password_based"
 			
 			# Attempt connection with password
 			if timeout 15 sshpass -p "$ssh_password" $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'SSH connection successful' && hostname && uname -a" &>/dev/null; then
 				test_result="SUCCESS"
 				ssh_succeeded=1
-				print_success "Connected successfully to ${hostname} (password auth)"
+				print_success "  └─ ✓ Connected with password auth"
 			else
 				error_msg="SSH password authentication failed"
-				print_error "${error_msg}"
+				print_warning "  │   └─ Password auth failed, trying next method..."
 			fi
 		fi
 	fi
 	
 	# If all methods failed or unavailable, try default SSH key
 	if [ "$ssh_succeeded" -eq 0 ]; then
-		print_info "Using default SSH key from ~/.ssh"
+		print_info "  └─ [3] Trying default SSH key from ~/.ssh"
 		log_message "AUTH" "default_key"
 		
 		if timeout 15 $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'SSH connection successful' && hostname && uname -a" &>/dev/null; then
 			test_result="SUCCESS"
 			ssh_succeeded=1
-			print_success "Connected successfully to ${hostname} (default key)"
+			print_success "  └─ ✓ Connected with default key"
 		else
 			if [ -z "$error_msg" ]; then
 				error_msg="SSH connection with default key failed"
 			fi
-			print_error "${error_msg}"
+			print_error "  └─ ✗ All authentication methods failed"
 		fi
 	fi
 	
@@ -554,7 +556,8 @@ main() {
 	echo ""
 	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 	echo "" | tee -a "$REPORT_FILE"
-	print_info "Test Summary"
+	print_info "📊 Test Summary"
+	echo "" | tee -a "$REPORT_FILE"
 	log_message "SUMMARY" "Total servers: ${TOTAL_SERVERS}"
 	log_message "SUMMARY" "Successfully connected: ${SUCCESS_COUNT}"
 	log_message "SUMMARY" "Connection failed: ${FAILURE_COUNT}"
@@ -562,11 +565,33 @@ main() {
 	log_message "SUMMARY" "Actually processed: ${actual_server_count}"
 	log_message "END" "SSH Connection Test Completed"
 	
-	echo ""
-	print_success "Report saved to: ${REPORT_FILE}"
-	print_success "JSON results saved to: ${RESULT_JSON}"
+	# Print statistics in table format
+	echo "" | tee -a "$REPORT_FILE"
+	print_success "✓ Successful:     ${SUCCESS_COUNT}/${TOTAL_SERVERS}"
+	print_error "✗ Failed:         ${FAILURE_COUNT}/${TOTAL_SERVERS}"
+	print_warning "⊘ Skipped:        ${SKIPPED_COUNT}/${TOTAL_SERVERS}"
+	echo "" | tee -a "$REPORT_FILE"
+	
+	# Calculate success rate
+	if [ "$TOTAL_SERVERS" -gt 0 ]; then
+		local success_rate=$((SUCCESS_COUNT * 100 / TOTAL_SERVERS))
+		if [ "$success_rate" -eq 100 ]; then
+			print_success "Success Rate:    ${success_rate}% (모든 서버 연결 성공!)"
+		elif [ "$success_rate" -ge 75 ]; then
+			print_info "Success Rate:    ${success_rate}%"
+		elif [ "$success_rate" -ge 50 ]; then
+			print_warning "Success Rate:    ${success_rate}%"
+		else
+			print_error "Success Rate:    ${success_rate}% (연결 문제 있음)"
+		fi
+	fi
+	
+	echo "" | tee -a "$REPORT_FILE"
 	
 	# Print JSON results file content for quick review
+	echo ""
+	print_success "✓ Report saved to: ${REPORT_FILE}"
+	print_success "✓ JSON results saved to: ${RESULT_JSON}"
 	echo ""
 	print_info "JSON Results Preview:"
 	
