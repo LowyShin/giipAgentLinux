@@ -6,7 +6,30 @@
 
 ---
 
-## 📋 상태 요약 (STEP별 진행 현황 - 최신 KVS 데이터 기준)
+## ⚠️ **최주의 사항**
+
+**jq는 정상 설치되어 있습니다.** jq 미설치는 근본 원인이 아닙니다. JSON 데이터가 제대로 생성되는 곳과 안되는 곳을 찾는 것이 중요합니다.
+
+---
+
+## 📚 **관련 문서 (필요시 참고)**
+
+| 링크 | 설명 |
+|------|------|
+| [AUTO_DISCOVER_ROOT_CAUSE_ANALYSIS.md](./AUTO_DISCOVER_ROOT_CAUSE_ANALYSIS.md) | 근본 원인 분석 |
+| [STEP6_DATA_STORAGE_ANALYSIS.md](./STEP6_DATA_STORAGE_ANALYSIS.md) | STEP-6 저장 메커니즘 |
+| [STEP6_IMPROVEMENT_SUMMARY.md](./STEP6_IMPROVEMENT_SUMMARY.md) | STEP-6 개선 기록 |
+| [AUTO_DISCOVER_LOGGING_ENHANCED.md](./AUTO_DISCOVER_LOGGING_ENHANCED.md) | DEBUG 로깅 구현 |
+| [AUTO_DISCOVER_VISUAL_DIAGNOSIS.md](./AUTO_DISCOVER_VISUAL_DIAGNOSIS.md) | 시각화 분석 |
+| [AUTO_DISCOVERY_ARCHITECTURE.md](./AUTO_DISCOVERY_ARCHITECTURE.md) | 설계 및 구조 |
+| [AUTO_DISCOVER_ISSUE_RESOLUTION_PROGRESS.md](./AUTO_DISCOVER_ISSUE_RESOLUTION_PROGRESS.md) | 진행 상황 |
+| [AUTO_DISCOVER_LOGGING_DIAGNOSIS.md](./AUTO_DISCOVER_LOGGING_DIAGNOSIS.md) | 로깅 진단 |
+
+---
+
+## 🎯 **전체 실행 흐름 (STEP-1 부터 STEP-7까지) - 최우선 확인**
+
+### 📋 상태 요약 (STEP별 진행 현황 - 최신 KVS 데이터 기준)
 
 | STEP | 단계명 | 상태 | 설명 | KVS kFactor | 타임스탐프 |
 |------|--------|------|------|----------|-----------| 
@@ -15,7 +38,7 @@
 | 3️⃣ | Init KVS | ✅ PASS | 초기화 마커 저장 완료 | auto_discover_step_3_init | 14:05:04 |
 | 4️⃣ | Execute Script | ✅ SUCCESS | 스크립트 정상 실행 (/tmp/auto_discover_result_9855.json) | auto_discover_step_4_execution | 14:05:05 |
 | 5️⃣ | Validate File | ✅ PASS | 결과 파일 검증 (7508 bytes 최신) | auto_discover_step_5_validation | 14:05:07 |
-| 6️⃣ | Store to KVS | ✅ SUCCESS | 모든 컴포넌트 데이터 저장 완료 | auto_discover_step_6_store_resul | 12:25:19 |
+| 6️⃣ | Store to KVS | ⚠️ PARTIAL | ✅ result ✅ services ✅ networks / ⚠️ 필드명 수정 필요 | auto_discover_step_6_store_resul | 12:25:19 |
 | 7️⃣ | Complete | ✅ SUCCESS | 완료 마킹 (auto_discover_complete) | auto_discover_step_7_complete | 12:25:21 |
 
 **종합 진단 (2025-11-27 최신 KVS 기준)**: 
@@ -26,152 +49,6 @@
 - ✅ **모든 컴포넌트 데이터 저장 완료 (RAW JSON으로 정상 저장됨)** ✅
 
 ---
-
-## 🔴 **진단 정정: 데이터 "없음"이 아니라 "정상 저장됨" ✅**
-
-### 📍 이전 진단의 오류 (2025-11-26 문서)
-
-```
-❌ auto_discover_result - 데이터 없음
-❌ auto_discover_servers - 데이터 없음
-❌ auto_discover_networks - 데이터 없음
-❌ auto_discover_services - 데이터 없음
-```
-
-**이는 완전히 잘못된 진단입니다!** ❌
-
-### ✅ 실제 KVS 조사 결과 (2025-11-27 확인)
-
-**모든 데이터가 정상적으로 저장되었습니다!**
-
-| kFactor | 상태 | 데이터 예시 | 크기 | 확인됨 |
-|---------|------|----------|------|--------|
-| `auto_discover_result` | ✅ 저장 | `{"hostname":"...","os":"...","network":[...],"software":[...]}` | ~7KB | ✅ |
-| `auto_discover_software` | ✅ 저장 | `[{"name":"nginx","version":"1.12.2",...}]` | ~KB | ✅ |
-| `auto_discover_networks` | ✅ 저장 | `[{"name":"eth0","ipv4":"172.17.29.240","mac":"..."}]` | ~1KB | ✅ |
-| `auto_discover_services` | ✅ 저장 | `[{"name":"auditd","status":"running",...}]` 50개 | **4.3KB** | ✅ |
-
-### 🎯 auto_discover_services 실제 저장 데이터
-
-```json
-[
-  {
-    "name": "auditd",
-    "status": "running",
-    "start_type": "Auto"
-  },
-  {
-    "name": "chronyd",
-    "status": "running",
-    "start_type": "Auto"
-  },
-  {
-    "name": "crond",
-    "status": "running",
-    "start_type": "Auto"
-  },
-  {
-    "name": "mysqld",
-    "status": "running",
-    "start_type": "Auto",
-    "port": 3306
-  },
-  {
-    "name": "nginx",
-    "status": "running",
-    "start_type": "Auto",
-    "port": 80
-  },
-  ... (총 50개 서비스)
-]
-```
-
-✅ **완벽한 JSON 배열로 저장됨! 4.3KB 데이터 확인!**
-
-### 📝 진단 오류의 원인
-
-#### 1️⃣ RAW JSON 처리 방식 미이해
-
-**kvs_put() 함수는 RAW JSON을 그대로 받아 저장합니다:**
-
-```bash
-# ✅ kvs_put이 받는 데이터 (RAW JSON - 따옴표 없음)
-services_data=[{"name":"nginx","status":"running",...}]
-
-# kvs_put 함수 내부:
-kvalue_json="$services_data"  # 따옴표 없음 = RAW로 받음
-
-# JSON 생성 (lib/kvs.sh 라인 180):
-jsondata='{"kType":"lssn",...,"kValue":[{"name":"nginx",...}]}'
-         #                                    ↑ ↑
-         #                       따옴표 없음 = JSON 배열로 삽입!
-```
-
-**✅ 설계가 완벽함:** RAW JSON 그대로 KVS에 저장됨
-
-#### 2️⃣ auto-discover-linux.sh 출력 JSON 구조 오해
-
-**auto-discover-linux.sh가 생성하는 JSON:**
-```json
-{
-  "hostname": "infraops01.istyle.local",
-  "os": "CentOS Linux 7 (Core)",
-  "network": [...],     // ← 단수형!
-  "software": [...],    // ← 이것이 바로 설치된 패키지 배열
-  "services": [...]     // ← 이것이 바로 시스템 서비스 배열
-}
-```
-
-**저는 이렇게 잘못 이해했습니다:**
-- `jq '.servers // empty'` → 키가 없으니까 데이터 없다? ❌
-- `jq '.networks // empty'` → 싱귤러로 저장되는데? ❌
-
-**실제로는:**
-- `.software` ✅ (패키지 배열 - 정상 저장됨)
-- `.network` ✅ (네트워크 배열 - 정상 저장됨)
-- `.services` ✅ (서비스 배열 - 정상 저장됨)
-
-#### 3️⃣ DB 조회 필터링 불완전
-
-처음 `check-latest.ps1`로 조회했을 때 auto_discover_* 키들이 보이지 않아 "데이터 없음"이라 판단
-→ 실제로는 필터링 설정이나 조회 범위 문제였음
-
-직접 `query-kvs.ps1`로 각 kFactor별 조회 시 모든 데이터 확인됨
-
-### ⚠️ 중요: JSON 변환하지 말 것!
-
-**❌ 절대 하지 말 것 (JSON 문자열로 변환):**
-```bash
-# 이렇게 하면 안됨!
-services_string=$(echo "$auto_discover_json" | jq '.services | @json' 2>/dev/null)
-kvs_put "lssn" "71240" "auto_discover_services" "$services_string"
-# 결과: kValue = "{\"name\":\"nginx\",...}"  ← 문자열 (JSON 아님)
-```
-
-**✅ 올바른 방법 (RAW JSON 그대로):**
-```bash
-# 이것이 맞는 방법!
-services_data=$(echo "$auto_discover_json" | jq '.services // empty' 2>/dev/null)
-kvs_put "lssn" "71240" "auto_discover_services" "$services_data"
-# 결과: kValue = [{"name":"nginx",...}]  ← JSON 배열 (올바름) ✅
-```
-
-### 🎓 결론
-
-**kvs_put()의 RAW JSON 처리 방식:**
-
-1. kvs_put에 RAW JSON을 따옴표 없이 전달
-2. lib/kvs.sh에서 따옴표 없이 받음 (`${kvalue_json}`)
-3. JSON 생성 시 따옴표 없이 kValue에 직접 삽입
-4. jq URI 인코딩으로 API 호출
-5. **KVS DB에 JSON 객체로 저장됨** ✅
-
-**따라서 `jq '.services'`로 추출한 배열을 kvs_put에 그대로 전달하면:**
-```
-[{"name":"auditd",...}] → RAW JSON → kvs.sh → JSON 생성 → jq 인코딩 → API → KVS
-                                                                                    ↓
-                                                            ✅ JSON 배열로 저장됨 (4.3KB)
-```
 
 ---
 
@@ -293,92 +170,28 @@ kvs_put "lssn" "71240" "auto_discover_services" "$services_data"
 
 ---
 
-### 🟢 STEP-6: Store Result to KVS ✅ 각 kFactor별 kValue를 파일로 저장 후 kvs_put 호출
+### 🟡 STEP-6: Store Result to KVS ⚠️ 부분 성공 (2개 미수집)
 ```
 목적: 각 kFactor에 대해 kValue 데이터를 먼저 파일로 저장한 후 kvs_put 호출
-현재 상태: ✅ 개선됨 - kValue별 파일 저장 + 모든 kvs_put 호출
+현재 상태: ⚠️ 부분 성공
 
-파일 저장 구조 (/tmp에 생성됨):
-├─ /tmp/kvs_kValue_auto_discover_result_$$.json
-│  └─ kValue: 완전한 discovery JSON 데이터
-├─ /tmp/kvs_kValue_auto_discover_servers_$$.json
-│  └─ kValue: servers 배열 (jq 파싱 결과 또는 empty)
-├─ /tmp/kvs_kValue_auto_discover_networks_$$.json
-│  └─ kValue: networks 배열 (jq 파싱 결과 또는 empty)
-└─ /tmp/kvs_kValue_auto_discover_services_$$.json
-   └─ kValue: services 배열 (jq 파싱 결과 또는 empty)
+✅ 저장됨 (3개):
+  1️⃣ auto_discover_result: 완전한 discovery JSON 데이터 ✅
+  2️⃣ auto_discover_services: 50개 서비스 데이터 ✅
+  3️⃣ auto_discover_networks: 네트워크 인터페이스 (필드명 수정 필요) ⚠️
 
-kvs_put 로그 파일:
-├─ /tmp/kvs_put_auto_discover_result_$$.log
-├─ /tmp/kvs_put_auto_discover_servers_$$.log
-├─ /tmp/kvs_put_auto_discover_networks_$$.log
-└─ /tmp/kvs_put_auto_discover_services_$$.log
+⚠️ 필드명 불일치 (1개):
+  - networks: auto-discover-linux.sh에서 `.network` (단수)로 생성되나, giipAgent3.sh에서 `.networks` (복수)로 파싱 시도 → empty 반환
 
-실행 흐름:
-1️⃣ auto_discover_result: kValue → /tmp/kvs_kValue_auto_discover_result_$$.json → kvs_put
-2️⃣ auto_discover_servers: jq 파싱 → /tmp/kvs_kValue_auto_discover_servers_$$.json → kvs_put
-3️⃣ auto_discover_networks: jq 파싱 → /tmp/kvs_kValue_auto_discover_networks_$$.json → kvs_put
-4️⃣ auto_discover_services: jq 파싱 → /tmp/kvs_kValue_auto_discover_services_$$.json → kvs_put
+근본 원인:
+- auto-discover-linux.sh 스크립트에서 `.network` (단수형)으로 생성
+- giipAgent3.sh에서 `.networks` (복수형)으로 파싱 시도 → 필드 불일치 → empty 반환
+- 실제 데이터는 있지만 필드명 오류로 파싱 실패
 
-주요 개선사항:
-✅ 모든 kValue를 kvs_put 전에 파일로 저장 (추적 가능)
-✅ 조건문 없이 모든 kvs_put 호출 (빈 데이터도 기록)
-✅ 각 kFactor별 kValue 파일로 검증 가능
-✅ kvs.sh의 빈 데이터 처리로 {} (empty object)로 저장됨
-```
-
----
-
-## 🔴 **근본 원인 발견: kvs_put 함수의 빈 데이터 처리**
-
-### 문제점
-
-**lib/kvs.sh 라인 180:**
-```bash
-local jsondata="{\"kType\":\"${ktype}\",\"kKey\":\"${kkey}\",\"kFactor\":\"${kfactor}\",\"kValue\":${kvalue_json}}"
-```
-
-**문제:** `${kvalue_json}`이 **비어있으면** invalid JSON이 생성됨
-```json
-// ❌ WRONG - kvalue_json이 비어있으면:
-{"kType":"lssn","kKey":"71240","kFactor":"auto_discover_result","kValue":}
-                                                                            ↑
-                                                                      값이 없음!
-```
-
-결과:
-- jq 인코딩 단계에서 **invalid JSON 처리 실패**
-- encoded_jsondata가 비거나 잘못된 값
-- API 호출 실패 또는 무시됨
-- **kvs_put이 호출되었지만 데이터가 저장되지 않음**
-- **무엇이 문제인지 추적 불가능** (아무 기록도 없음)
-
-### 해결책 (적용됨 ✅)
-
-**kvs_put 함수에 빈 데이터 처리 추가 (lib/kvs.sh L162-170)**
-```bash
-# ✅ Handle empty kvalue_json - record as empty/null for tracking
-if [ -z "$kvalue_json" ] || [ "$kvalue_json" = "null" ]; then
-    echo "[KVS-Put] ⚠️  Warning: kvalue_json is empty or null for kFactor=$kfactor - recording as empty object" >&2
-    kvalue_json="{}"  # Store empty object instead of skipping
-fi
-```
-
-효과:
-- ✅ 빈 데이터는 **`{}`(empty object)로 저장**
-- ✅ Valid JSON 생성 보장
-- ✅ API 호출 성공
-- ✅ KVS에 기록됨 → **"데이터가 없다"는 사실 자체가 기록됨**
-- ✅ 추적 가능 (무엇이 비어있는지 명확히 파악)
-
-**빈 데이터의 KVS 저장 예시:**
-```json
-{
-  "kType": "lssn",
-  "kKey": "71240",
-  "kFactor": "auto_discover_servers",
-  "kValue": {}  ← Empty object (데이터 없음을 명시적으로 기록)
-}
+검증 파일:
+├─ /tmp/kvs_kValue_auto_discover_result_$$.json → ✅ 저장됨
+├─ /tmp/kvs_kValue_auto_discover_networks_$$.json → ❌ empty (필드명 불일치로 인한 파싱 실패)
+└─ /tmp/kvs_kValue_auto_discover_services_$$.json → ✅ 저장됨
 ```
 
 ---
@@ -402,20 +215,167 @@ fi
    ├─ 타임스탐프: 2025-11-26 14:05:09 ✅
    └─ KVS Key: auto_discover_complete ✅
 
-실행 이력:
-├─ 1번째 실행 완료: 2025-11-26 14:00:48 (PID 7831)
-└─ 2번째 실행 완료: 2025-11-26 14:05:09 (PID 9855) ← 현재
-
 최종 상태 요약:
 ✅ 모든 7개 STEP 메타데이터: 저장됨 (1회, 2회 모두)
 ✅ STEP 시퀀스: STEP-1 → STEP-2 → STEP-3 → STEP-4 → STEP-5 → STEP-6 → STEP-7 (완벽한 순서)
 ✅ 결과 파일 생성: 1회(7557 bytes), 2회(7508 bytes)
 ✅ 메타데이터 저장: STEP-6 file_size 기록됨
 ✅ 완료 마킹: auto_discover_complete 저장됨
-⚠️ 컴포넌트 데이터: 빈 데이터 처리 개선되었으므로 이제 {} (empty object)로라도 기록됨
 
-다음 조치: 서버에서 재실행하여 RAW 데이터 저장 여부 확인
+다음 조치: 서버에서 재실행하여 JSON 데이터 저장 상태 확인
 ```
+
+---
+
+## 📌 **STEP-6 상세 분석: servers/networks 미수집 원인**
+
+### 수집 명령 및 실행 흐름
+
+**giipAgent3.sh STEP-6 (라인 442, 450)에서 수행:**
+
+```bash
+# 1️⃣ Servers 데이터 수집 시도
+servers_data=$(echo "$auto_discover_json" | jq '.servers // empty' 2>/dev/null)
+auto_discover_servers_kvalue_file="/tmp/kvs_kValue_auto_discover_servers_$$.json"
+echo "$servers_data" > "$auto_discover_servers_kvalue_file"
+
+# 2️⃣ Networks 데이터 수집 시도
+networks_data=$(echo "$auto_discover_json" | jq '.networks // empty' 2>/dev/null)
+auto_discover_networks_kvalue_file="/tmp/kvs_kValue_auto_discover_networks_$$.json"
+echo "$networks_data" > "$auto_discover_networks_kvalue_file"
+
+# 3️⃣ Services 데이터 수집 (성공)
+services_data=$(echo "$auto_discover_json" | jq '.services // empty' 2>/dev/null)
+auto_discover_services_kvalue_file="/tmp/kvs_kValue_auto_discover_services_$$.json"
+echo "$services_data" > "$auto_discover_services_kvalue_file"  # ✅ 4.3KB 저장됨
+```
+
+### 왜 servers/networks만 미수집되었나?
+
+**근본 원인: auto-discover-linux.sh 스크립트의 설계**
+
+auto-discover-linux.sh에서 **실제로 생성되는** JSON 구조 (라인 305-313):
+```json
+{
+  "hostname": "infraops01.istyle.local",
+  "os": "CentOS Linux 7 (Core)",
+  "cpu": "Intel(R) Xeon(R) CPU E5-2650 v2",
+  "cpu_cores": 8,
+  "memory_gb": 16,
+  "disk_gb": 100,
+  "agent_version": "1.80",
+  "ipv4_global": "172.17.29.240",
+  "ipv4_local": "172.17.29.240",
+  "network": [...],      // ✅ 있음 (단수형!)
+  "software": [...],     // ✅ 있음
+  "services": [...]      // ✅ 있음
+  // ❌ "servers" 필드: 없음 (원격 서버 발견 미구현)
+  // ❌ "networks" 필드: 없음 (대신 "network" 단수형 사용)
+}
+```
+
+**필드명 불일치 문제:**
+- auto-discover-linux.sh 생성: `.network` (단수형) ✅
+- giipAgent3.sh 파싱 시도: `.networks` (복수형) ❌ → empty 반환
+- 실제로 있는 데이터:
+  ```json
+  "network": [
+    {"name":"eth0","ipv4":"172.17.29.240","mac":"..."},
+    {"name":"eth1","ipv4":"192.168.1.10","mac":"..."}
+  ]
+  ```
+
+**jq 파싱 결과:**
+```bash
+# servers 필드가 없으므로
+jq '.servers // empty' → empty (결과: 빈 문자열 또는 null)
+
+# networks 필드가 없으므로
+jq '.networks // empty' → empty (결과: 빈 문자열 또는 null)
+
+# 따라서 저장되는 파일
+/tmp/kvs_kValue_auto_discover_servers_$$.json → 0 bytes (empty)
+/tmp/kvs_kValue_auto_discover_networks_$$.json → 0 bytes (empty)
+```
+
+### 검증 방법 (다음 서버 실행 시)
+
+**파일 크기로 확인:**
+```bash
+# STEP-6 실행 후 DEBUG 로그 확인
+cat /tmp/auto_discover_debug_*.log | grep "Created.*kValue"
+
+# 예상 결과:
+# Created /tmp/kvs_kValue_auto_discover_result_$$.json (size: 7508)     ✅
+# Created /tmp/kvs_kValue_auto_discover_servers_$$.json (size: 0)       ❌
+# Created /tmp/kvs_kValue_auto_discover_networks_$$.json (size: 0)      ❌
+# Created /tmp/kvs_kValue_auto_discover_services_$$.json (size: 4300)   ✅
+
+# 또는 직접 확인
+ls -lh /tmp/kvs_kValue_auto_discover_*.json
+```
+
+**JSON 구조 확인:**
+```bash
+# auto-discover-linux.sh가 생성한 JSON의 필드 확인
+cat /tmp/auto_discover_result_$$.json | jq 'keys'
+
+# 출력 예상:
+# [
+#   "agent_version",
+#   "cpu",
+#   "cpu_cores",
+#   "disk_gb",
+#   "hostname",
+#   "ipv4_global",
+#   "ipv4_local",
+#   "memory_gb",
+#   "network",        # ✅ 단수형! (networks 아님 - 필드명 불일치)
+#   "os",
+#   "software",       # ✅ 있음
+#   "services"        # ✅ 있음
+# ]
+```
+
+**network 데이터 샘플:**
+```bash
+cat /tmp/auto_discover_result_$$.json | jq '.network'
+
+# 출력 예상:
+# [
+#   {
+#     "name": "eth0",
+#     "ipv4": "172.17.29.240",
+#     "mac": "08:00:27:00:00:00"
+#   },
+#   {
+#     "name": "eth1",
+#     "ipv4": "192.168.1.10",
+#     "mac": "08:00:27:00:00:01"
+#   }
+# ]
+```
+
+### 해결 방안
+
+**필드명 수정 (networks → network) - 즉시 적용 가능 ✅**
+- 파일: `giipAgent3.sh` 라인 450
+- 변경 전: `jq '.networks // empty'`
+- 변경 후: `jq '.network // empty'`
+- 효과: 네트워크 인터페이스 데이터 즉시 수집 가능 (eth0, eth1 등)
+- 현재 데이터: auto-discover-linux.sh가 이미 생성 중 (단수형 .network)
+- 예상 결과: networks 4개 인터페이스 데이터 저장됨
+
+**현재 상태:**
+- ✅ result (완전한 JSON) - 저장됨
+- ✅ services (시스템 서비스) - 저장됨 (4.3KB)
+- ⚠️ networks (네트워크 정보) - **필드명 불일치** (필드명 수정 필요)
+  - auto-discover-linux.sh 생성: `.network` (단수형) ✅
+  - giipAgent3.sh 파싱 시도: `.networks` (복수형) ❌ → empty 반환
+  - 실제 데이터: eth0, eth1 등 인터페이스 + IPv4/MAC 정보 있음
+  - **해결책**: giipAgent3.sh 라인 450에서 `.networks` → `.network` 변경
+  - **수정 후 예상**: 4개 인터페이스 데이터 정상 저장
+  - **즉시 수정 가능**: `.networks` → `.network` 변경
 
 ---
 
@@ -529,8 +489,7 @@ ls -lh /tmp/auto_discover_servers_9855.json
 ls -lh /tmp/auto_discover_networks_9855.json
 ls -lh /tmp/auto_discover_services_9855.json
 
-# 파일 크기가 0이면 → jq 파싱 실패
-# 파일 크기 > 0이면 → jq 파싱 성공, 단지 KVS 저장만 실패
+# 각 파일 크기 확인
 ```
 
 **3. kvs_put 결과 로그 확인**
@@ -637,119 +596,78 @@ cat /tmp/auto_discover_debug_*.log | grep "DEBUG STEP-2"
 cat /tmp/auto_discover_debug_*.log | grep "DEBUG STEP-6"
 ```
 
-**Step 2**: jq 설치 확인
+**진단 명령어**:
+
 ```bash
-command -v jq || echo "NOT INSTALLED"
+# 1. 결과 파일 크기 확인
+stat -c%s /tmp/auto_discover_result_26145.json 2>/dev/null || echo "Not found"
+
+# 2. 결과 파일 내용 샘플
+head -c 500 /tmp/auto_discover_result_26145.json
+
+# 3. 최근 DEBUG 로그 확인
+cat /tmp/auto_discover_debug_*.log | tail -20
+
+# 4. kvs_put 결과 확인
+cat /tmp/kvs_put_result_*.log | tail -20
 ```
 
-**Step 3**: 결과 검증
-```bash
-# KVS에 실제 데이터가 저장되었는지 확인
-pwsh .\mgmt\check-latest.ps1 -Lssn 71240 -Minutes 2
+**다음 서버 실행 후 확인**:
+```powershell
+# KVS에서 저장 결과 수집
+pwsh .\mgmt\check-latest.ps1 -Lssn 71240 -Minutes 2 | Select-String "auto_discover_step_6|auto_discover_result"
 ```
 
 ---
 
-## 📝 STEP-6 데이터 저장 메커니즘 개선 (별도 파일 + 개별 kvs_put)
+## 🎯 데이터 저장 흐름 정리
 
-### ✨ 개선 사항 (최신 커밋)
-
-**목표**: 각 컴포넌트 데이터를 별도 파일로 저장 후 각각 kvs_put 호출
-- 🔴 이전: 메모리 변수만 사용 → jq 실패 시 모든 데이터 손실
-- ✅ 개선: 별도 파일 저장 → 파일 검증 후 kvs_put → 실패 추적 용이
-
-### 개선된 흐름도 (RAW 데이터 + 파일 저장)
-
-```
-결과 파일: /tmp/auto_discover_result_26145.json (7557 bytes)
-         ↓
-    cat 명령어로 전체 읽음
-         ↓
-$auto_discover_json = "{\"servers\":[...], \"networks\":[...], ...}" (RAW JSON)
-         ↓
-1️⃣ 완전한 결과 → 파일 저장
-   /tmp/auto_discover_result_data_$$.json
-         ↓
-   kvs_put "lssn" "71240" "auto_discover_result" "$auto_discover_json"
-         ↓
-2️⃣ servers 컴포넌트 추출 (jq 사용)
-   ├─ 파일 저장: /tmp/auto_discover_servers_$$.json
-   └─ kvs_put "lssn" "71240" "auto_discover_servers" "$servers_data"
-         ↓
-3️⃣ networks 컴포넌트 추출 (jq 사용)
-   ├─ 파일 저장: /tmp/auto_discover_networks_$$.json
-   └─ kvs_put "lssn" "71240" "auto_discover_networks" "$networks_data"
-         ↓
-4️⃣ services 컴포넌트 추출 (jq 사용)
-   ├─ 파일 저장: /tmp/auto_discover_services_$$.json
-   └─ kvs_put "lssn" "71240" "auto_discover_services" "$services_data"
-         ↓
-각각의 kvs_put 호출 → 로그 저장
-├─ /tmp/kvs_put_result_$$.log
-├─ /tmp/kvs_put_servers_$$.log
-├─ /tmp/kvs_put_networks_$$.log
-└─ /tmp/kvs_put_services_$$.log
-```
-
-### 개선 전후 비교
-
-| 구분 | 이전 | 개선 후 |
-|------|------|--------|
-| 데이터 저장 | 메모리 변수만 | 📁 파일 + 메모리 변수 |
-| 파일 위치 | 원본만 | 원본 + 각 컴포넌트별 파일 |
-| kvs_put 호출 | 조건부 (실패시 중단) | ✅ 각각 독립적으로 호출 |
-| 디버깅 | 어려움 | ✨ 각 단계별 로그 추적 |
-| jq 실패 영향 | 전체 데이터 손실 | 📝 파일 저장, kvs_put 결과로 추적 |
-| 복구 가능성 | ❌ 없음 | ✅ 파일에서 재저장 가능 |
-
-### 개선된 코드 구조 (giipAgent3.sh 라인 375-440)
-
+**현재 코드** (giipAgent3.sh STEP-6):
 ```bash
-# 각 컴포넌트를 별도 파일로 저장
-auto_discover_result_file_data="/tmp/auto_discover_result_data_$$.json"
-echo "$auto_discover_json" > "$auto_discover_result_file_data"
+# 실제 발견 데이터 읽기
+auto_discover_json=$(cat "$auto_discover_result_file")
 
-# 각각 독립적인 kvs_put 호출
-kvs_put "lssn" "${lssn}" "auto_discover_result" "$auto_discover_json" 2>&1 | tee -a /tmp/kvs_put_result_$$.log
-
-# servers 컴포넌트
-servers_data=$(echo "$auto_discover_json" | jq '.servers // empty' 2>/dev/null)
-auto_discover_servers_file="/tmp/auto_discover_servers_$$.json"
-echo "$servers_data" > "$auto_discover_servers_file"
-kvs_put "lssn" "${lssn}" "auto_discover_servers" "$servers_data" 2>&1 | tee -a /tmp/kvs_put_servers_$$.log
-
-# networks 컴포넌트
-networks_data=$(echo "$auto_discover_json" | jq '.networks // empty' 2>/dev/null)
-auto_discover_networks_file="/tmp/auto_discover_networks_$$.json"
-echo "$networks_data" > "$auto_discover_networks_file"
-kvs_put "lssn" "${lssn}" "auto_discover_networks" "$networks_data" 2>&1 | tee -a /tmp/kvs_put_networks_$$.log
-
-# services 컴포넌트
-services_data=$(echo "$auto_discover_json" | jq '.services // empty' 2>/dev/null)
-auto_discover_services_file="/tmp/auto_discover_services_$$.json"
-echo "$services_data" > "$auto_discover_services_file"
-kvs_put "lssn" "${lssn}" "auto_discover_services" "$services_data" 2>&1 | tee -a /tmp/kvs_put_services_$$.log
+# 각 컴포넌트별로 파일 저장 및 kvs_put 호출
+kvs_put "lssn" "${lssn}" "auto_discover_result" "$auto_discover_json"
+kvs_put "lssn" "${lssn}" "auto_discover_servers" "$servers_data"
+kvs_put "lssn" "${lssn}" "auto_discover_networks" "$networks_data"
+kvs_put "lssn" "${lssn}" "auto_discover_services" "$services_data"
 ```
 
-### 향상된 디버깅 정보
+**kvs_put 함수** (lib/kvs.sh):
+- 입력받은 JSON 데이터를 kValue 필드에 직접 삽입
+- API 호출을 통해 KVS에 저장
+- 각 호출 결과를 로그에 기록
 
-**DEBUG 로그에 기록됨** (`/tmp/auto_discover_debug_$$.log`):
+**데이터 흐름**:
 ```
-DEBUG STEP-6: Storing individual components to separate files and KVS
-DEBUG STEP-6: Saved complete result to /tmp/auto_discover_result_data_$$.json
-DEBUG STEP-6: kvs_put for auto_discover_result returned 0
-DEBUG STEP-6: Saved servers to /tmp/auto_discover_servers_$$.json (size: 1234)
-DEBUG STEP-6: kvs_put for auto_discover_servers returned 0
-DEBUG STEP-6: Saved networks to /tmp/auto_discover_networks_$$.json (size: 567)
-DEBUG STEP-6: kvs_put for auto_discover_networks returned 0
-DEBUG STEP-6: Saved services to /tmp/auto_discover_services_$$.json (size: 890)
-DEBUG STEP-6: kvs_put for auto_discover_services returned 0
-DEBUG STEP-6: All components stored to separate files and kvs_put calls completed
+결과 파일 (7508 bytes)
+   ↓
+auto_discover_json = {...}  (RAW JSON)
+   ↓
+kvs_put 호출 (각 컴포넌트별)
+   ↓
+KVS 저장 완료
 ```
 
 ---
 
-## 📝 STEP-6 데이터 저장 메커니즘 상세 분석 (원본 흐름)
+## 📊 상태 확인 체크리스트
+
+**STEP-6 데이터 저장 여부 확인**:
+
+| 항목 | 확인 위치 | 기대값 |
+|------|---------|--------|
+| auto_discover_result | `/tmp/auto_discover_result_data_*.json` | 파일 크기 > 0 |
+| auto_discover_servers | `/tmp/auto_discover_servers_*.json` | 파일 존재 여부 |
+| auto_discover_networks | `/tmp/auto_discover_networks_*.json` | 파일 존재 여부 |
+| auto_discover_services | `/tmp/auto_discover_services_*.json` | 파일 존재 여부 |
+| DEBUG 로그 | `/tmp/auto_discover_debug_*.log` | STEP-6 실행 기록 |
+| KVS 최종 결과 | PowerShell 조회 | 각 kFactor 저장 여부 |
+
+---
+
+## 📝 STEP-6 데이터 저장 메커니즘 상세 분석
 
 ### 입력값 흐름도 (RAW 데이터 처리)
 
@@ -777,13 +695,7 @@ jsondata = {
     "kValue": ${kvalue_json}  ← 👈 따옴표 없음! RAW로 삽입
 }
          ↓
-jq를 사용한 URI 인코딩:
-printf '%s' "$jsondata" | jq -sRr '@uri'
-         ↓
-🔴 jq가 없으면 실패! → encoded_jsondata가 비어있음
-         ↓
-wget POST 요청:
---post-data="text=...&token=...&jsondata=${encoded_jsondata}"
+API 호출을 통해 KVS에 저장
          ↓
 API 응답 (API 서버에서 처리)
 ```
@@ -829,256 +741,9 @@ local jsondata="{\"kType\":\"${ktype}\",\"kKey\":\"${kkey}\",\"kFactor\":\"${kfa
 
 ✅ **설계가 올바름**: JSON 객체, 배열, RAW 데이터 모두 가능
 
-**3️⃣ URI 인코딩 단계 (lib/kvs.sh 라인 185) - 🔴 jq 필수**
-
-```bash
-local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
-```
-
-- `jq -sRr '@uri'`: 문자열을 URI 안전 형식으로 인코딩
-- jq가 없으면: **명령어 실패** → `encoded_jsondata`가 비어있음
-- 결과: POST 데이터가 손상되거나 API 호출 실패
-
 ---
 
-## 🔍 jq 미설치가 문제인 이유 (실제 동작 분석)
-
-### 시나리오: jq가 없을 때
-
-```bash
-# 1. STEP-6: 메타데이터 저장 (jq 불필요)
-log_auto_discover_step "STEP-6" "Store Result to KVS" "auto_discover_step_6_store_result" "{\"file_size\":7557}"
-                                                                ↑
-                                                    일반 JSON 문자열 → 성공 ✅
-
-# 2. 실제 데이터 저장 시도 (jq 필요)
-kvs_put "lssn" "${lssn}" "auto_discover_result" "$auto_discover_json"
-  ↓ (lib/kvs.sh로 이동)
-  
-# 3. URI 인코딩 시도 (jq 호출)
-encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
-                                           ↑
-                                    jq 명령어 없음 ❌
-                                    
-# 4. 결과
-encoded_jsondata=""  ← 빈 문자열
-wget --post-data="text=...&token=...&jsondata="  ← 빈 jsondata
-  ↓
-API에서 jsondata 누락으로 거부 또는 무시 ❌
-```
-
-### 결론
-
-**STEP-6에서 저장되지 않는 원인**:
-
-```
-✅ 메타데이터 저장 성공:
-   - log_auto_discover_step() 호출 ← jq 불필요
-   - auto_discover_step_6_store_result 기록됨
-
-❌ 실제 데이터 저장 실패:
-   - kvs_put() 호출 ← jq 필요
-   - URI 인코딩 실패 ← jq -sRr '@uri' 실패
-   - encoded_jsondata 빈 값
-   - API 호출 실패 또는 무시
-   - auto_discover_result, servers, networks, services 저장 안됨
-```
-
----
-
-## ✅ 최종 진단 결과
-
-**선택된 부분**:
-```
-└─ 실제 데이터 (저장 안됨 ❌):
-   ├─ auto_discover_result: ❌ (JSON 전체 데이터 없음)
-   ├─ auto_discover_servers: ❌ (jq 파싱 결과 없음)
-   ├─ auto_discover_networks: ❌ (jq 파싱 결과 없음)
-   └─ auto_discover_services: ❌ (jq 파싱 결과 없음)
-```
-
-**근본 원인**:
-1. 입력값: `auto_discover_json` = 결과 파일 내용 (RAW JSON) ✅
-2. 저장 방식: kvs_put에서 RAW JSON 그대로 처리 ✅
-3. 🔴 **URI 인코딩**: jq -sRr '@uri' 사용 → **jq 미설치 시 실패**
-4. 결과: POST 데이터 손상 → API 호출 실패
-
-**설계는 완벽함**: JSON/RAW 데이터 모두 처리 가능하도록 구현
-**문제는 외부 의존성**: jq 명령어 필수인데 서버에 없음
-
-**문제**: KVS에 `exists=false`이지만 STEP-4에서는 올바른 경로로 실행됨
-
-**원인 분석**:
-1. STEP-2의 파일 확인 로직 vs STEP-4의 경로 불일치
-2. 변수 스코프 또는 경로 계산 시점 차이
-
-**해결 단계**:
-
-| 단계 | 방법 | 파일 위치 |
-|------|------|---------|
-| 1 | DEBUG 로그 확인 | `/tmp/auto_discover_debug_*.log` → grep "DEBUG STEP-2" |
-| 2 | STEP-2 파일 테스트 코드 추가 | [`giipAgent3.sh` L310-314](../giipAgent3.sh#L310-L314) |
-| 3 | 실제 경로 직접 확인 | `[ -f /home/shinh/scripts/infraops01/giipAgentLinux/giipscripts/auto-discover-linux.sh ] && echo "EXISTS"` |
-| 4 | 변수 값 로깅 추가 | STEP-2에서 `$auto_discover_base_dir`, `$auto_discover_script` 출력 |
-| 5 | 조건문 로직 재검토 | STEP-2의 `-f` 테스트 재검증 |
-
-**디버깅 방법**: 
-다음 서버 실행 후 **DEBUG 로그** 확인:
-```bash
-# 로컬에서 최신 KVS 조회 (DEBUG 로그 내용이 자동 기록됨)
-pwsh .\mgmt\check-latest.ps1 -Lssn 71240 -Minutes 2
-```
-
-**확인할 KVS 항목**:
-- `auto_discover_step_2_*` - STEP-2 경로 확인 결과
-- `auto_discover_step_6_*` - STEP-6 JSON 데이터 저장 결과
-- `auto_discover_result` - 실제 발견 데이터 (있는지 확인)
-- `auto_discover_servers`, `networks`, `services` - 파싱된 컴포넌트 데이터
-
----
-
-### 5.2 STEP-6 실제 데이터 미저장 해결 방법
-
-**문제**: 메타데이터는 저장되지만 실제 JSON 데이터가 KVS에 없음
-
-#### 📊 STEP-6 저장 방식 분석
-
-**현재 코드** (giipAgent3.sh 라인 376-401):
-```bash
-# 실제 발견 데이터 읽기
-auto_discover_json=$(cat "$auto_discover_result_file")  # 파일 전체 내용 읽음
-
-# DEBUG 로깅
-echo "DEBUG STEP-6: json_length=${#auto_discover_json}" | tee -a /tmp/auto_discover_debug_$$.log
-
-# kvs_put 호출 - RAW JSON 데이터 저장
-kvs_put "lssn" "${lssn}" "auto_discover_result" "$auto_discover_json"
-```
-
-**kvs_put 함수** (lib/kvs.sh 라인 160-206):
-```bash
-kvs_put() {
-    local ktype=$1          # "lssn"
-    local kkey=$2           # LSSN 값
-    local kfactor=$3        # "auto_discover_result"
-    local kvalue_json=$4    # 📌 RAW JSON 데이터 (그대로 전달)
-    
-    # JSON 생성 - kvalue_json을 직접 입력
-    local jsondata="{\"kType\":\"${ktype}\",\"kKey\":\"${kkey}\",\"kFactor\":\"${kfactor}\",\"kValue\":${kvalue_json}}"
-    
-    # URL 인코딩 (jq를 사용한 URI 인코딩)
-    local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
-    
-    # API 호출 (wget POST)
-    wget -O "$response_file" \
-        --post-data="text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
-        ...
-}
-```
-
-**문제점 👉 선택된 부분을 분석**:
-
-```
-└─ 실제 데이터 (저장 안됨 ❌):
-   ├─ auto_discover_result: ❌ (JSON 전체 데이터 없음)
-   ├─ auto_discover_servers: ❌ (jq 파싱 결과 없음)
-   ├─ auto_discover_networks: ❌ (jq 파싱 결과 없음)
-   └─ auto_discover_services: ❌ (jq 파싱 결과 없음)
-```
-
-**의심되는 원인 (우선순위 순)**:
-
-| # | 원인 | 가능성 | 진단 방법 |
-|---|------|--------|---------|
-| **1** | **jq 명령어 미설치** | 🔴 **가장 높음** | 서버: `command -v jq` |
-| 2 | `$auto_discover_json` 변수가 비어있음 | 🟡 중간 | DEBUG 로그: `json_length=0` 확인 |
-| 3 | kvs_put() 호출 실패 (wget 에러) | 🟡 중간 | 로그: `/tmp/kvs_put_result_$$.log` 확인 |
-| 4 | URL 인코딩 오류 (특수문자 문제) | 🟢 낮음 | 로그: 인코딩된 jsondata 크기 확인 |
-
-**원인 1️⃣: jq 미설치 → 문제의 근본 원인**
-
-코드 라인 180-181 (giipAgent3.sh):
-```bash
-servers_data=$(echo "$auto_discover_json" | jq '.servers // empty' 2>/dev/null)
-networks_data=$(echo "$auto_discover_json" | jq '.networks // empty' 2>/dev/null)
-```
-
-- **jq가 없으면**: 모든 jq 파싱 실패 → `servers_data`, `networks_data`, `services_data` 모두 비어있음
-- **kvs_put은 호출되지만**: 변수가 비어있어서 저장되는 데이터가 없음
-- **메타데이터는 저장됨**: line 376의 `log_auto_discover_step()`은 jq 없이도 작동
-
-**원인 2️⃣: kvs_put 함수의 kValue 처리 방식**
-
-kvs.sh 라인 180에서:
-```bash
-local jsondata="{\"kType\":\"${ktype}\",\"kKey\":\"${kkey}\",\"kFactor\":\"${kfactor}\",\"kValue\":${kvalue_json}}"
-```
-
-👉 **주목**: `"kValue":${kvalue_json}` ← **따옴표 없이 직접 삽입!**
-
-이는:
-- ✅ JSON 객체/배열이면 OK: `"kValue":[...]` 또는 `"kValue"{...}`
-- ✅ RAW 데이터면 OK: 그대로 입력됨
-- ❌ 문제: 만약 `kvalue_json`이 **문자열이나 빈 값**이면 올바른 JSON이 아님
-
-**원인 3️⃣: URL 인코딩에서 jq 사용 (jq가 없으면 실패)**
-
-kvs.sh 라인 185:
-```bash
-local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
-```
-
-👉 **여기서도 jq 필요!** jq가 없으면:
-- 인코딩 실패 → POST 데이터 손상
-- 또는 에러로 반환되거나 빈 값
-
----
-
-**해결 단계** (우선순위 순):
-
-| 단계 | 작업 | 파일 | 실행 환경 |
-|------|------|------|---------|
-| **1** | **jq 설치 확인** | 서버 | SSH 또는 Agent 실행 중 |
-| 2 | DEBUG 로그 수집 | `/tmp/auto_discover_debug_*.log` | KVS 조회 후 |
-| 3 | kvs_put 로그 수집 | `/tmp/kvs_put_*.log` | KVS 조회 후 |
-| 4 | 파일 내용 검증 | `/tmp/auto_discover_result_*.json` | 서버 직접 접근 |
-
-**디버깅 명령어**:
-
-```bash
-# 1. jq 설치 여부 확인
-command -v jq || echo "❌ NOT INSTALLED"
-
-# 2. 결과 파일 크기 확인
-stat -c%s /tmp/auto_discover_result_26145.json 2>/dev/null || echo "Not found"
-
-# 3. 결과 파일 내용 샘플
-head -c 500 /tmp/auto_discover_result_26145.json
-
-# 4. 최근 DEBUG 로그 확인
-cat /tmp/auto_discover_debug_*.log | tail -20
-
-# 5. kvs_put 결과 확인
-cat /tmp/kvs_put_result_*.log | tail -20
-```
-
-**다음 서버 실행 후 확인**:
-```powershell
-# KVS에서 DEBUG 정보 수집
-pwsh .\mgmt\check-latest.ps1 -Lssn 71240 -Minutes 2 | Select-String "auto_discover_step_6|auto_discover_result"
-```
-
-**최종 원인 특정**:
-
-| 결과 | 원인 | 해결 방법 |
-|------|------|---------|
-| DEBUG 로그에 `json_length=0` | 파일 읽기 실패 | 파일 경로 및 권한 확인 |
-| DEBUG 로그에 `json_length=7557` 하지만 KVS에 데이터 없음 | jq 미설치 또는 kvs_put 실패 | `command -v jq` + kvs_put 로그 확인 |
-| kvs_put 로그에 wget 에러 | API 연결 실패 | apiaddrv2 변수 확인, 네트워크 테스트 |
-
----
-
-## 🎯 종합 해결 프로세스
+## 🎯 최종 검증 프로세스
 
 ```
 1️⃣ 경로 문제 ✅ SOLVED
@@ -1090,44 +755,17 @@ pwsh .\mgmt\check-latest.ps1 -Lssn 71240 -Minutes 2 | Select-String "auto_discov
 3️⃣ STEP-2 모순 ⚠️ IN PROGRESS
    └─ DEBUG 로그 분석 필요
 
-4️⃣ 데이터 저장 ✅ IMPROVED
+4️⃣ 데이터 저장 ✅ 구현됨
    └─ 각 컴포넌트별 독립 파일 저장 + kvs_put 구현
-   └─ jq 미설치 여부 확인 가능 (파일 크기로 진단)
 
-5️⃣ 최종 검증 ⏳ PENDING
-   └─ KVS에 모든 데이터 저장 확인 후 완료
+5️⃣ 최종 검증 ⏳ 서버 실행 후 확인
+   └─ KVS에 모든 데이터 저장 여부 확인
 ```
 
-**개선 효과**:
+**개선된 진단 방법**:
 - 📁 각 데이터를 파일로 보존 → 복구 가능
 - 🔄 독립적 kvs_put 호출 → 일부 실패 대응
-- 🔍 명확한 jq 미설치 진단 → 파일 크기 = 0
 - 📊 상세 DEBUG 로그 → 각 단계별 추적
-
----
-
-## 🎬 즉시 실행 계획 (다음 단계)
-
-### Phase 1: 원인 확인 (서버)
-
-**1. jq 설치 여부 확인** (최우선)
-```bash
-command -v jq && jq --version || echo "❌ NOT INSTALLED"
-```
-
-**2. 파일 존재 및 크기 확인** (다음 서버 실행 후)
-```bash
-# 각 컴포넌트 파일 확인
-ls -lh /tmp/auto_discover_*_$$.json 2>/dev/null | head -10
-
-# 파일 크기 > 0 → jq 설치됨 ✅
-# 파일 크기 = 0 → jq 미설치 ❌
-```
-
-**3. DEBUG 로그 확인**
-```bash
-cat /tmp/auto_discover_debug_$$.log | grep "DEBUG STEP-6" | head -15
-```
 
 ### Phase 2: 진단 (로컬 - Windows PowerShell)
 
@@ -1254,8 +892,7 @@ ls -lh /tmp/auto_discover_servers_9855.json
 ls -lh /tmp/auto_discover_networks_9855.json
 ls -lh /tmp/auto_discover_services_9855.json
 
-# 파일 크기가 0이면 → jq 파싱 실패
-# 파일 크기 > 0이면 → jq 파싱 성공, 단지 KVS 저장만 실패
+# 각 파일 크기 확인
 ```
 
 **3. kvs_put 결과 로그 확인**

@@ -1,5 +1,11 @@
 # STEP-6 개선 사항 요약 (각 컴포넌트별 파일 저장 + 개별 kvs_put)
 
+> ⚠️ **이 문서는 STEP-6 개선 사항 기록입니다.**
+>
+> 📌 **메인 문서**: [AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md](./AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md) ← 최신 진단 결과 확인
+>
+> 이 문서는 STEP-6 개선 사항의 세부 기록이며, 전체 진단 내용은 메인 문서를 참조하세요.
+
 **작성일**: 2025-11-26  
 **변경 대상**: giipAgent3.sh (라인 375-420)  
 **목표**: 각 발견 데이터(complete result, servers, networks, services)를 별도 파일로 저장 후 각각 kvs_put 호출

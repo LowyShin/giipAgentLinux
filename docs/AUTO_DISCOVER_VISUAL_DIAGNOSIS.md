@@ -1,5 +1,11 @@
 # Auto-Discover 문제 시각화 및 해결책
 
+> ⚠️ **이 문서는 문제 시각화 분석 기록입니다.**
+>
+> 📌 **메인 문서**: [AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md](./AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md) ← 최신 진단 결과 확인
+>
+> 이 문서는 문제를 시각화한 분석 자료이며, 최신 정보는 메인 문서를 참조하세요.
+
 **작성**: 2025-11-26  
 **기반**: KVS 실제 데이터 분석  
 **상태**: 🔴 원인 명확히 파악됨

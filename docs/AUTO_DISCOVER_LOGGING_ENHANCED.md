@@ -1,5 +1,11 @@
 # Auto-Discover 로깅 강화 (옵션 B)
 
+> ⚠️ **이 문서는 로깅 강화 구현 기록입니다.**
+>
+> 📌 **메인 문서**: [AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md](./AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md) ← 최신 진단 결과 확인
+>
+> 이 문서는 DEBUG 로깅 추가의 기술 기록이며, 전체 진단 내용은 메인 문서를 참조하세요.
+
 **작성일**: 2025-11-25  
 **목적**: auto-discover가 실행되지 않는 원인 명확히 파악  
 **상태**: ✅ 로깅 강화 완료 + DEBUG 로깅 추가 (2025-11-25)

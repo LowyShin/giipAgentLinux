@@ -1,5 +1,11 @@
 # Auto-Discovery Architecture
 
+> ⚠️ **이 문서는 아키텍처 설계 문서입니다.**
+>
+> 📌 **메인 진단 문서**: [AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md](./AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md) ← 최신 진단 결과 확인
+>
+> 이 문서는 설계 배경을 이해하기 위한 자료이며, 현재 진단 상태는 메인 문서를 참조하세요.
+
 ---
 
 ## 🔗 **문서 간 링크**

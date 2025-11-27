@@ -1,5 +1,11 @@
 # Auto-Discover 미실행 원인 진단 가이드
 
+> ⚠️ **이 문서는 초기 진단 기록입니다.**
+>
+> 📌 **메인 문서**: [AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md](./AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md) ← 최신 진단 결과 확인
+>
+> 이 문서는 초기 진단 과정의 기록이며, 최신 정보는 메인 문서를 참조하세요.
+
 **작성일**: 2025-11-23 (업데이트: 2025-11-25)  
 **상태**: auto-discover가 실행되지 않음 (KVS discovery_collection_local만 경고 상태)  
 **목표**: 로깅 강화를 통해 실제 원인 파악

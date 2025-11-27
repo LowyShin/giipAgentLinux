@@ -1,5 +1,11 @@
 # STEP-6 데이터 저장 메커니즘 상세 분석
 
+> ⚠️ **이 문서는 기술 분석 자료입니다.**
+>
+> 📌 **메인 문서**: [AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md](./AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md) ← 최신 진단 결과 확인
+>
+> 이 문서는 STEP-6의 상세 기술 분석이며, 전체 진단 내용은 메인 문서를 참조하세요.
+
 **최종 작성**: 2025-11-26  
 **분석 대상**: giipAgent3.sh 라인 360-420, lib/kvs.sh 라인 160-206  
 **결론**: ✅ 저장 메커니즘 완벽 설계 / 🔴 jq 미설치가 근본 원인

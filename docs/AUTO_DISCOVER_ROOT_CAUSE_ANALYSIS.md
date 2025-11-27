@@ -1,5 +1,11 @@
 # auto_discover KVS 미기록 원인 분석 및 진단
 
+> ⚠️ **이 문서는 분석 과정의 기록입니다.**
+>
+> 📌 **메인 문서**: [AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md](./AUTO_DISCOVER_ISSUE_DIAGNOSIS_REPORT.md) ← 최신 진단 결과 확인
+>
+> 이 문서는 근본 원인 분석의 초기 단계 자료이며, 최신 정보는 메인 문서를 참조하세요.
+
 **작성일**: 2025-11-25 ~ 2025-11-26  
 **분석 대상**: LSSN 71240  
 **상태**: ✅ **원인 파악 완료 - 진단 단계**  
