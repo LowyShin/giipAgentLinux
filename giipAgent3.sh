@@ -245,6 +245,7 @@ fi
 # Mode Selection: Gateway or Normal
 # ============================================================================
 
+# Run gateway mode if enabled
 if [ "${gateway_mode}" = "1" ]; then
 	# ========================================================================
 	# GATEWAY MODE - Call SSH test script
@@ -275,18 +276,22 @@ if [ "${gateway_mode}" = "1" ]; then
 	bash "${SCRIPT_DIR}/test_ssh_from_gateway_json.sh"
 	
 	log_message "INFO" "SSH test script completed"
-else
-	# ========================================================================
-	# NORMAL MODE
-	# ========================================================================
-	
-	log_message "INFO" "Running in NORMAL MODE"
-	
-	# Load normal mode library
+fi
+
+# ========================================================================
+# NORMAL MODE - Always executed
+# ========================================================================
+
+log_message "INFO" "Running in NORMAL MODE"
+
+# Load normal mode library
+if [ -f "${LIB_DIR}/normal.sh" ]; then
 	. "${LIB_DIR}/normal.sh"
 	
 	# Run normal mode (single execution)
 	run_normal_mode "$lssn" "$hn" "$os"
+else
+	log_message "WARN" "normal.sh not found, skipping normal mode"
 fi
 
 # ============================================================================
@@ -294,7 +299,7 @@ fi
 # ============================================================================
 
 # Record execution shutdown log
-save_execution_log "shutdown" "{\"mode\":\"$([ "$gateway_mode" = "1" ] && echo "gateway" || echo "normal")\",\"status\":\"normal_exit\"}"
+save_execution_log "shutdown" "{\"mode\":\"$([ "$gateway_mode" = "1" ] && echo "gateway+normal" || echo "normal")\",\"status\":\"normal_exit\"}"
 
 log_message "INFO" "GIIP Agent V${sv} completed"
 exit 0
