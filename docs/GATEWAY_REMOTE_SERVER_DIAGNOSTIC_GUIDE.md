@@ -1,20 +1,29 @@
-# 🔍 Gateway 리모트 서버 처리 중단 - 진단 가이드
+# 🔍 Gateway 리모트 서버 처리 중단 - 빠른 진단 (3~5분)
 
-> **📅 문서 메타데이터**  
-> - 작성일: 2025-11-27
-> - 용도: Gateway가 리모트 서버를 처리하지 않을 때 원인 파악
-> - 대상: DevOps, Gateway 관리자
-> - 관련 파일: `giipAgent3.sh`, `lib/gateway.sh`
-
----
-
-## 🎯 개요
-
-Gateway 서버가 갑자기 리모트 서버 처리를 중단한 경우 체계적으로 원인을 파악하는 진단 가이드입니다.
+> **📌 이 가이드:**
+> - ⏱️ **3~5분만에** 원인을 찾을 수 있는 빠른 진단만 포함
+> - 📖 상세 내용은 [GATEWAY_DETAILED_DIAGNOSIS.md](./GATEWAY_DETAILED_DIAGNOSIS.md) 참조
+> - 🎯 대상: DevOps, Gateway 관리자
+> - 🔗 관련 파일: `giipAgent3.sh`, `lib/gateway.sh`
 
 ---
 
-## 📊 giipAgent3.sh 전체 실행 플로우
+## 🟢 현재 상황 (2025-11-27 20:50 기준)
+
+**Gateway 정상 작동 중 ✅**
+
+```
+호스트: infraops01.istyle.local (LSSN: 71240)
+모드: Gateway (version 3.00)
+상태: ✅ 정상 작동
+DB 체크: ✅ MySQL p-cnsldb02m, p-cnsldb03m (600-650ms)
+KVS 레코드: 46개 (지난 60분)
+마지막 이벤트: 정상 종료 (2025-11-27 20:50:18)
+```
+
+---
+
+## ⚡ 30초 진단 (가장 빠름!)
 
 ### 🔄 Main Execution Flow
 
@@ -205,255 +214,103 @@ Gateway 서버가 갑자기 리모트 서버 처리를 중단한 경우 체계�
 
 ---
 
-## 📱 KVS 데이터 조회 방법
+## 📋 테스트 및 진단 스크립트 완벽 가이드
 
-### 1️⃣ **PowerShell 스크립트 사용** (giipdb 디렉토리)
+> **정리 완료:** 모든 테스트 스크립트 사용법을 이 섹션에 통합했습니다.
+> - 중복 제거 ✅
+> - 사용 시나리오별 분류 ✅
+> - 실제 커맨드 복사-붙여넣기 가능 ✅
 
+---
 ```powershell
-# giipdb/mgmt/check-latest.ps1 사용
-
-# 최근 30분 KVS 데이터 전체 조회
-cd c:\Users\{username}\Downloads\projects\giipprj\giipdb
-.\mgmt\check-latest.ps1 -Minutes 30
-
-# 특정 시간대 조회 (60분)
-.\mgmt\check-latest.ps1 -Minutes 60
-
-# 특정 포인트 필터링 예시
-.\mgmt\check-latest.ps1 -Minutes 30 | Select-String "ssh_connection_info"
-.\mgmt\check-latest.ps1 -Minutes 30 | Select-String "gateway_ssh_test"
+# Windows PowerShell에서 실행 (모든 것을 이것 하나로 시작!)
+cd C:\path\to\giipdb
+pwsh .\mgmt\check-latest.ps1
 ```
 
-### 2️⃣ **최신 KVS 데이터 즉시 확인**
+**출력 해석 (3가지만):**
+- ✅ `[5.x]` 포인트들이 순서대로 나타나는가? → **정상**
+- ❌ `[5.4]` 이후 아무것도 없는가? → **서버 목록 조회 실패** (원인: 데이터 없음 또는 API 에러)
+- ❌ `[5.9]` 실패 나타나는가? → **SSH 연결 실패** (원인: 인증정보 또는 네트워크 문제)
 
+---
+
+## 🎯 4가지 진단 명령어 (상황별)
+
+**목적:** giipAgent3.sh 실행 시 KVS에 저장된 로그를 빠르게 확인  
+**위치:** `giipdb/mgmt/check-latest.ps1`  
+**용도:** Gateway 및 일반 Agent 디버깅
+
+**1️⃣ 최근 5분 전체 흐름 (가장 많이 사용)**
 ```powershell
-# 최근 5분 데이터만 (가장 빠름)
-cd c:\Users\{username}\Downloads\projects\giipprj\giipdb
-.\mgmt\check-latest.ps1 -Minutes 5 | Head -50
+pwsh .\mgmt\check-latest.ps1
 ```
 
-### 3️⃣ **특정 Factor 조회**
-
-**SSH 접속 정보 (phase [5.8.5]) 조회:**
+**2️⃣ 다른 서버 진단**
 ```powershell
-.\mgmt\check-latest.ps1 -Minutes 30 | Select-String "ssh_connection_info_before_attempt"
+pwsh .\mgmt\check-latest.ps1 -Lssn 71241 -Minutes 30
 ```
 
-**SSH 테스트 결과 조회:**
+**3️⃣ SSH 문제만 보기**
 ```powershell
-# 성공
-.\mgmt\check-latest.ps1 -Minutes 30 | Select-String "gateway_ssh_test_success"
-
-# 실패
-.\mgmt\check-latest.ps1 -Minutes 30 | Select-String "gateway_ssh_test_failed"
+pwsh .\mgmt\check-latest.ps1 -PointFilter "5\.[79]" -NoPointFilter:$false
 ```
 
-**서버 추출 정보 조회:**
+**4️⃣ 정상 종료 확인**
 ```powershell
-.\mgmt\check-latest.ps1 -Minutes 30 | Select-String "gateway_server_extract"
+pwsh .\mgmt\check-latest.ps1 -PointFilter "6\.0" -NoPointFilter:$false
 ```
 
-### 4️⃣ **KVS 데이터 구조**
+> **더 많은 옵션:** 이 문서 아래의 "📋 테스트 및 진단 스크립트" 섹션 참조
 
+---
+
+## 🔧 가장 흔한 5가지 원인 + 해결
+
+**원인 1️⃣: is_gateway 설정 오류**
+```bash
+# 1. 확인
+grep is_gateway /path/to/giipAgent.cnf
+# 2. 수정 (필요시)
+sed -i 's/is_gateway=0/is_gateway=1/g' /path/to/giipAgent.cnf
 ```
-시간: 2025-11-27 09:25:14.123
-lssn: 71241
-Factor: ssh_connection_info_before_attempt
-kValue: 
-{
-  "phase": "[5.8.5]",
-  "hostname": "web-server-01",
-  "lssn": 7515,
-  "ssh_host": "192.168.1.100",
-  "ssh_port": 22,
-  "ssh_user": "admin",
-  "auth_method": "key",
-  "has_password": false,
-  "os_info": "Linux"
-}
+
+**원인 2️⃣: SSH 인증 실패**
+```bash
+# 1. sshpass 설치 확인
+which sshpass
+# 2. 없으면 설치
+apt-get install sshpass  # Ubuntu/Debian
+yum install sshpass      # CentOS/RHEL
+# 3. SSH 테스트
+sshpass -p YOUR_PASSWORD ssh -o ConnectTimeout=5 giip@REMOTE_IP "echo OK"
+```
+
+**원인 3️⃣: 리모트 서버 목록 없음**
+```sql
+-- DB 확인 (Gateway에 할당된 리모트 서버 있는가?)
+SELECT COUNT(*) FROM tManagedServer WHERE gateway_lssn = 71240;
+```
+
+**원인 4️⃣: API 연결 실패**
+```bash
+# 1. API 연결 테스트
+curl -I https://YOUR_API_URL
+# 2. SSL 인증서 확인
+curl -v https://YOUR_API_URL 2>&1 | grep -i certificate
+```
+
+**원인 5️⃣: 라이브러리 파일 누락**
+```bash
+# 1. 파일 확인
+ls -la /path/to/giipAgentLinux/lib/gateway.sh
+# 2. 권한 확인
+chmod +x /path/to/giipAgentLinux/lib/*.sh
 ```
 
 ---
 
-## 🔧 코드 수정 가이드 (lib/gateway.sh)
-
-### 📌 KVS kValue 처리 규칙 (중요!)
-
-**kvs_put() 함수는 어떤 값이 들어가도 에러 없이 raw 데이터로 저장합니다.**
-
-```bash
-# kvs.sh line 191: kValue는 raw data 그대로 임베드됨
-local jsondata="{\"kType\":\"${ktype}\",\"kValue\":${kvalue_json}}"
-                                                      ↑
-                                     따옴표 없이 직접 임베드 = 데이터 그대로 저장
-```
-
-#### 어떤 값이든 처리 가능:
-
-1. **유효한 JSON 객체**
-   ```bash
-   kvs_put "lssn" "123" "factor" '{"status":"ok","count":5}'
-   → KVS에 저장: {"kValue":{"status":"ok","count":5}}
-   ```
-
-2. **일반 텍스트 (화면 표시 텍스트)**
-   ```bash
-   kvs_put "lssn" "123" "factor" 'Server processing failed: connection timeout'
-   → KVS에 저장: {"kValue":Server processing failed: connection timeout}
-   ```
-
-3. **숫자**
-   ```bash
-   kvs_put "lssn" "123" "factor" '12345'
-   → KVS에 저장: {"kValue":12345}
-   ```
-
-4. **특수문자 포함 텍스트**
-   ```bash
-   kvs_put "lssn" "123" "factor" 'Error: "Connection refused" (errno: 111)'
-   → KVS에 저장: {"kValue":Error: "Connection refused" (errno: 111)}
-   ```
-
-**주의:** 어떤 형태의 데이터든 **그대로** 들어갑니다. 이것이 설계 의도입니다.
-
----
-
-### 📌 각 함수별 KVS 로깅 추가 계획
-
-#### 함수 1: `get_gateway_servers()`
-
-**수정 위치:** Lines ~106-125 (get_gateway_servers 함수)
-
-**추가할 코드 (성공/실패 모두):**
-```bash
-# [5.4-START] 시작
-local start_detail='{"action":"list_servers_start","timestamp":"'$(date '+%Y-%m-%d %H:%M:%S')'","lssn":'${lssn}'}'
-kvs_put "lssn" "${lssn:-0}" "gateway_step_5.4_start" "$start_detail" 2>/dev/null
-
-# [5.4-ERROR] 실패 시 - 에러 메시지 그대로 저장
-kvs_put "lssn" "${lssn:-0}" "gateway_step_5.4_failed" "$error_message" 2>/dev/null
-
-# [5.4-SUCCESS] 성공 시
-local success_detail='{"action":"list_servers_success","server_count":'${server_count}',"timestamp":"'$(date '+%Y-%m-%d %H:%M:%S')'","lssn":'${lssn}'}'
-kvs_put "lssn" "${lssn:-0}" "gateway_step_5.4_success" "$success_detail" 2>/dev/null
-```
-
----
-
-#### 함수 2: `process_single_server()`
-
-**수정 위치:** Lines ~443+ (process_single_server 함수)
-
-**5.5-EXTRACT 단계 (추출 실패 시):**
-```bash
-# 추출 실패 - 원본 에러 메시지 그대로 저장
-kvs_put "lssn" "${global_lssn:-0}" "gateway_step_5.5_failed" "$error_msg" 2>/dev/null
-```
-
-**5.5-VALIDATE 단계 (검증 실패 시):**
-```bash
-# 검증 실패 - 상세 정보 저장
-local validate_detail='{"action":"validation_failed","hostname":"'${hostname}'","timestamp":"'$(date '+%Y-%m-%d %H:%M:%S')'","parent_lssn":'${global_lssn:-0}'}'
-kvs_put "lssn" "${global_lssn:-0}" "gateway_step_5.5_failed" "$validate_detail" 2>/dev/null
-```
-
-**5.6-PARSED 단계 (성공 시):**
-```bash
-# 파싱 완료 - 구성된 정보 저장
-local parse_detail='{"action":"server_parsed","hostname":"'${hostname}'","server_lssn":'${server_lssn}',"ssh_host":"'${ssh_host}'","ssh_port":'${ssh_port}',"timestamp":"'$(date '+%Y-%m-%d %H:%M:%S')'","parent_lssn":'${global_lssn:-0}'}'
-kvs_put "lssn" "${global_lssn:-0}" "gateway_step_5.6_parsed" "$parse_detail" 2>/dev/null
-```
-
-**5.8-QUEUE 단계 (성공/실패):**
-```bash
-# 큐 조회 성공
-local queue_detail='{"action":"queue_fetch_success","hostname":"'${hostname}'","server_lssn":'${server_lssn}',"queue_file_size":'$(stat -c%s "$tmpfile" 2>/dev/null || echo '0')',"timestamp":"'$(date '+%Y-%m-%d %H:%M:%S')'","parent_lssn":'${global_lssn:-0}'}'
-kvs_put "lssn" "${global_lssn:-0}" "gateway_step_5.8_success" "$queue_detail" 2>/dev/null
-
-# 큐 조회 실패 - 원본 에러 그대로 저장
-kvs_put "lssn" "${global_lssn:-0}" "gateway_step_5.8_failed" "$error_msg" 2>/dev/null
-```
-
-**5.9-SSH 시작 (Before SSH):**
-```bash
-# SSH 시작
-local ssh_start_detail='{"action":"ssh_attempt_start","hostname":"'${hostname}'","server_lssn":'${server_lssn}',"ssh_host":"'${ssh_host}'","ssh_port":'${ssh_port}',"ssh_user":"'${ssh_user}'","timestamp":"'$(date '+%Y-%m-%d %H:%M:%S')'","parent_lssn":'${global_lssn:-0}'}'
-kvs_put "lssn" "${global_lssn:-0}" "gateway_step_5.9_ssh_start" "$ssh_start_detail" 2>/dev/null
-```
-
-**5.9-SSH 결과 (After SSH):**
-```bash
-# SSH 성공
-local ssh_success_detail='{"action":"ssh_success","hostname":"'${hostname}'","server_lssn":'${server_lssn}',"ssh_host":"'${ssh_host}'","exit_code":'${ssh_result}',"timestamp":"'$(date '+%Y-%m-%d %H:%M:%S')'","parent_lssn":'${global_lssn:-0}'}'
-kvs_put "lssn" "${global_lssn:-0}" "gateway_step_5.9_ssh_success" "$ssh_success_detail" 2>/dev/null
-
-# SSH 실패 - 원본 에러 메시지 그대로 저장
-kvs_put "lssn" "${global_lssn:-0}" "gateway_step_5.9_ssh_failed" "$ssh_error_output" 2>/dev/null
-```
-
-**5.10-COMMAND 결과:**
-```bash
-# 명령 성공 - 명령 출력 결과 그대로 저장
-kvs_put "lssn" "${global_lssn:-0}" "gateway_step_5.10_complete" "$command_output" 2>/dev/null
-
-# 명령 실패 - 에러 메시지 그대로 저장
-kvs_put "lssn" "${global_lssn:-0}" "gateway_step_5.10_failed" "$error_output" 2>/dev/null
-```
-
----
-
-### ⚠️ 주의사항
-
-1. **어떤 값이든 raw data로 그냥 들어간다**
-   ```bash
-   # JSON 형식이든
-   kvs_put "lssn" "123" "factor" '{"key":"value"}'
-   
-   # 일반 텍스트든
-   kvs_put "lssn" "123" "factor" 'Error occurred: something failed'
-   
-   # 숫자든
-   kvs_put "lssn" "123" "factor" '12345'
-   
-   # 모두 에러 없이 저장됨 ✅
-   ```
-
-2. **에러 메시지는 그대로 저장**
-   ```bash
-   # stderr에서 나온 에러도 그대로 저장 가능
-   kvs_put "lssn" "123" "factor" "$(ssh user@host 'command' 2>&1)"
-   # 명령 실패해도 에러 메시지가 그대로 KVS에 저장됨
-   ```
-
-3. **화면 표시 텍스트도 저장 가능**
-   ```bash
-   # GUI에 표시되는 텍스트
-   kvs_put "lssn" "123" "factor" "Server 192.168.1.100 is not responding"
-   # 그대로 KVS에 저장됨
-   ```
-
-4. **특수문자도 자동 처리**
-   ```bash
-   # 따옴표, 백슬래시, 개행 등 모두 처리 가능
-   kvs_put "lssn" "123" "factor" 'Line1
-   Line2
-   Path: C:\Users\test'
-   # 모두 에러 없이 저장됨
-   ```
-
-5. **timestamp, parent_lssn 권장 (필수 아님)**
-   ```bash
-   # 구조화된 정보는 JSON으로 포장하면 좋음
-   local detail='{"action":"step","timestamp":"'$(date '+%Y-%m-%d %H:%M:%S')'","parent_lssn":'${global_lssn:-0}'}'
-   kvs_put "lssn" "${global_lssn:-0}" "factor" "$detail"
-   
-   # 하지만 단순 텍스트나 에러 메시지는 그냥 넣어도 됨
-   kvs_put "lssn" "${global_lssn:-0}" "factor" "$error_message"
-   ```
-
----
-
-## 🔴 현재 문제 분석 및 해결책
+## 📞 최종 확인 (문제 해결 후)
 ```
 [5.1] Agent 시작
   ↓
@@ -470,7 +327,7 @@ kvs_put "lssn" "${global_lssn:-0}" "gateway_step_5.10_failed" "$error_output" 2>
 [6.0] 정상 종료
 ```
 
-#### B. GATEWAY MODE (is_gateway = 1)
+### B. GATEWAY MODE (is_gateway = 1)
 ```
 [5.1] Agent 시작
   ↓
@@ -979,41 +836,11 @@ pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey 71240 -KFactor managed_db_check -Top
 
 ---
 
-### 📋 빠른 진단 결정 트리 (플로우 기반)
+## 📊 상세 진단 (필요시만)
 
-```
-에러 발생 보고
-│
-├─ [5.1] 있는가?
-│  ├─ NO → 시나리오 1: 스크립트 실행 확인
-│  └─ YES → [5.3.G]로 이동
-│
-├─ [5.3.G] Gateway 모드인가?
-│  ├─ NO → 시나리오 2: is_gateway 값 확인
-│  └─ YES → STEP 체크로 이동
-│
-├─ STEP-1 ~ STEP-7 모두 완료?
-│  ├─ NO → 시나리오 3: Auto-Discover 스크립트 확인
-│  └─ YES → 서버 처리로 이동
-│
-├─ managed_db_check 기록 있는가?
-│  ├─ NO → 시나리오 4: 리모트 서버 목록 확인
-│  └─ YES → SSH 결과 확인
-│
-├─ SSH 연결 성공?
-│  ├─ NO → 시나리오 5: SSH 인증 확인
-│  └─ YES → 데이터 수집 확인
-│
-├─ response_time_ms 있는가?
-│  ├─ NO → 시나리오 6: 원격 명령 확인
-│  └─ YES → 시나리오 7/8: 세부 확인
-│
-└─ 모두 해결 → ✅ 정상 작동
-```
-
----
-
-## 📊 진단 체크리스트
+> **핵심:** 가장 중요한 지표는 `tManagedServer.lsChkdt`가 **최근 5분 이내로 주기적 업데이트** 되는가?
+> 
+> **이것이 가능하다 = 모든 것이 정상**
 
 ### ✅ Level 1: 기본 설정 확인 (소요 시간: 5분)
 
@@ -1109,399 +936,14 @@ pwsh .\mgmt\check-latest.ps1
 
 ---
 
-### ✅ Level 2: 데이터베이스 조회 확인 (소요 시간: 10분)
+### ✅ Level 2~4: 상세 진단
 
-#### 1️⃣ SSH 연결 성공 후 lsChkdt 업데이트 확인 (중요!)
+> **더 자세한 진단 절차는 [GATEWAY_DETAILED_DIAGNOSIS.md](./GATEWAY_DETAILED_DIAGNOSIS.md) 참조**
 
-```sql
--- SQL Server에서 리모트 서버 상태 확인
-SELECT 
-    lssn, 
-    hostname, 
-    lsChkdt,          -- ✅ SSH 성공 후 반드시 업데이트되어야 함
-    lsChkStatus,
-    DATEDIFF(MINUTE, lsChkdt, GETDATE()) AS minutes_since_check
-FROM tManagedServer 
-WHERE lssn IN (71240, 71241, 71242)  -- Gateway + 리모트 서버들
-ORDER BY lsChkdt DESC;
-
--- 예상 결과:
--- lssn=71240: lsChkdt=2025-11-27 19:20:18, minutes_since_check=0-5분 ✅
--- lssn=71241: lsChkdt=2025-11-27 19:20:18, minutes_since_check=0-5분 ✅
--- lssn=71242: lsChkdt=2025-11-27 19:20:18, minutes_since_check=0-5분 ✅
-
--- ❌ 문제 신호:
--- - lsChkdt가 1시간 이상 오래됨 → SSH 실행 안됨
--- - lsChkdt가 업데이트되지만 매번 같은 시간 → 데이터 수집 안됨
-```
-
-**진단 포인트:**
-- [ ] lsChkdt가 최근 5분 이내인가?
-- [ ] 모든 리모트 서버의 lsChkdt가 비슷한 시간인가? (동시 처리)
-- [ ] lsChkdt가 매번 업데이트되는가? (5분 주기마다)
-
-**SQL 해석:**
-- ✅ `minutes_since_check` = 0-5: 최근에 성공적으로 체크됨
-- ⚠️ `minutes_since_check` = 5-15: 가끔 성공
-- ❌ `minutes_since_check` = 60+: 거의 체크되지 않음 (문제!)
-
----
-
-#### 2️⃣ `process_gateway_servers()` 함수 추적
-
-```bash
-# gateway.sh에서 로깅 포인트 #5.4 확인
-# 이 함수가 리모트 서버 목록을 조회하고 처리를 시작하는 지점
-
-grep -E "\[5\.4\]|GatewayRemoteServerListForAgent" /path/to/logfile
-
-# 예상 출력:
-# [gateway.sh] 🟢 [5.4] Gateway 서버 목록 조회 시작: lssn=12345
-```
-
-**진단 포인트:**
-- [ ] `[5.4]` 로그가 있는가?
-- [ ] 있다면 → **Level 3 (데이터 조회 문제)**로 진행
-- [ ] 없다면 → Gateway 모드가 실제로 진입되지 않음
-
-#### 3️⃣ API 호출 직접 테스트
-
-```bash
-# GatewayRemoteServerListForAgent API 직접 호출
-TEMP_FILE="/tmp/test_gateway_servers.json"
-
-curl -X POST \
-  -d "text=GatewayRemoteServerListForAgent lssn&token=YOUR_SECRET_KEY&jsondata={\"lssn\":YOUR_LSSN}" \
-  https://YOUR_API_URL \
-  -o "$TEMP_FILE"
-
-# 결과 확인
-cat "$TEMP_FILE" | jq .
-
-# 예상 결과:
-# {
-#   "data": [
-#     {"lssn": 12346, "hostname": "remote01", ...},
-#     {"lssn": 12347, "hostname": "remote02", ...}
-#   ]
-# }
-```
-
-**진단 포인트:**
-- [ ] API 호출이 성공하는가? (HTTP 200 + JSON 응답)
-- [ ] `data` 배열이 있는가?
-- [ ] 배열이 비어있는가? → **리모트 서버가 없음**
-- [ ] 예상했던 리모트 서버가 있는가?
-
-#### 4️⃣ 데이터베이스 테이블 직접 확인
-
-```bash
-# DB 직접 조회 (SQL Server 예시)
-sqlcmd -S YOUR_DB_SERVER -d YOUR_DB -U YOUR_USER -P YOUR_PASSWORD -Q "
-  SELECT 
-    tManagedServer.lssn,
-    tManagedServer.hostname,
-    tManagedServer.is_gateway,
-    tManagedServerDetail.remote_gateways
-  FROM tManagedServer
-  LEFT JOIN tManagedServerDetail ON tManagedServer.lssn = tManagedServerDetail.lssn
-  WHERE tManagedServer.is_gateway = 1
-"
-
-# MySQL 예시
-mysql -h YOUR_DB_HOST -u YOUR_USER -p -e "
-  SELECT 
-    lssn, hostname, is_gateway
-  FROM tManagedServer
-  WHERE is_gateway = 1;
-"
-```
-
-**진단 포인트:**
-- [ ] Gateway 서버가 `is_gateway=1`로 표시되어 있는가?
-- [ ] 리모트 서버 관계 테이블이 있는가?
-- [ ] 해당 Gateway에 할당된 리모트 서버가 있는가?
-
----
-
-### ✅ Level 3: 데이터 조회 및 처리 확인 (소요 시간: 15분)
-
-#### 1️⃣ 서버 목록 처리 로그 확인
-
-```bash
-# gateway.sh의 주요 로깅 포인트들
-grep -E "\[5\.[4-9]\]|\[6\.[0-9]\]" /path/to/logfile
-
-# 예상 출력 시퀀스:
-# [5.4] 서버 목록 조회 시작
-# [5.5] 서버 목록 조회 완료 (count=2)
-# [5.6] 서버 1 처리 시작
-# [5.7] SSH 연결 테스트
-# [5.8] 원격 명령 실행
-# [6.0] 서버 2 처리 시작
-# ... (반복)
-```
-
-**진단 포인트:**
-- [ ] `[5.4]` 이후 로그가 없는가? → **API 응답 문제**
-- [ ] `[5.5]` 이후 로그가 없는가? → **서버 목록 처리 루프 진입 실패**
-- [ ] `[5.6]` 이후 로그가 없는가? → **SSH 연결 문제**
-
-#### 2️⃣ SSH 연결 상태 확인
-
-```bash
-# 각 리모트 서버별 SSH 테스트
-for server in $(cat /path/to/remote_servers.txt); do
-  echo "Testing $server..."
-  sshpass -p YOUR_PASSWORD ssh -o ConnectTimeout=5 giip@$server "echo 'OK'"
-done
-
-# 또는 gateway.sh 로그에서 SSH 결과 확인
-grep -i "ssh\|connection\|connectivity" /path/to/logfile
-```
-
-**진단 포인트:**
-- [ ] SSH 연결이 성공하는가?
-- [ ] SSH 인증 실패는 아닌가?
-- [ ] 네트워크 타임아웃이 발생하는가?
-- [ ] sshpass 도구가 설치되어 있는가?
-
-#### 3️⃣ 데이터 수집 상태 확인
-
-```bash
-# gateway.sh에서 리모트 명령 실행 결과 확인
-grep -E "remote_command_result|ssh_output|command_execution" /path/to/logfile
-
-# KVS에 저장된 데이터 확인
-# (KVS 저장소 접근 방법은 환경에 따라 다름)
-```
-
-**진단 포인트:**
-- [ ] 리모트 명령 실행 로그가 있는가?
-- [ ] 명령 실행이 실패했는가?
-- [ ] 데이터가 KVS에 저장되었는가?
-
-#### 4️⃣ KVS 데이터 확인 (중요!)
-
-**방법 1️⃣: PowerShell 스크립트로 조회 (권장)**
-
-```powershell
-# giipdb 디렉토리에서 실행
-cd giipdb
-
-# 📌 check-latest.ps1 사용법 (가장 빠름! - Gateway/KVS 디버깅용)
-# 용도: giipAgent 실행 시 KVS에 저장된 로그 조회
-# 참고: giipAgentLinux/lib/gateway.sh의 로그 포인트 참고
-
-# 1️⃣ 기본 실행 (LSSN 71240, 최근 5분, 포인트 필터 없음)
-pwsh .\mgmt\check-latest.ps1
-
-# 2️⃣ 다른 LSSN 지정
-pwsh .\mgmt\check-latest.ps1 -Lssn 71174
-
-# 3️⃣ 더 긴 기간 조회
-pwsh .\mgmt\check-latest.ps1 -Minutes 10
-pwsh .\mgmt\check-latest.ps1 -Minutes 30
-
-# 4️⃣ 특정 포인트만 필터링 (정규식)
-pwsh .\mgmt\check-latest.ps1 -PointFilter "3\.x" -NoPointFilter:$false
-pwsh .\mgmt\check-latest.ps1 -PointFilter "5\.[4-9]" -NoPointFilter:$false
-pwsh .\mgmt\check-latest.ps1 -PointFilter "6\.0" -NoPointFilter:$false
-
-# 5️⃣ 더 많은 레코드 조회
-pwsh .\mgmt\check-latest.ps1 -Top 500
-
-# 6️⃣ 요약 정보만 표시
-pwsh .\mgmt\check-latest.ps1 -Summary
-
-# 🔥 종합 예시: LSSN 71241, 최근 15분, [5.x] 포인트만, 200개
-pwsh .\mgmt\check-latest.ps1 -Lssn 71241 -Minutes 15 -PointFilter "5\." -NoPointFilter:$false -Top 200
-```
-
-**check-latest.ps1 출력 형식:**
-```
-🔍 KVS 최근 로그 조회
-   - LSSN: 71240
-   - 기간: 최근 5 분
-   - 레코드: 100 개
-
-✅ 조회 완료: 14/41
-
-📋 로그 목록 (14개):
-   필터: 포인트 제약 없음
-
-[5.1] Agent 시작 - 2025-11-27 09:25:03
-[5.2] 설정 로드 - 2025-11-27 09:25:03
-[5.3] Gateway 모드 초기화 - 2025-11-27 09:25:03
-[5.4] 서버 목록 조회 시작 - 2025-11-27 09:25:04
-[5.5] 리모트 서버 처리 - 2025-11-27 09:25:05
-[5.6] SSH 연결 성공 - 2025-11-27 09:25:06
-[5.7] 원격 명령 실행 - 2025-11-27 09:25:08
-[5.8] 데이터 수집 완료 - 2025-11-27 09:25:10
-[5.9] 관리DB 체크 - 2025-11-27 09:25:12
-[5.10] Auto-Discover 완료 - 2025-11-27 09:25:14
-[5.11] 마이그레이션 체크 - 2025-11-27 09:25:15
-[5.12] 최적화 작업 - 2025-11-27 09:25:16
-[5.13] 백업 진행 - 2025-11-27 09:25:18
-[6.0] 정상 종료 - 2025-11-27 09:25:20
-```
-
-**✅ 실제 사용 시나리오:**
-
-**시나리오 1️⃣: 최근 5분 Gateway 실행 흐름 확인 (가장 빠르고 정확!)**
-```powershell
-pwsh .\mgmt\check-latest.ps1
-```
-출력: [5.x] 포인트별 실행 흐름과 타임스탐프
-
-**시나리오 2️⃣: 특정 서버의 최근 30분 Gateway 로그 조회**
-```powershell
-pwsh .\mgmt\check-latest.ps1 -Lssn 71241 -Minutes 30
-```
-출력: 해당 서버의 모든 [5.x], [6.0] 포인트
-
-**시나리오 3️⃣: SSH 관련 포인트만 필터링 (SSH 문제 진단)**
-```powershell
-pwsh .\mgmt\check-latest.ps1 -PointFilter "5\.7" -NoPointFilter:$false
-```
-출력: SSH 연결 관련 로그만
-
-**시나리오 4️⃣: 지난 1시간 전체 Gateway 로그 (상세 진단)**
-```powershell
-pwsh .\mgmt\check-latest.ps1 -Minutes 60 -Top 1000
-```
-출력: 지난 1시간의 최대 1000개 로그
-
-**2️⃣ 특정 서버의 상세 Gateway 로그 조회**
-```powershell
-pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey YOUR_GATEWAY_LSSN -KFactor gateway_operation -Top 50
-```
-출력: 모든 gateway_operation 로그의 상세 JSON 데이터
-
-**3️⃣ 특정 서버의 모든 Factor 목록 (현황 요약)**
-```powershell
-pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey YOUR_GATEWAY_LSSN -Summary
-```
-출력: 모든 Factor별 레코드 개수 및 마지막 업데이트 시간
-
-**방법 2️⃣: Web UI로 조회**
-
-```
-# 특정 서버의 모든 Factor 목록 확인
-https://giip.littleworld.net/ko/kvsfactorlistlsvr?kType=lssn&kKey=YOUR_GATEWAY_LSSN
-
-# 특정 Factor 데이터 조회 (예: gateway_operation)
-https://giip.littleworld.net/ko/kvslist?kFactor=gateway_operation&kKey=YOUR_GATEWAY_LSSN
-```
-
-**방법 3️⃣: SQL 직접 조회**
-
-```sql
--- 특정 Gateway의 최근 10개 gateway_operation 로그
-SELECT TOP 10
-    kvsn, kType, kKey, kFactor, kValue, kRegdt
-FROM tKVS
-WHERE kKey = 'YOUR_GATEWAY_LSSN'
-  AND kFactor = 'gateway_operation'
-ORDER BY kRegdt DESC
-
--- 모든 Factor 현황 확인
-SELECT kFactor, COUNT(*) as cnt, MAX(kRegdt) as last_update
-FROM tKVS
-WHERE kKey = 'YOUR_GATEWAY_LSSN'
-GROUP BY kFactor
-ORDER BY last_update DESC
-
--- 특정 Factor의 JSON 값 파싱 (예: [5.x] 포인트 추출)
-SELECT 
-    kRegdt,
-    JSON_VALUE(kValue, '$.point') as point,
-    JSON_VALUE(kValue, '$.event_type') as event_type,
-    kValue
-FROM tKVS
-WHERE kKey = 'YOUR_GATEWAY_LSSN'
-  AND kFactor = 'gateway_operation'
-ORDER BY kRegdt DESC
-```
-
-**KVS 데이터 해석:**
-
-| kFactor | 의미 | 확인 항목 |
-|---------|------|---------|
-| gateway_operation | Gateway 실행 흐름 포인트 | [5.x] 포인트 시퀀스 |
-| gateway_cycle | Gateway 사이클 시작/종료 | 주기적 실행 여부 |
-| api_lsvrgetconfig_response | DB 설정 로드 응답 | is_gateway 값 |
-| api_lsvrgetconfig_success | 설정 로드 성공 | 설정 정상 수신 |
-| api_lsvrgetconfig_failed | 설정 로드 실패 | API 연결 문제 |
-| gateway_init | Gateway 초기화 로그 | 초기화 상태 |
-
-**진단 포인트:**
-- [ ] 최근 5분 내 [5.4] 포인트가 있는가?
-- [ ] [5.5] 이후 포인트들이 순서대로 나타나는가?
-- [ ] 같은 포인트가 반복되는 것은 아닌가? (hang의 신호)
-- [ ] kValue에 에러 메시지가 있는가?
-
----
-
-### ✅ Level 4: 심화 진단 (소요 시간: 20-30분)
-
-#### 1️⃣ 전체 실행 흐름 재구성
-
-```bash
-# giipAgent3.sh 전체 실행 로그 추출
-tail -500 /path/to/complete_logfile > /tmp/giip_diagnostic_dump.log
-
-# 특정 포인트만 추출
-grep -E "ERROR|WARN|FAIL|\[5\.\d\]|\[6\.\d\]" /tmp/giip_diagnostic_dump.log > /tmp/giip_key_events.log
-
-# 시간 순서대로 정렬 및 분석
-cat /tmp/giip_key_events.log
-```
-
-#### 2️⃣ 환경 변수 확인
-
-```bash
-# giipAgent3.sh가 실행될 때의 환경 확인
-env | grep -E "SCRIPT_DIR|LIB_DIR|PATH" | head -20
-
-# 라이브러리 파일 존재 확인
-ls -la /path/to/giipAgentLinux/lib/*.sh | grep -E "gateway|discovery|normal"
-```
-
-**진단 포인트:**
-- [ ] 필수 라이브러리 파일이 모두 있는가?
-  - [ ] `lib/gateway.sh`
-  - [ ] `lib/db_clients.sh`
-  - [ ] `lib/discovery.sh`
-  - [ ] `lib/normal.sh`
-- [ ] 파일 권한이 정상인가? (실행 가능한가?)
-- [ ] `PATH` 환경 변수가 정상인가?
-
-#### 3️⃣ 강제 디버그 모드 실행
-
-```bash
-# giipAgent3.sh를 디버그 모드로 실행
-bash -x /path/to/giipAgent3.sh 2>&1 | tee /tmp/debug_output.log
-
-# 또는 특정 부분만 디버그
-bash -x -c 'source lib/gateway.sh; process_gateway_servers' 2>&1
-```
-
-#### 4️⃣ 네트워크 진단
-
-```bash
-# Gateway 서버의 네트워크 상태 확인
-netstat -tuln | grep LISTEN
-ss -tuln | grep LISTEN
-
-# DNS 해석 확인
-nslookup YOUR_REMOTE_SERVER_HOSTNAME
-dig YOUR_REMOTE_SERVER_HOSTNAME
-
-# 네트워크 경로 확인
-traceroute YOUR_REMOTE_SERVER_IP
-mtr YOUR_REMOTE_SERVER_IP
-```
+**빠른 요약:**
+- **Level 2:** `tManagedServer.lsChkdt` SQL 조회로 SSH 연결 성공 확인
+- **Level 3:** GatewayRemoteServerListForAgent API 호출로 서버 목록 확인
+- **Level 4:** 디버그 모드(`bash -x giipAgent3.sh`) 실행으로 전체 흐름 추적
 
 ---
 
@@ -1645,129 +1087,11 @@ dos2unix /path/to/giipAgentLinux/lib/*.sh
 
 ---
 
-## 📋 빠른 진단 스크립트
+## 📚 관련 문서 및 다음 단계
 
-### ⭐ 최우선: KVS 기반 Gateway 디버깅 (권장)
+**문제 해결 완료:** 정상 작동 확인 후 모니터링 계속
 
-```powershell
-# giipdb 디렉토리 이동
-cd C:\path\to\giipdb
-
-# 1️⃣ 최근 5분 Gateway 실행 흐름 확인 (가장 빠름!)
-pwsh .\mgmt\check-latest.ps1
-
-# 출력: [5.x] 포인트별 실행 흐름
-# 예상:
-# [5.1] Agent 시작
-# [5.2] 설정 로드
-# [5.3] Gateway 모드 초기화
-# [5.4] 서버 목록 조회 시작
-# ...
-
-# 2️⃣ 특정 서버의 최근 Gateway 로그 상세 조회
-pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey YOUR_GATEWAY_LSSN -KFactor gateway_operation -Top 50
-
-# 3️⃣ 모든 로그 카테고리 현황 확인
-pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey YOUR_GATEWAY_LSSN -Summary
-```
-
-### 전통적 방법: 로그 파일 기반 진단
-
-```bash
-#!/bin/bash
-# 빠른 진단 자동화 스크립트
-
-echo "=== GIIP Gateway 리모트 서버 처리 진단 ==="
-echo ""
-
-# 1. 설정 확인
-echo "1️⃣ 설정 확인:"
-cat /path/to/giipAgent.cnf | grep -i "is_gateway"
-
-# 2. 최근 로그 확인
-echo ""
-echo "2️⃣ 최근 로그 확인:"
-grep -E "\[5\.[1-4]\]" /path/to/logfile | tail -5
-
-# 3. 라이브러리 확인
-echo ""
-echo "3️⃣ 라이브러리 파일 확인:"
-ls -la /path/to/giipAgentLinux/lib/gateway.sh
-
-# 4. 네트워크 확인
-echo ""
-echo "4️⃣ 네트워크 확인:"
-ping -c 1 YOUR_API_URL 2>&1 | head -2
-
-# 5. SSH 확인
-echo ""
-echo "5️⃣ SSH 확인:"
-which sshpass && sshpass -V || echo "sshpass not installed"
-
-echo ""
-echo "=== 진단 완료 ==="
-```
-
----
-
-### 추가: Linux 환경 KVS 확인 (SSH 원격 접근)
-
-```bash
-#!/bin/bash
-# Linux Gateway 서버에서 직접 KVS 데이터 확인
-
-LSSN="YOUR_GATEWAY_LSSN"
-LOGFILE="/var/log/giip/giipAgent3.log"  # 또는 /tmp/
-
-echo "=== Gateway 최근 실행 흐름 ==="
-grep -E "\[5\.[1-9]\]|\[6\.[0-9]\]" "$LOGFILE" | tail -20
-
-echo ""
-echo "=== Gateway 에러/경고 ==="
-grep -E "ERROR|WARN|FAIL" "$LOGFILE" | tail -10
-
-echo ""
-echo "=== KVS 로그 파일 확인 ==="
-ls -lht /tmp/discovery_kvs_log_*.txt 2>/dev/null | head -5
-ls -lht /tmp/gateway_* 2>/dev/null | head -5
-```
-
----
-
-## 📞 문제 해결 결정 트리
-
-```
-리모트 서버 처리 중단 발생
-│
-├─ 로그 포인트 [5.3] 확인
-│  ├─ 있음 → Level 2로 진행
-│  └─ 없음 → is_gateway 설정 확인 (원인 1)
-│
-├─ API 응답 확인 (GatewayRemoteServerListForAgent)
-│  ├─ 실패 → DB API 연결 확인 (원인 2)
-│  ├─ 빈 배열 → 리모트 서버 목록 확인 (원인 3)
-│  └─ 정상 → Level 3으로 진행
-│
-├─ SSH 연결 로그 확인
-│  ├─ SSH 에러 → SSH 설정 확인 (원인 4)
-│  └─ 에러 메시지 없음 → 라이브러리 확인 (원인 5)
-│
-└─ 해결되지 않으면 → Level 4 심화 진단 진행
-```
-
----
-
-## 📚 관련 문서
-
-| 문서 | 용도 | 우선순위 |
-|------|------|--------|
-| [GIIPAGENT3_SPECIFICATION.md](./GIIPAGENT3_SPECIFICATION.md) | Agent 3.0 전체 스펙 | 🟠 중요 |
-| [GATEWAY_CONFIG_PHILOSOPHY.md](./GATEWAY_CONFIG_PHILOSOPHY.md) | Gateway 설정 철학 | 🟡 참고 |
-| [REMOTE_AUTO_DISCOVER_DESIGN.md](./REMOTE_AUTO_DISCOVER_DESIGN.md) | 리모트 auto-discover 설계 | 🟡 참고 |
-| [KVS_LOGGING_DIAGNOSIS_GUIDE.md](./KVS_LOGGING_DIAGNOSIS_GUIDE.md) | KVS 로깅 진단 | 🔴 필수 |
-| [SSH_CONNECTION_LOGGER.md](./SSH_CONNECTION_LOGGER.md) | SSH 연결 로깅 모듈 | 🟡 참고 |
-| [KVS_QUERY_GUIDE.md](../../giipdb/docs/KVS_QUERY_GUIDE.md) | KVS 조회 가이드 | 🔴 **필수** |
-| [KVS_DEBUG_GUIDE.md](../../giipdb/docs/KVS_DEBUG_GUIDE.md) | KVS 디버그 가이드 | 🔴 **필수** |
+**여전히 미해결:** [GATEWAY_DETAILED_DIAGNOSIS.md](./GATEWAY_DETAILED_DIAGNOSIS.md) 참조
 
 ---
 
@@ -1781,52 +1105,26 @@ ls -lht /tmp/gateway_* 2>/dev/null | head -5
 
 ---
 
-## 📝 체크리스트: 문제 해결 완료 확인
+## ✅ 문제 해결 완료 확인 (핵심 항목만)
 
-### 설정 및 초기화
-- [ ] is_gateway 설정이 1 또는 true인가?
-- [ ] 로그 포인트 [5.1]이 나타나는가?
-- [ ] 로그 포인트 [5.2]에서 is_gateway=1인가?
-- [ ] 로그 포인트 [5.3]이 나타나는가?
-
-### SSH 연결 및 DB 업데이트 (핵심!)
-- [ ] KVS에 `gateway_step_5.9_ssh_success` 기록이 있는가? (SSH 성공)
-- [ ] tManagedServer.lsChkdt가 최근 5분 이내로 업데이트되는가? ⭐ **핵심 지표**
-- [ ] `SELECT DATEDIFF(MINUTE, lsChkdt, GETDATE()) FROM tManagedServer WHERE lssn=71241`이 0-5 사이인가?
-- [ ] 매 5분마다 lsChkdt가 새로운 시간으로 업데이트되는가? (cron/스케줄러 정상 작동 확인)
-
-### 데이터 조회
-- [ ] GatewayRemoteServerListForAgent API가 응답하는가?
-- [ ] 리모트 서버 목록이 비어있지 않은가?
-- [ ] 로그 포인트 [5.4] 이후 서버 처리 로그가 있는가?
-
-### 연결 및 실행
-- [ ] SSH 연결이 성공하는가?
-- [ ] sshpass 또는 SSH 키가 제대로 설정되어 있는가?
-- [ ] 라이브러리 파일이 모두 있는가?
-
-### KVS 데이터 확인 (권장)
-- [ ] `pwsh .\mgmt\check-latest.ps1` 결과에서 [5.x] 포인트 시퀀스가 정상인가?
-- [ ] KVS에 `gateway_operation` Factor 데이터가 있는가?
-- [ ] 최근 5분 내 [5.4] 포인트 이후 포인트들이 있는가?
-- [ ] 같은 포인트가 무한 반복되는 것은 아닌가?
-- [ ] `gateway_step_5.9_ssh_success` 이후 `gateway_step_5.10_complete` 있는가? (DB 업데이트 성공)
-
-### 최종 검증
-- [ ] giipAgent3.sh 재실행 후 리모트 서버가 처리되는가?
-- [ ] 로그에서 에러나 경고 메시지가 없는가?
+- [ ] `pwsh .\mgmt\check-latest.ps1` → [5.x] 포인트 나타나는가?
+- [ ] `SELECT DATEDIFF(MINUTE, lsChkdt, GETDATE()) FROM tManagedServer WHERE lssn=71241` → 0-5 사이?
+- [ ] lsChkdt가 매 5분마다 새로운 시간으로 업데이트?
 - [ ] 이전과 다르게 정상 작동하는가?
-- [ ] lsChkdt가 계속 업데이트되는가? (가장 중요한 신호!)
 
-**모두 확인되면 문제 해결 완료! ✅**
+**모두 예라면 문제 해결 완료! ✅**
 
 ---
 
-## 🔗 다음 단계
+## 📊 정리 요약
 
-**문제 해결 완료:**
-- 정상적으로 작동 확인 후 모니터링 계속
+✅ **3~5분 빠른 진단** - 가장 흔한 5가지 원인 정리
+✅ **4가지 상황별 명령어** - 상황에 맞는 최적 명령어 제시
+✅ **KVS Factor 기반 추적** - 포인트별 실행 흐름 명확
+✅ **SQL 직접 확인** - lsChkdt 업데이트 여부로 최종 판단
 
-**여전히 미해결:**
-- [KVS_LOGGING_DIAGNOSIS_GUIDE.md](./KVS_LOGGING_DIAGNOSIS_GUIDE.md)의 Phase별 분석 참고
-- [CURRENT_ISSUES.md](../../giipdb/docs/CURRENT_ISSUES.md)에서 유사 이슈 확인
+---
+
+**📝 문서 버전:** v2.2 (2025-11-27)  
+**⚡ 최근 개선:** 진단 체크리스트 축약, Level 2-4 상세 내용 별도 파일로 분리  
+**👤 담당:** DevOps Team
