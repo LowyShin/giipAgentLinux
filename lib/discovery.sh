@@ -6,6 +6,23 @@
 # ⚠️ set -euo pipefail 제거됨 (부모 스크립트 영향 방지)
 # 대신 각 함수에서 명시적 error handling 사용
 
+# ============================================================================
+# Required Dependencies (must be loaded before this module)
+# ============================================================================
+# - common.sh (for log_auto_discover_step, log_auto_discover_error, log_auto_discover_validation, log_message)
+# - kvs.sh (for kvs_put)
+
+# Verify dependencies are available
+if ! declare -f log_auto_discover_step >/dev/null 2>&1; then
+	echo "❌ Error: log_auto_discover_step not found. common.sh must be loaded before discovery.sh" >&2
+	exit 1
+fi
+
+if ! declare -f kvs_put >/dev/null 2>&1; then
+	echo "❌ Error: kvs_put not found. kvs.sh must be loaded before discovery.sh" >&2
+	exit 1
+fi
+
 # 설정
 DISCOVERY_SCRIPT_LOCAL="$(dirname "$0")/../giipscripts/auto-discover-linux.sh"
 DISCOVERY_INTERVAL=21600  # 6시간 (초 단위)
