@@ -13,24 +13,15 @@
 #
 # Features:
 #   - Auto-detects latest gateway_servers_*.json if not specified
-#   - Tests each server with detailed logging
+#   - Tests each server with simple output
 #   - Supports both password and key-based authentication
 #   - Generates summary report
 #   - Color-coded output for easy reading
 ################################################################################
 
-# set -e 제거 - 개별 에러 처리로 변경
-# set -e
-
-# Color codes
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
-
 # Script configuration
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+LIB_DIR="${SCRIPT_DIR}/lib"
 LOG_DIR="/tmp/ssh_test_logs"
 mkdir -p "$LOG_DIR"
 
@@ -42,6 +33,18 @@ TOTAL_SERVERS=0
 SUCCESS_COUNT=0
 FAILURE_COUNT=0
 SKIPPED_COUNT=0
+
+# ============================================================================
+# Load required modules
+# ============================================================================
+
+# Load target list module for display and color functions
+if [ -f "${LIB_DIR}/target_list.sh" ]; then
+	. "${LIB_DIR}/target_list.sh"
+else
+	echo "❌ Error: target_list.sh not found in ${LIB_DIR}"
+	exit 1
+fi
 
 ################################################################################
 # Utility Functions
@@ -61,23 +64,6 @@ exit_with_error() {
 	fi
 	
 	exit "$exit_code"
-}
-
-# Print colored output
-print_info() {
-	echo -e "${BLUE}ℹ️  $1${NC}"
-}
-
-print_success() {
-	echo -e "${GREEN}✅ $1${NC}"
-}
-
-print_error() {
-	echo -e "${RED}❌ $1${NC}"
-}
-
-print_warning() {
-	echo -e "${YELLOW}⚠️  $1${NC}"
 }
 
 # Log to file and console
@@ -394,13 +380,15 @@ main() {
 	fi
 	
 	# ============================================================================
-	# Step 8: Run SSH tests
+	# Step 8: Display target servers and run SSH tests
 	# ============================================================================
 	
-	print_success "Starting SSH connection tests"
-	echo ""
-	print_info "📋 Target servers:"
+	# Display target servers using target_list module
+	display_target_servers "$json_file" || exit_with_error "Failed to display target servers" 1
+	
+	print_info "🔄 Testing connection..."
 	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+	echo ""
 	
 	# Parse JSON and extract servers
 	local actual_server_count=0
@@ -408,32 +396,15 @@ main() {
 	
 	# Try using jq first
 	if command -v jq &> /dev/null; then
-		print_info "Using jq for JSON parsing"
-		
 		# Extract to temp file first to preserve array in main shell
 		local temp_servers="/tmp/servers_to_test_$$.jsonl"
 		jq -c '.data[]? // .[]? // .' "$json_file" 2>/dev/null > "$temp_servers"
 		
-		local list_count=0
 		while IFS= read -r server_json; do
 			[ -z "$server_json" ] && continue
-			
-			local hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null)
-			local lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null)
-			local ssh_host=$(echo "$server_json" | jq -r '.ssh_host // empty' 2>/dev/null)
-			local ssh_user=$(echo "$server_json" | jq -r '.ssh_user // empty' 2>/dev/null)
-			local ssh_port=$(echo "$server_json" | jq -r '.ssh_port // 22' 2>/dev/null)
-			
 			server_list+=("$server_json")
-			list_count=$((list_count + 1))
-			print_info "  [$list_count] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user}"
 		done < "$temp_servers"
 		rm -f "$temp_servers"
-		
-		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
-		print_info ""
-		print_info "🔄 Testing connection..."
-		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		
 		# Test connections
 		for server_json in "${server_list[@]}"; do
@@ -459,26 +430,11 @@ main() {
 		local temp_servers="/tmp/servers_to_test_$$.jsonl"
 		tr -d '\n' < "$json_file" | sed 's/}/}\n/g' | grep -o '{[^}]*}' > "$temp_servers"
 		
-		local list_count=0
 		while IFS= read -r server_json; do
 			[ -z "$server_json" ] && continue
-			
-			local hostname=$(echo "$server_json" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-			local lssn=$(echo "$server_json" | grep -o '"lssn"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-			local ssh_host=$(echo "$server_json" | grep -o '"ssh_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-			local ssh_user=$(echo "$server_json" | grep -o '"ssh_user"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-			local ssh_port=$(echo "$server_json" | grep -o '"ssh_port"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/' || echo "22")
-			
 			server_list+=("$server_json")
-			list_count=$((list_count + 1))
-			print_info "  [$list_count] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user}"
 		done < "$temp_servers"
 		rm -f "$temp_servers"
-		
-		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
-		print_info ""
-		print_info "🔄 Testing connection..."
-		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		
 		# Test connections
 		for server_json in "${server_list[@]}"; do
