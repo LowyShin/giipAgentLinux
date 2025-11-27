@@ -275,9 +275,6 @@ if [ "${gateway_mode}" = "1" ]; then
 	bash "${SCRIPT_DIR}/test_ssh_from_gateway_json.sh"
 	
 	log_message "INFO" "SSH test script completed"
-	
-	# Shutdown log
-	save_execution_log "shutdown" "{\"mode\":\"gateway\",\"status\":\"normal_exit\"}"
 else
 	# ========================================================================
 	# NORMAL MODE
@@ -290,14 +287,14 @@ else
 	
 	# Run normal mode (single execution)
 	run_normal_mode "$lssn" "$hn" "$os"
-	
-	# Shutdown log
-	save_execution_log "shutdown" "{\"mode\":\"normal\",\"status\":\"normal_exit\"}"
 fi
 
 # ============================================================================
-# Completion
+# Shutdown Log and Completion
 # ============================================================================
+
+# Record execution shutdown log
+save_execution_log "shutdown" "{\"mode\":\"$([ "$gateway_mode" = "1" ] && echo "gateway" || echo "normal")\",\"status\":\"normal_exit\"}"
 
 log_message "INFO" "GIIP Agent V${sv} completed"
 exit 0
