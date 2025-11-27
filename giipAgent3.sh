@@ -283,7 +283,7 @@ if [ "${gateway_mode}" = "1" ]; then
 	
 	# Call SSH test script
 	log_message "INFO" "Calling test_ssh_from_gateway_json.sh..."
-	"${SCRIPT_DIR}/test_ssh_from_gateway_json.sh"
+	bash "${SCRIPT_DIR}/test_ssh_from_gateway_json.sh"
 	
 	log_message "INFO" "SSH test script completed"
 	
