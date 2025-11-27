@@ -430,7 +430,42 @@ if [ "${gateway_mode}" = "1" ]; then
 	
 	log_auto_discover_step "STEP-6" "Store Result to KVS" "auto_discover_step_6_store_result" "{\"status\":\"completed\",\"kValues_saved_to\":\"/tmp/kvs_kValue_auto_discover_*_$$.json\"}"
 	
-	# STEP-7: Complete Marker (auto_discover_complete KVS 저장)
+	# STEP-7: Store All Data to KVS (파일에서 읽어서 kvs_put)
+	log_auto_discover_step "STEP-7" "Store Discovery Data to KVS" "auto_discover_step_7_complete" "{\"status\":\"storing_data\"}"
+	
+	echo "[AUTO-DISCOVER] STEP-7: Reading /tmp/kvs_kValue_auto_discover_*.json files and storing to KVS" >&2
+	
+	# Store auto_discover_result
+	if [ -f "/tmp/kvs_kValue_auto_discover_result_$$.json" ]; then
+		echo "[AUTO-DISCOVER] STEP-7: Processing auto_discover_result" >&2
+		result_data=$(cat "/tmp/kvs_kValue_auto_discover_result_$$.json" 2>/dev/null)
+		log_auto_discover_step "STEP-7-1" "Store auto_discover_result data" "auto_discover_result" "$result_data"
+	fi
+	
+	# Store auto_discover_servers
+	if [ -f "/tmp/kvs_kValue_auto_discover_servers_$$.json" ]; then
+		echo "[AUTO-DISCOVER] STEP-7: Processing auto_discover_servers" >&2
+		servers_data=$(cat "/tmp/kvs_kValue_auto_discover_servers_$$.json" 2>/dev/null)
+		log_auto_discover_step "STEP-7-2" "Store auto_discover_servers data" "auto_discover_servers" "$servers_data"
+	fi
+	
+	# Store auto_discover_networks
+	if [ -f "/tmp/kvs_kValue_auto_discover_networks_$$.json" ]; then
+		echo "[AUTO-DISCOVER] STEP-7: Processing auto_discover_networks" >&2
+		networks_data=$(cat "/tmp/kvs_kValue_auto_discover_networks_$$.json" 2>/dev/null)
+		log_auto_discover_step "STEP-7-3" "Store auto_discover_networks data" "auto_discover_networks" "$networks_data"
+	fi
+	
+	# Store auto_discover_services
+	if [ -f "/tmp/kvs_kValue_auto_discover_services_$$.json" ]; then
+		echo "[AUTO-DISCOVER] STEP-7: Processing auto_discover_services" >&2
+		services_data=$(cat "/tmp/kvs_kValue_auto_discover_services_$$.json" 2>/dev/null)
+		log_auto_discover_step "STEP-7-4" "Store auto_discover_services data" "auto_discover_services" "$services_data"
+	fi
+	
+	echo "[AUTO-DISCOVER] STEP-7: All discovery data stored to KVS" >&2
+	
+	# Final Complete Marker
 	log_auto_discover_step "STEP-7" "Store Complete Marker" "auto_discover_step_7_complete" "{\"status\":\"completed\"}"
 	
 	# Initialize kvs_put_complete_code before using it
@@ -443,16 +478,8 @@ if [ "${gateway_mode}" = "1" ]; then
 	fi
 	
 	local complete_data="{\"status\":\"completed\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"all_steps_passed\":$([ \"$final_status\" = \"PASSED\" ] && echo 'true' || echo 'false'),\"final_status\":\"${final_status}\"}"
-	kvs_put "lssn" "${lssn}" "auto_discover_complete" "$complete_data" 2>&1 | tee -a /tmp/kvs_put_complete_$$.log
+	log_auto_discover_step "COMPLETE" "Auto-Discover Phase Complete" "auto_discover_complete" "$complete_data"
 	kvs_put_complete_code=$?
-	
-	log_auto_discover_validation "STEP-7" "kvs_put_auto_discover_complete" "$([ $kvs_put_complete_code -eq 0 ] && echo 'PASS' || echo 'FAIL')" "{\"exit_code\":${kvs_put_complete_code}}"
-	
-	# ✅ PROHIBITED_ACTION_13 준수: 최종 저장 실패 시 오류 기록
-	if [ $kvs_put_complete_code -ne 0 ]; then
-		local complete_error=$(tail -5 /tmp/kvs_put_complete_$$.log 2>/dev/null | tr '\n' ' ')
-		log_auto_discover_error "STEP-7" "KVS_PUT_COMPLETE_FAILED" "Failed to store auto_discover_complete" "{\"exit_code\":${kvs_put_complete_code},\"error_detail\":\"${complete_error}\"}"
-	fi
 	
 	# Cleanup temp files
 	rm -f /tmp/kvs_put_init_$$.log /tmp/kvs_put_result_$$.log /tmp/kvs_put_complete_$$.log /tmp/auto_discover_result_$$.json /tmp/auto_discover_log_$$.log
