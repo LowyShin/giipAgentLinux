@@ -176,7 +176,7 @@ kvs_put() {
 	
 	# Validate required variables
 	if [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
-		echo "[KVS-Put] ⚠️  Missing required variables (sk, apiaddrv2)" >&2
+		echo "[KVS-Put] ❌ ERROR: Missing required variables (sk, apiaddrv2)" >&2
 		return 1
 	fi
 	
@@ -209,12 +209,18 @@ kvs_put() {
 		-v 2>"$stderr_file"
 	
 	local exit_code=$?
-	if [ $exit_code -ne 0 ]; then
-		local api_response=$(cat "$response_file" 2>/dev/null | head -c 200)
-		local http_status=$(grep "HTTP/" "$stderr_file" 2>/dev/null | tail -1)
-		echo "[KVS-Put] ⚠️  Failed (exit_code=${exit_code}): ${api_response}" >&2
-		echo "[KVS-Put] ⚠️  HTTP Status: ${http_status}" >&2
+	local api_response=$(cat "$response_file" 2>/dev/null | head -c 500)
+	local http_status=$(grep "HTTP/" "$stderr_file" 2>/dev/null | tail -1)
+	
+	# Print result to both stdout and stderr
+	if [ $exit_code -eq 0 ]; then
+		echo "[KVS-Put] ✅ SUCCESS: kFactor=$kfactor, kValue_length=${#kvalue_json}, HTTP: $http_status"
+		echo "[KVS-Put] ✅ SUCCESS: kFactor=$kfactor, kValue_length=${#kvalue_json}, HTTP: $http_status" >&2
+	else
+		echo "[KVS-Put] ❌ FAILED: kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status, response: $api_response"
+		echo "[KVS-Put] ❌ FAILED: kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status, response: $api_response" >&2
 	fi
+	
 	rm -f "$response_file" "$stderr_file"
 	
 	return $exit_code
