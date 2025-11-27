@@ -451,10 +451,13 @@ if [ "${gateway_mode}" = "1" ]; then
 		if [ "$result_size" -eq 0 ]; then
 			echo "[AUTO-DISCOVER] STEP-6: auto_discover_result file is empty, uploading file_info only" >&2
 			local result_file_info="{\"file\":\"/tmp/kvs_kValue_auto_discover_result_$$.json\",\"size\":0,\"status\":\"empty\"}"
+			echo "[AUTO-DISCOVER] STEP-6: kvs_put params: ktype=lssn, kkey=${lssn}, kfactor=auto_discover_result_file_info, data_len=${#result_file_info}" >&2
 			kvs_put "lssn" "${lssn}" "auto_discover_result_file_info" "$result_file_info" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
 		else
 			result_data=$(cat "/tmp/kvs_kValue_auto_discover_result_$$.json" 2>/dev/null)
 			echo "[AUTO-DISCOVER] STEP-6: Uploading auto_discover_result (${result_size} bytes)" >&2
+			echo "[AUTO-DISCOVER] STEP-6: kvs_put params: ktype=lssn, kkey=${lssn}, kfactor=auto_discover_result, data_len=${#result_data}" >&2
+			echo "[AUTO-DISCOVER] STEP-6: data_first_100=$(echo "$result_data" | head -c 100)" >&2
 			kvs_put "lssn" "${lssn}" "auto_discover_result" "$result_data" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
 		fi
 	fi
@@ -464,10 +467,13 @@ if [ "${gateway_mode}" = "1" ]; then
 		if [ "$servers_size" -eq 0 ]; then
 			echo "[AUTO-DISCOVER] STEP-6: auto_discover_servers file is empty, uploading file_info only" >&2
 			local servers_file_info="{\"file\":\"/tmp/kvs_kValue_auto_discover_servers_$$.json\",\"size\":0,\"status\":\"empty\"}"
+			echo "[AUTO-DISCOVER] STEP-6: kvs_put params: ktype=lssn, kkey=${lssn}, kfactor=auto_discover_servers_file_info, data_len=${#servers_file_info}" >&2
 			kvs_put "lssn" "${lssn}" "auto_discover_servers_file_info" "$servers_file_info" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
 		else
 			servers_data=$(cat "/tmp/kvs_kValue_auto_discover_servers_$$.json" 2>/dev/null)
 			echo "[AUTO-DISCOVER] STEP-6: Uploading auto_discover_servers (${servers_size} bytes)" >&2
+			echo "[AUTO-DISCOVER] STEP-6: kvs_put params: ktype=lssn, kkey=${lssn}, kfactor=auto_discover_servers, data_len=${#servers_data}" >&2
+			echo "[AUTO-DISCOVER] STEP-6: data_first_100=$(echo "$servers_data" | head -c 100)" >&2
 			kvs_put "lssn" "${lssn}" "auto_discover_servers" "$servers_data" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
 		fi
 	fi
@@ -477,10 +483,13 @@ if [ "${gateway_mode}" = "1" ]; then
 		if [ "$networks_size" -eq 0 ]; then
 			echo "[AUTO-DISCOVER] STEP-6: auto_discover_networks file is empty, uploading file_info only" >&2
 			local networks_file_info="{\"file\":\"/tmp/kvs_kValue_auto_discover_networks_$$.json\",\"size\":0,\"status\":\"empty\"}"
+			echo "[AUTO-DISCOVER] STEP-6: kvs_put params: ktype=lssn, kkey=${lssn}, kfactor=auto_discover_networks_file_info, data_len=${#networks_file_info}" >&2
 			kvs_put "lssn" "${lssn}" "auto_discover_networks_file_info" "$networks_file_info" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
 		else
 			networks_data=$(cat "/tmp/kvs_kValue_auto_discover_networks_$$.json" 2>/dev/null)
 			echo "[AUTO-DISCOVER] STEP-6: Uploading auto_discover_networks (${networks_size} bytes)" >&2
+			echo "[AUTO-DISCOVER] STEP-6: kvs_put params: ktype=lssn, kkey=${lssn}, kfactor=auto_discover_networks, data_len=${#networks_data}" >&2
+			echo "[AUTO-DISCOVER] STEP-6: data_first_100=$(echo "$networks_data" | head -c 100)" >&2
 			kvs_put "lssn" "${lssn}" "auto_discover_networks" "$networks_data" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
 		fi
 	fi
@@ -490,10 +499,13 @@ if [ "${gateway_mode}" = "1" ]; then
 		if [ "$services_size" -eq 0 ]; then
 			echo "[AUTO-DISCOVER] STEP-6: auto_discover_services file is empty, uploading file_info only" >&2
 			local services_file_info="{\"file\":\"/tmp/kvs_kValue_auto_discover_services_$$.json\",\"size\":0,\"status\":\"empty\"}"
+			echo "[AUTO-DISCOVER] STEP-6: kvs_put params: ktype=lssn, kkey=${lssn}, kfactor=auto_discover_services_file_info, data_len=${#services_file_info}" >&2
 			kvs_put "lssn" "${lssn}" "auto_discover_services_file_info" "$services_file_info" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
 		else
 			services_data=$(cat "/tmp/kvs_kValue_auto_discover_services_$$.json" 2>/dev/null)
 			echo "[AUTO-DISCOVER] STEP-6: Uploading auto_discover_services (${services_size} bytes)" >&2
+			echo "[AUTO-DISCOVER] STEP-6: kvs_put params: ktype=lssn, kkey=${lssn}, kfactor=auto_discover_services, data_len=${#services_data}" >&2
+			echo "[AUTO-DISCOVER] STEP-6: data_first_100=$(echo "$services_data" | head -c 100)" >&2
 			kvs_put "lssn" "${lssn}" "auto_discover_services" "$services_data" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
 		fi
 	fi
