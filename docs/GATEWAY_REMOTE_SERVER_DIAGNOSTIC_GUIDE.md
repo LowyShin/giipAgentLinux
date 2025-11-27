@@ -691,13 +691,104 @@ pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey 71240 -KFactor ssh_connection -Top 1
 
 ---
 
+#### **시나리오 5️⃣-A: SSH 연결 성공 후 lsChkdt 미업데이트**
+
+**증상:**
+```
+✅ [5.9] SSH 연결 성공 로그 있음
+✅ gateway_step_5.9_ssh_success 기록됨
+❌ tManagedServer.lsChkdt가 최신 날짜로 업데이트 안됨
+❌ 리모트 서버 상태가 "checking" 상태에서 안 넘어감
+```
+
+**원인:**
+- CQEQueueGet API 호출이 제대로 이루어지지 않음
+- API 응답 처리 실패
+- 네트워크 연결 끊김
+
+**핵심 메커니즘 (giipAgent3.sh → gateway.sh → normal.sh):**
+
+```bash
+# giipAgentLinux/lib/gateway.sh line 648:
+# [5.3.1] 🟢 Gateway 자신의 큐 처리 (CQEQueueGet API 호출 → LSChkdt 자동 업데이트)
+
+# giipAgentLinux/lib/normal.sh line 24:
+local text="CQEQueueGet lssn hostname os op"
+local jsondata="{\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"os\":\"${os}\",\"op\":\"op\"}"
+
+# ✅ CQEQueueGet API 호출 시 DB에서 자동으로:
+# 1. lsChkdt를 현재 시간으로 설정
+# 2. lsChkStatus를 업데이트
+# → gateway.sh가 직접 업데이트하는 게 아니라 API 응답으로 자동 업데이트됨!
+```
+
+**따라서 lsChkdt 업데이트를 위한 필수 조건:**
+
+| 조건 | 상태 | 확인 방법 |
+|------|------|---------|
+| ✅ CQEQueueGet API 호출 | 필수 | KVS에서 [5.3.1] 포인트 확인 |
+| ✅ API 응답 수신 | 필수 | 네트워크 연결 정상 |
+| ✅ DB 연결 정상 | 필수 | API 서버의 DB 연결 상태 |
+| ✅ lsChkdt 컬럼 활성 | 필수 | tManagedServer 테이블 스키마 |
+
+**해결 방법:**
+
+```powershell
+# 1️⃣ CQEQueueGet API가 실제로 호출되는지 확인 (KVS 로그)
+cd giipdb
+pwsh .\mgmt\check-latest.ps1 -PointFilter "5\.3\.1" -NoPointFilter:$false -Top 20
+
+# 출력 예시 (정상):
+# [5.3.1] Gateway 자신의 큐 조회 시작
+# [5.3.1-EXECUTE] Gateway 자신의 큐 존재, 스크립트 실행 
+# [5.3.1-COMPLETED] Gateway 자신의 큐 실행 완료
+
+# 2️⃣ [5.3.1] 포인트가 있는가?
+# ✅ 있음 → API 호출 성공, lsChkdt는 자동 업데이트됨
+# ❌ 없음 → fetch_queue 함수 미로드 또는 API 호출 실패
+
+# 3️⃣ [5.3.1-EMPTY]가 나오는 경우?
+# → API 응답이 없음 (404) → 큐 서버 연결 문제
+```
+
+**최종 확인:**
+
+```bash
+# lsChkdt 확인 (직접 확인은 사용자가 할 것)
+# SQL:
+SELECT TOP 20 
+    lssn, hostname, lsChkdt,
+    DATEDIFF(MINUTE, lsChkdt, GETDATE()) as minutes_ago,
+    lsChkStatus
+FROM tManagedServer 
+WHERE lssn IN (71240, 71241, 71242)
+ORDER BY lsChkdt DESC;
+
+# 예상 결과 (정상):
+# lssn=71240: lsChkdt=2025-11-27 19:25:18, minutes_ago=0-5 ✅
+# lssn=71241: lsChkdt=2025-11-27 19:25:18, minutes_ago=0-5 ✅
+# lssn=71242: lsChkdt=2025-11-27 19:25:18, minutes_ago=0-5 ✅
+
+# ❌ 문제: minutes_ago > 30 
+# → CQEQueueGet API 호출이 안됨 → [5.3.1] 포인트가 없음 확인
+```
+
+**문제 해결 체크리스트:**
+
+- [ ] KVS에 `[5.3.1-COMPLETED]` 기록이 있는가? (API 호출 성공)
+- [ ] 있다면 → **lsChkdt는 자동 업데이트됨 ✅** (확인만 하면 됨)
+- [ ] 없다면 → **API 호출 자체가 안됨** (fetch_queue 함수 또는 API 서버 문제)
+
+---
+
 #### **시나리오 6️⃣: [5.8] 명령 실행은 되지만 데이터 수집이 없음**
 
 **증상:**
 ```
 ✅ SSH 연결 성공
-✅ 명령 시작 로그 있음
-❌ 결과 데이터 없음 또는 에러 상태
+✅ [5.9-SUCCESS] SSH 연결 성공 로그 있음
+✅ lsChkdt 업데이트됨
+❌ 하지만 응답 데이터(managed_db_check 등)가 없음
 ❌ response_time_ms 없음
 ```
 
@@ -950,7 +1041,43 @@ pwsh .\mgmt\check-latest.ps1
 
 ### ✅ Level 2: 데이터베이스 조회 확인 (소요 시간: 10분)
 
-#### 1️⃣ `process_gateway_servers()` 함수 추적
+#### 1️⃣ SSH 연결 성공 후 lsChkdt 업데이트 확인 (중요!)
+
+```sql
+-- SQL Server에서 리모트 서버 상태 확인
+SELECT 
+    lssn, 
+    hostname, 
+    lsChkdt,          -- ✅ SSH 성공 후 반드시 업데이트되어야 함
+    lsChkStatus,
+    DATEDIFF(MINUTE, lsChkdt, GETDATE()) AS minutes_since_check
+FROM tManagedServer 
+WHERE lssn IN (71240, 71241, 71242)  -- Gateway + 리모트 서버들
+ORDER BY lsChkdt DESC;
+
+-- 예상 결과:
+-- lssn=71240: lsChkdt=2025-11-27 19:20:18, minutes_since_check=0-5분 ✅
+-- lssn=71241: lsChkdt=2025-11-27 19:20:18, minutes_since_check=0-5분 ✅
+-- lssn=71242: lsChkdt=2025-11-27 19:20:18, minutes_since_check=0-5분 ✅
+
+-- ❌ 문제 신호:
+-- - lsChkdt가 1시간 이상 오래됨 → SSH 실행 안됨
+-- - lsChkdt가 업데이트되지만 매번 같은 시간 → 데이터 수집 안됨
+```
+
+**진단 포인트:**
+- [ ] lsChkdt가 최근 5분 이내인가?
+- [ ] 모든 리모트 서버의 lsChkdt가 비슷한 시간인가? (동시 처리)
+- [ ] lsChkdt가 매번 업데이트되는가? (5분 주기마다)
+
+**SQL 해석:**
+- ✅ `minutes_since_check` = 0-5: 최근에 성공적으로 체크됨
+- ⚠️ `minutes_since_check` = 5-15: 가끔 성공
+- ❌ `minutes_since_check` = 60+: 거의 체크되지 않음 (문제!)
+
+---
+
+#### 2️⃣ `process_gateway_servers()` 함수 추적
 
 ```bash
 # gateway.sh에서 로깅 포인트 #5.4 확인
@@ -967,7 +1094,7 @@ grep -E "\[5\.4\]|GatewayRemoteServerListForAgent" /path/to/logfile
 - [ ] 있다면 → **Level 3 (데이터 조회 문제)**로 진행
 - [ ] 없다면 → Gateway 모드가 실제로 진입되지 않음
 
-#### 2️⃣ API 호출 직접 테스트
+#### 3️⃣ API 호출 직접 테스트
 
 ```bash
 # GatewayRemoteServerListForAgent API 직접 호출
@@ -996,7 +1123,7 @@ cat "$TEMP_FILE" | jq .
 - [ ] 배열이 비어있는가? → **리모트 서버가 없음**
 - [ ] 예상했던 리모트 서버가 있는가?
 
-#### 3️⃣ 데이터베이스 테이블 직접 확인
+#### 4️⃣ 데이터베이스 테이블 직접 확인
 
 ```bash
 # DB 직접 조회 (SQL Server 예시)
@@ -1092,15 +1219,100 @@ grep -E "remote_command_result|ssh_output|command_execution" /path/to/logfile
 # giipdb 디렉토리에서 실행
 cd giipdb
 
-# 1. 최근 5분 Gateway 실행 흐름 확인 (가장 빠르고 정확!)
+# 📌 check-latest.ps1 사용법 (가장 빠름! - Gateway/KVS 디버깅용)
+# 용도: giipAgent 실행 시 KVS에 저장된 로그 조회
+# 참고: giipAgentLinux/lib/gateway.sh의 로그 포인트 참고
+
+# 1️⃣ 기본 실행 (LSSN 71240, 최근 5분, 포인트 필터 없음)
 pwsh .\mgmt\check-latest.ps1
 
-# 2. 특정 서버의 최근 20개 Gateway 로그 조회
-pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey YOUR_GATEWAY_LSSN -KFactor gateway_operation -Top 20
+# 2️⃣ 다른 LSSN 지정
+pwsh .\mgmt\check-latest.ps1 -Lssn 71174
 
-# 3. 특정 서버의 모든 Factor 목록 (summary)
+# 3️⃣ 더 긴 기간 조회
+pwsh .\mgmt\check-latest.ps1 -Minutes 10
+pwsh .\mgmt\check-latest.ps1 -Minutes 30
+
+# 4️⃣ 특정 포인트만 필터링 (정규식)
+pwsh .\mgmt\check-latest.ps1 -PointFilter "3\.x" -NoPointFilter:$false
+pwsh .\mgmt\check-latest.ps1 -PointFilter "5\.[4-9]" -NoPointFilter:$false
+pwsh .\mgmt\check-latest.ps1 -PointFilter "6\.0" -NoPointFilter:$false
+
+# 5️⃣ 더 많은 레코드 조회
+pwsh .\mgmt\check-latest.ps1 -Top 500
+
+# 6️⃣ 요약 정보만 표시
+pwsh .\mgmt\check-latest.ps1 -Summary
+
+# 🔥 종합 예시: LSSN 71241, 최근 15분, [5.x] 포인트만, 200개
+pwsh .\mgmt\check-latest.ps1 -Lssn 71241 -Minutes 15 -PointFilter "5\." -NoPointFilter:$false -Top 200
+```
+
+**check-latest.ps1 출력 형식:**
+```
+🔍 KVS 최근 로그 조회
+   - LSSN: 71240
+   - 기간: 최근 5 분
+   - 레코드: 100 개
+
+✅ 조회 완료: 14/41
+
+📋 로그 목록 (14개):
+   필터: 포인트 제약 없음
+
+[5.1] Agent 시작 - 2025-11-27 09:25:03
+[5.2] 설정 로드 - 2025-11-27 09:25:03
+[5.3] Gateway 모드 초기화 - 2025-11-27 09:25:03
+[5.4] 서버 목록 조회 시작 - 2025-11-27 09:25:04
+[5.5] 리모트 서버 처리 - 2025-11-27 09:25:05
+[5.6] SSH 연결 성공 - 2025-11-27 09:25:06
+[5.7] 원격 명령 실행 - 2025-11-27 09:25:08
+[5.8] 데이터 수집 완료 - 2025-11-27 09:25:10
+[5.9] 관리DB 체크 - 2025-11-27 09:25:12
+[5.10] Auto-Discover 완료 - 2025-11-27 09:25:14
+[5.11] 마이그레이션 체크 - 2025-11-27 09:25:15
+[5.12] 최적화 작업 - 2025-11-27 09:25:16
+[5.13] 백업 진행 - 2025-11-27 09:25:18
+[6.0] 정상 종료 - 2025-11-27 09:25:20
+```
+
+**✅ 실제 사용 시나리오:**
+
+**시나리오 1️⃣: 최근 5분 Gateway 실행 흐름 확인 (가장 빠르고 정확!)**
+```powershell
+pwsh .\mgmt\check-latest.ps1
+```
+출력: [5.x] 포인트별 실행 흐름과 타임스탐프
+
+**시나리오 2️⃣: 특정 서버의 최근 30분 Gateway 로그 조회**
+```powershell
+pwsh .\mgmt\check-latest.ps1 -Lssn 71241 -Minutes 30
+```
+출력: 해당 서버의 모든 [5.x], [6.0] 포인트
+
+**시나리오 3️⃣: SSH 관련 포인트만 필터링 (SSH 문제 진단)**
+```powershell
+pwsh .\mgmt\check-latest.ps1 -PointFilter "5\.7" -NoPointFilter:$false
+```
+출력: SSH 연결 관련 로그만
+
+**시나리오 4️⃣: 지난 1시간 전체 Gateway 로그 (상세 진단)**
+```powershell
+pwsh .\mgmt\check-latest.ps1 -Minutes 60 -Top 1000
+```
+출력: 지난 1시간의 최대 1000개 로그
+
+**2️⃣ 특정 서버의 상세 Gateway 로그 조회**
+```powershell
+pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey YOUR_GATEWAY_LSSN -KFactor gateway_operation -Top 50
+```
+출력: 모든 gateway_operation 로그의 상세 JSON 데이터
+
+**3️⃣ 특정 서버의 모든 Factor 목록 (현황 요약)**
+```powershell
 pwsh .\mgmt\query-kvs.ps1 -KType lssn -KKey YOUR_GATEWAY_LSSN -Summary
 ```
+출력: 모든 Factor별 레코드 개수 및 마지막 업데이트 시간
 
 **방법 2️⃣: Web UI로 조회**
 
@@ -1507,6 +1719,12 @@ ls -lht /tmp/gateway_* 2>/dev/null | head -5
 - [ ] 로그 포인트 [5.2]에서 is_gateway=1인가?
 - [ ] 로그 포인트 [5.3]이 나타나는가?
 
+### SSH 연결 및 DB 업데이트 (핵심!)
+- [ ] KVS에 `gateway_step_5.9_ssh_success` 기록이 있는가? (SSH 성공)
+- [ ] tManagedServer.lsChkdt가 최근 5분 이내로 업데이트되는가? ⭐ **핵심 지표**
+- [ ] `SELECT DATEDIFF(MINUTE, lsChkdt, GETDATE()) FROM tManagedServer WHERE lssn=71241`이 0-5 사이인가?
+- [ ] 매 5분마다 lsChkdt가 새로운 시간으로 업데이트되는가? (cron/스케줄러 정상 작동 확인)
+
 ### 데이터 조회
 - [ ] GatewayRemoteServerListForAgent API가 응답하는가?
 - [ ] 리모트 서버 목록이 비어있지 않은가?
@@ -1522,11 +1740,13 @@ ls -lht /tmp/gateway_* 2>/dev/null | head -5
 - [ ] KVS에 `gateway_operation` Factor 데이터가 있는가?
 - [ ] 최근 5분 내 [5.4] 포인트 이후 포인트들이 있는가?
 - [ ] 같은 포인트가 무한 반복되는 것은 아닌가?
+- [ ] `gateway_step_5.9_ssh_success` 이후 `gateway_step_5.10_complete` 있는가? (DB 업데이트 성공)
 
 ### 최종 검증
 - [ ] giipAgent3.sh 재실행 후 리모트 서버가 처리되는가?
 - [ ] 로그에서 에러나 경고 메시지가 없는가?
 - [ ] 이전과 다르게 정상 작동하는가?
+- [ ] lsChkdt가 계속 업데이트되는가? (가장 중요한 신호!)
 
 **모두 확인되면 문제 해결 완료! ✅**
 

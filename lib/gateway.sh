@@ -66,11 +66,13 @@ gateway_log() {
 	
 	# Log to tKVS - point only (timestamp will be set by DB with getdate())
 	# Use pure JSON object as per kvs.sh requirements
-	local json_payload="{\"event_type\":\"gateway_operation\",\"point\":\"${point}\"}"
+	local json_payload="{\"event_type\":\"gateway_operation\",\"point\":\"${point}\""
 	
 	# Only append extra_json if provided (it must be valid JSON fragment)
 	if [ -n "$extra_json" ]; then
-		json_payload="${json_payload%}},${extra_json}}"
+		json_payload="${json_payload},${extra_json}}"
+	else
+		json_payload="${json_payload}}"
 	fi
 	
 	# Call kvs_put with proper JSON object (NOT escaped string)
@@ -237,8 +239,11 @@ execute_remote_command() {
 			return 1
 		fi
 		
+		# SSH 테스트 결과를 임시 파일에 저장
+		local ssh_test_output="/tmp/ssh_test_${remote_lssn}_$$.txt"
+		
 		sshpass -p "${ssh_password}" scp ${ssh_opts} -P ${remote_port} \
-		    ${script_file} ${remote_user}@${remote_host}:/tmp/giipTmpScript.sh 2>&1 | head -5
+		    ${script_file} ${remote_user}@${remote_host}:/tmp/giipTmpScript.sh 2>&1 | tee -a "$ssh_test_output"
 		
 		if [ $? -ne 0 ]; then
 			local duration=$(($(date +%s) - start_time))
@@ -247,18 +252,39 @@ execute_remote_command() {
 			if type log_ssh_result >/dev/null 2>&1; then
 				log_ssh_result "$remote_host" "$remote_port" "126" "$duration" "$remote_lssn" "$hostname"
 			fi
+			
+			# 실패 결과도 KVS에 기록
+			if [ -f "$ssh_test_output" ]; then
+				local ssh_error=$(cat "$ssh_test_output")
+				kvs_put "lssn" "${lssn:-0}" "gateway_ssh_test_failed" "$ssh_error" 2>/dev/null
+			fi
+			rm -f "$ssh_test_output"
 			return 1
 		fi
 		
 		sshpass -p "${ssh_password}" ssh ${ssh_opts} -p ${remote_port} \
 		    ${remote_user}@${remote_host} \
-		    "chmod +x /tmp/giipTmpScript.sh && /tmp/giipTmpScript.sh && rm -f /tmp/giipTmpScript.sh" 2>&1 | head -20
+		    "chmod +x /tmp/giipTmpScript.sh && /tmp/giipTmpScript.sh && rm -f /tmp/giipTmpScript.sh" 2>&1 | tee -a "$ssh_test_output"
 		
 		exit_code=$?
 		
+		# SSH 테스트 성공/실패 결과를 KVS에 기록
+		if [ -f "$ssh_test_output" ]; then
+			local ssh_result=$(cat "$ssh_test_output")
+			if [ $exit_code -eq 0 ]; then
+				kvs_put "lssn" "${lssn:-0}" "gateway_ssh_test_success" "$ssh_result" 2>/dev/null
+			else
+				kvs_put "lssn" "${lssn:-0}" "gateway_ssh_test_failed" "$ssh_result" 2>/dev/null
+			fi
+			rm -f "$ssh_test_output"
+		fi
+		
 	elif [ -n "${ssh_key}" ] && [ -f "${ssh_key}" ]; then
+		# SSH 테스트 결과를 임시 파일에 저장
+		local ssh_test_output="/tmp/ssh_test_${remote_lssn}_$$.txt"
+		
 		scp ${ssh_opts} -i ${ssh_key} -P ${remote_port} \
-		    ${script_file} ${remote_user}@${remote_host}:/tmp/giipTmpScript.sh 2>&1 | head -5
+		    ${script_file} ${remote_user}@${remote_host}:/tmp/giipTmpScript.sh 2>&1 | tee -a "$ssh_test_output"
 		
 		if [ $? -ne 0 ]; then
 			local duration=$(($(date +%s) - start_time))
@@ -267,14 +293,32 @@ execute_remote_command() {
 			if type log_ssh_result >/dev/null 2>&1; then
 				log_ssh_result "$remote_host" "$remote_port" "126" "$duration" "$remote_lssn" "$hostname"
 			fi
+			
+			# 실패 결과도 KVS에 기록
+			if [ -f "$ssh_test_output" ]; then
+				local ssh_error=$(cat "$ssh_test_output")
+				kvs_put "lssn" "${lssn:-0}" "gateway_ssh_test_failed" "$ssh_error" 2>/dev/null
+			fi
+			rm -f "$ssh_test_output"
 			return 1
 		fi
 		
 		ssh ${ssh_opts} -i ${ssh_key} -p ${remote_port} \
 		    ${remote_user}@${remote_host} \
-		    "chmod +x /tmp/giipTmpScript.sh && /tmp/giipTmpScript.sh && rm -f /tmp/giipTmpScript.sh" 2>&1 | head -20
+		    "chmod +x /tmp/giipTmpScript.sh && /tmp/giipTmpScript.sh && rm -f /tmp/giipTmpScript.sh" 2>&1 | tee -a "$ssh_test_output"
 		
 		exit_code=$?
+		
+		# SSH 테스트 성공/실패 결과를 KVS에 기록
+		if [ -f "$ssh_test_output" ]; then
+			local ssh_result=$(cat "$ssh_test_output")
+			if [ $exit_code -eq 0 ]; then
+				kvs_put "lssn" "${lssn:-0}" "gateway_ssh_test_success" "$ssh_result" 2>/dev/null
+			else
+				kvs_put "lssn" "${lssn:-0}" "gateway_ssh_test_failed" "$ssh_result" 2>/dev/null
+			fi
+			rm -f "$ssh_test_output"
+		fi
 	else
 		echo "  ❌ No authentication method available"
 		local duration=$(($(date +%s) - start_time))
