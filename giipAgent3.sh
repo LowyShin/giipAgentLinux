@@ -382,9 +382,18 @@ if [ "${gateway_mode}" = "1" ]; then
 	# Read the actual discovery result data
 	auto_discover_json=$(cat "$auto_discover_result_file")
 	
-	# DEBUG: Log json content
+	# DEBUG: Log json content and structure
 	echo "DEBUG STEP-6: json_length=${#auto_discover_json}" | tee -a /tmp/auto_discover_debug_$$.log
 	echo "DEBUG STEP-6: json_first_200=$(echo "$auto_discover_json" | head -c 200)" | tee -a /tmp/auto_discover_debug_$$.log
+	
+	# DEBUG: Check JSON structure
+	echo "DEBUG STEP-6: JSON structure check:" | tee -a /tmp/auto_discover_debug_$$.log
+	echo "$auto_discover_json" | jq 'keys' 2>/dev/null | tee -a /tmp/auto_discover_debug_$$.log
+	echo "DEBUG STEP-6: .servers exists: $(echo "$auto_discover_json" | jq 'has("servers")' 2>/dev/null)" | tee -a /tmp/auto_discover_debug_$$.log
+	echo "DEBUG STEP-6: .networks exists: $(echo "$auto_discover_json" | jq 'has("networks")' 2>/dev/null)" | tee -a /tmp/auto_discover_debug_$$.log
+	echo "DEBUG STEP-6: .services exists: $(echo "$auto_discover_json" | jq 'has("services")' 2>/dev/null)" | tee -a /tmp/auto_discover_debug_$$.log
+	echo "DEBUG STEP-6: .servers value: $(echo "$auto_discover_json" | jq '.servers' 2>/dev/null)" | tee -a /tmp/auto_discover_debug_$$.log
+	echo "DEBUG STEP-6: .networks value: $(echo "$auto_discover_json" | jq '.networks' 2>/dev/null)" | tee -a /tmp/auto_discover_debug_$$.log
 	
 	# Parse and store discovery results by type (각 kFactor별로 파일만 생성, kvs_put은 나중에)
 	# The auto_discover_json contains: {"servers":[...], "networks":[...], "services":[...], etc.}
