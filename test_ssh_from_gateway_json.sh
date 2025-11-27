@@ -513,6 +513,8 @@ main() {
 		while IFS= read -r server_json; do
 			[ -z "$server_json" ] && continue
 			
+			echo "DEBUG: Raw server_json: $server_json" >&2
+			
 			local hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null)
 			local lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null)
 			local ssh_host=$(echo "$server_json" | jq -r '.ssh_host // empty' 2>/dev/null)
