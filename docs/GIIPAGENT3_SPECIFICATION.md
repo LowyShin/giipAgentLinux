@@ -2,14 +2,16 @@
 
 > **📅 문서 메타데이터**  
 > - 최초 작성: 2025-11-11  
-> - 최종 수정: 2025-11-22  
+> - 최종 수정: 2025-11-27  
 > - 작성자: AI Agent  
 > - 목적: giipAgent3 모듈 구조 및 KVS 로깅 규칙 명세
+> - **최신 업데이트 (2025-11-27)**: 실행 흐름 규칙 확정, 모듈 로드 정보 최신화, 라인 넘버 수정, 새로운 cleanup.sh/target_list.sh 모듈 문서화
 > 
-> **✅ 해결 완료 (2025-11-22)**:
-> - **문제**: Gateway 모드에서 자신의 LSChkdt가 업데이트되지 않음
-> - **원인**: Gateway는 Remote 서버만 관리하고, 자신의 큐를 처리하지 않아 CQEQueueGet API 호출 없음
-> - **해결**: Gateway도 자신의 큐를 처리하도록 수정 (섹션 [Gateway 자신의 큐 처리](#gateway-자신의-큐-처리) 참고)
+> **✅ 해결 완료 (2025-11-27)**:
+> - ✅ Gateway와 Normal 모드 독립 실행 (if, 절대 if-else 금지)
+> - ✅ Shutdown log 단일화 (fi 블록 다음에 한 번만 기록)
+> - ✅ 모듈 통합 (cleanup.sh, target_list.sh, gateway_api.sh 활용)
+> - ✅ 실행 흐름 규칙 명문화 및 AI Agent 작업 규칙 문서화
 
 ---
 
@@ -27,8 +29,9 @@
 
 **파일**: `giipAgentLinux/giipAgent3.sh`  
 **버전**: 3.00  
-**아키텍처**: Modular (lib/*.sh 라이브러리 분리)  
-**모드**: Gateway / Normal
+**라인 수**: 306 lines (2025-11-27 최신)  
+**아키텍처**: Modular (lib/*.sh 라이브러리 분리 + cleanup/target_list 통합)  
+**모드**: Gateway + Normal (병행 실행)
 
 ---
 
@@ -175,11 +178,39 @@ WHERE gateway_lssn = @gateway_lssn
 ### 메인 스크립트
 
 **giipAgent3.sh**
-- 역할: 진입점, 설정 로드, 모드 분기
+- 역할: 진입점, 설정 로드, 모드 분기, cleanup 통합
 - 위치: `giipAgentLinux/giipAgent3.sh`
-- 라인 수: ~250 lines
+- 라인 수: 306 lines (2025-11-27)
+- 핵심 변경: cleanup.sh/target_list.sh/kvs.sh 통합 로드, 실행 흐름 재구성
 
 ### 라이브러리 모듈 (lib/*.sh)
+
+#### 0. lib/kvs.sh (NEW - 2025-11-27)
+**필수 로드**: ✅ 모든 모드
+
+**제공 기능**:
+- `kvs_put()`: KVS 키-값 저장 (디버깅용 메타데이터)
+- `save_execution_log()`: 실행 이력을 tKVS에 저장 (kFactor=giipagent) ⭐ **중요**
+- `save_gateway_status()`: Gateway 상태 저장 (kFactor=gateway_status)
+
+**KVS 로깅**: ✅ 있음
+- kFactor=giipagent (실행 이력)
+- kFactor=gateway_status (Gateway 상태)
+
+**로드 시점**: giipAgent3.sh Line 39-44
+
+```bash
+if [ -f "${LIB_DIR}/kvs.sh" ]; then
+	. "${LIB_DIR}/kvs.sh"
+else
+	echo "❌ Error: kvs.sh not found"
+	exit 1
+fi
+```
+
+**역할**: 모든 KVS 로깅의 중앙 집중식 처리
+
+---
 
 #### 1. lib/common.sh
 **필수 로드**: ✅ 모든 모드
@@ -194,13 +225,13 @@ WHERE gateway_lssn = @gateway_lssn
 
 **KVS 로깅**: ❌ 없음
 
-**로드 시점**: giipAgent3.sh Line 26-32
+**로드 시점**: giipAgent3.sh Line 28-33 (맨 먼저)
 
 ```bash
 if [ -f "${LIB_DIR}/common.sh" ]; then
 	. "${LIB_DIR}/common.sh"
 else
-	echo "❌ Error: common.sh not found"
+	echo "❌ Error: common.sh not found in ${LIB_DIR}"
 	exit 1
 fi
 ```
@@ -268,7 +299,87 @@ fi
 
 ---
 
-#### 4. lib/db_clients.sh
+#### 5. lib/cleanup.sh (NEW - 2025-11-27)
+**필수 로드**: ✅ 모든 모드 (초기화 단계)
+
+**제공 기능**:
+- `cleanup_old_temp_files(pattern)`: 패턴에 맞는 오래된 파일 삭제
+- `cleanup_all_temp_files()`: 모든 GIIP 임시 파일 정리
+
+**KVS 로깅**: ❌ 없음 (정리 목적)
+
+**로드 시점**: giipAgent3.sh Line 46-50 (config 로드 전)
+
+```bash
+if [ -f "${LIB_DIR}/cleanup.sh" ]; then
+	. "${LIB_DIR}/cleanup.sh"
+else
+	echo "❌ Error: cleanup.sh not found"
+	exit 1
+fi
+```
+
+**실행 시점**: giipAgent3.sh Line 68-70 (config 로드 후 즉시)
+
+```bash
+cleanup_all_temp_files
+echo ""
+```
+
+**정리 대상**:
+- `/tmp/giip_discovery_*.json`
+- `/tmp/gateway_servers_*.json`
+- `/tmp/ssh_test_logs/`
+
+---
+
+#### 6. lib/target_list.sh (NEW - 2025-11-27)
+**필수 로드**: ⚠️ Gateway 모드 (SSH 테스트 전)
+
+**제공 기능**:
+- `display_target_servers(json_file)`: 대상 서버 목록 색상 출력
+- `print_info/success/error/warning()`: ANSI 색상 함수
+
+**KVS 로깅**: ❌ 없음 (표시 목적)
+
+**로드 시점**: giipAgent3.sh Line 52-57 (항상, 사용 시에만 호출)
+
+```bash
+if [ -f "${LIB_DIR}/target_list.sh" ]; then
+	. "${LIB_DIR}/target_list.sh"
+else
+	echo "❌ Error: target_list.sh not found"
+	exit 1
+fi
+```
+
+**역할**: Gateway 모드에서 `display_target_servers()` 함수 제공
+
+---
+
+#### 7. lib/gateway_api.sh (외부 모듈)
+**필수 로드**: ⚠️ Gateway 모드만 (SSH 테스트 수행)
+
+**제공 기능**:
+- `get_gateway_servers()`: Gateway가 관리하는 Remote 서버 목록 조회 및 JSON 저장
+- `gateway_api_*`: 기타 Gateway API 함수들
+
+**KVS 로깅**: ❌ 없음 (API 호출만)
+
+**로드 시점**: giipAgent3.sh Line 195-198 (Gateway 모드 진입 시)
+
+```bash
+if [ -f "${LIB_DIR}/gateway_api.sh" ]; then
+	. "${LIB_DIR}/gateway_api.sh"
+else
+	log_message "ERROR" "gateway_api.sh not found"
+	exit 1
+fi
+```
+
+---
+
+#### 8. lib/db_clients.sh
 **필수 로드**: ⚠️ Gateway 모드만
 
 **제공 기능**:
@@ -277,7 +388,7 @@ fi
 
 **KVS 로깅**: ❌ 없음
 
-**로드 시점**: giipAgent3.sh Line 196 (Gateway 모드)
+**로드 시점**: giipAgent3.sh Line 199 (Gateway 모드, gateway_api.sh 전)
 
 ---
 
@@ -293,8 +404,10 @@ fi
 
 #### Gateway 모드
 **파일**: `giipAgent3.sh`  
-**위치**: Line 203  
+**위치**: 현재 코드에서 startup 로깅 없음 (gateway.sh에서 수행 또는 normal.sh 이용)
 **함수**: `save_execution_log "startup"`
+
+**주의**: 현재 giipAgent3.sh는 startup 로깅을 하지 않고, 각 모드가 자체 startup을 기록합니다.
 
 ```bash
 if [ "${gateway_mode}" = "1" ]; then
@@ -351,7 +464,7 @@ run_normal_mode() {
 ### 환경변수 설정
 
 **파일**: `giipAgent3.sh`  
-**위치**: Line 103-119
+**위치**: Line 149-156 (초기화 후, config 로드 전)
 
 ```bash
 # Get Git commit hash (if available)
@@ -809,14 +922,24 @@ grep -r "timestamp" lib/*.sh giipAgent3.sh | grep -v "# " | grep -v "⏰"
 
 ```
 giipAgentLinux/
-├── giipAgent3.sh           # 메인 진입점 (250 lines)
-│   ├── Load common.sh      # 필수
-│   ├── Fetch DB config     # is_gateway 조회
-│   ├── Export GIT_COMMIT   # 버전 추적
+├── giipAgent3.sh           # 메인 진입점 (306 lines, 2025-11-27)
+│   ├── Load common.sh      # Line 28-33 (필수)
+│   ├── Load kvs.sh         # Line 39-44 (필수, KVS 로깅)
+│   ├── Load cleanup.sh     # Line 46-50 (필수, 임시 파일 정리)
+│   ├── Load target_list.sh # Line 52-57 (필수, 표시 함수)
+│   ├── Fetch DB config     # Line 75-165 (is_gateway 조회)
+│   ├── Init Logging        # Line 168-176
+│   ├── Export GIT_COMMIT   # Line 149-156 (버전 추적)
 │   ├── Export FILE_MODIFIED
+│   ├── Cleanup old files   # Line 68-70
 │   └── Mode 분기
-│       ├── Gateway → load gateway.sh, db_clients.sh
-│       └── Normal → load normal.sh
+│       ├── Gateway (if) → Line 180-209
+│       │   ├── Load gateway_api.sh
+│       │   ├── Get server list
+│       │   └── SSH test
+│       └── Normal (항상) → Line 211-223
+│           ├── Load normal.sh
+│           └── run_normal_mode()
 │
 └── lib/
     ├── common.sh           # 공통 함수 (모든 모드)
@@ -844,27 +967,51 @@ giipAgentLinux/
 
 ---
 
-## 🎯 핵심 요약
+## 🎯 핵심 요약 (2025-11-27 최신)
 
-1. **startup 로깅은 1번만**:
-   - Gateway: giipAgent3.sh Line 203
-   - Normal: lib/normal.sh Line 216
+### ⭐ 실행 흐름 (절대 변경 금지)
+
+```
+Load Modules (kvs, cleanup, target_list) → DB Config → Cleanup
+→ [if gateway_mode=1] → Gateway (SSH test) → [endif]
+→ [ALWAYS] → Normal (queue process)
+→ Shutdown Log (fi 다음에 한 번만!)
+```
+
+### 핵심 규칙
+
+1. **모듈 로드 순서**:
+   - common.sh (Line 28-33) ← 맨 먼저!
+   - kvs.sh (Line 39-44) ← KVS 로깅
+   - cleanup.sh (Line 46-50) ← 정리
+   - target_list.sh (Line 52-57) ← 표시
+   - (config 로드 후)
+   - gateway_api.sh: Gateway 모드에서만
+   - normal.sh: Normal 모드에서만
 
 2. **버전 추적**:
-   - GIT_COMMIT, FILE_MODIFIED 환경변수 사용
-   - giipAgent3.sh Line 103-119에서 export
+   - GIT_COMMIT, FILE_MODIFIED 환경변수
+   - giipAgent3.sh Line 149-156에서 export
 
-3. **모듈 로드**:
-   - common.sh: 항상
-   - gateway.sh, db_clients.sh: Gateway 모드
-   - normal.sh: Normal 모드
+3. **실행 모드 (절대 if-else 금지!)**:
+   - Gateway: `if [ "$gateway_mode" = "1" ]` (조건부)
+   - Normal: `if` 바깥 (항상 실행)
+   - Shutdown: `fi` 다음 (공통 한 번만)
 
-4. **KVS 함수**:
-   - save_execution_log: giipagent factor (실행 이력)
-   - save_gateway_status: gateway_status factor (상태 정보)
+4. **startup 로깅**:
+   - Gateway 모드: gateway.sh에서 자체 처리
+   - Normal 모드: normal.sh에서 자체 처리
+   - 각 모드별 1번씩만!
 
-5. **사양서 업데이트**:
+5. **KVS 로깅 (중복 금지!)**:
+   - save_execution_log(): kFactor=giipagent (실행 이력)
+   - save_gateway_status(): kFactor=gateway_status (Gateway 상태)
+   - 각 위치에서 1번씩만
+
+6. **사양서 업데이트**:
    - 모듈 추가/수정 시 이 문서 업데이트 필수!
+   - 라인 넘버, 함수명, 로드 조건 정확히
+   - AI Agent 작업 규칙 섹션 참고
 
 ---
 
@@ -874,13 +1021,17 @@ giipAgentLinux/
 
 ## 📅 버전 이력 (Version History)
 
-| 날짜 | 변경 사항 | 영향 범위 |
-|------|---------|---------|
-| 2025-11-11 | 초안 작성 | 전체 구조 |
-| 2025-11-22 | [5.3.1] Gateway 자신의 큐 처리 추가 | gateway.sh, normal.sh |
-| 2025-11-22 | 타임스탐프 정책 업데이트 (DB 레벨) | JSON 구조 변경 |
-| 2025-11-22 | gateway.sh에 normal.sh 로드 추가 | gateway.sh 줄 34 |
-| 2025-11-22 | 에러 원인 & 해결책 상세 문서화 | 🚨 AI Agent 작업 규칙 섹션 신규 |
+| 날짜 | 변경 사항 | 영향 범위 | 파일 |
+|------|---------|----------|------|
+| 2025-11-11 | 초안 작성 | 전체 구조 | GIIPAGENT3_SPECIFICATION.md |
+| 2025-11-22 | [5.3.1] Gateway 자신의 큐 처리 추가 | gateway.sh, normal.sh | lib/gateway.sh |
+| 2025-11-22 | 타임스탐프 정책 업데이트 (DB 레벨) | JSON 구조 변경 | 명세서 |
+| 2025-11-22 | gateway.sh에 normal.sh 로드 추가 | gateway.sh 줄 34 | lib/gateway.sh |
+| 2025-11-22 | 에러 원인 & 해결책 상세 문서화 | 🚨 AI Agent 작업 규칙 섹션 신규 | 명세서 |
+| 2025-11-27 | **giipAgent3.sh 실행 흐름 확정** | **코드 구조화** | **giipAgent3.sh (306 lines)** |
+| 2025-11-27 | 모듈 통합: kvs.sh, cleanup.sh, target_list.sh | **모듈 로드 정보** | giipAgent3.sh, 명세서 |
+| 2025-11-27 | Gateway와 Normal 모드 독립 실행 규칙 | **if 구조 확정** | 명세서 섹션 5 |
+| 2025-11-27 | **사양서 전체 최신화** | **라인 넘버 정정** | GIIPAGENT3_SPECIFICATION.md |
 
 ---
 
