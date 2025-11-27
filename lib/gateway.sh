@@ -79,12 +79,6 @@ process_single_server() {
 	local ssh_password=$(echo "$server_params" | jq -r '.ssh_password' 2>/dev/null)
 	local os_info=$(echo "$server_params" | jq -r '.os_info' 2>/dev/null)
 	
-	# Step 3.5: Save server connection info to file (diagnostic purpose)
-	# File: gateway_servers_{lssn}.json
-	local server_info_file="${tmpdir}/gateway_servers_${server_lssn}.json"
-	echo "$server_params" > "$server_info_file"
-	gateway_log "🔵" "[5.5.9-FILE]" "Server connection info saved to file: $server_info_file"
-	
 	gateway_log "🟢" "[5.6]" "Server parsed: hostname=${hostname}, lssn=${server_lssn}"
 	echo "[$(date '+%Y%m%d%H%M%S')] [Gateway] Processing: $hostname (LSSN:$server_lssn)" >> $LogFileName
 	type log_remote_execution >/dev/null 2>&1 && log_remote_execution "started" "$hostname" "$server_lssn" "$ssh_host" "$ssh_port" "unknown"
