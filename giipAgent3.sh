@@ -276,71 +276,16 @@ fi
 
 if [ "${gateway_mode}" = "1" ]; then
 	# ========================================================================
-	# GATEWAY MODE
+	# GATEWAY MODE - Call SSH test script
 	# ========================================================================
-	
-	# 🔴 [로깅 포인트 #5.3] Gateway 모드 감지 및 초기화
-	echo "[giipAgent3.sh] 🟢 [5.3] Gateway 모드 감지 및 초기화: lssn=${lssn}, gateway_mode=1"
 	
 	log_message "INFO" "Running in GATEWAY MODE"
 	
-	# Load gateway and db_clients libraries
-	. "${LIB_DIR}/db_clients.sh"
-	. "${LIB_DIR}/gateway.sh"
+	# Call SSH test script
+	log_message "INFO" "Calling test_ssh_from_gateway_json.sh..."
+	"${SCRIPT_DIR}/test_ssh_from_gateway_json.sh"
 	
-	# Initialize Gateway
-	startup_status="{\"status\":\"started\",\"version\":\"${sv}\",\"lssn\":${lssn},\"mode\":\"gateway\",\"is_gateway\":1}"
-	save_gateway_status "startup" "$startup_status"
-	
-	init_details="{\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"pid\":$$,\"is_gateway\":1,\"git_commit\":\"${GIT_COMMIT}\",\"file_modified\":\"${FILE_MODIFIED}\",\"script_path\":\"${BASH_SOURCE[0]}\"}"
-	save_execution_log "startup" "$init_details"
-	
-	# Check and install dependencies
-	check_sshpass || error_handler "Failed to setup sshpass" 1
-	# Note: DB clients are checked/installed only when needed in check_managed_databases()
-	
-	# Verify DB connectivity (connectivity check only, no file operations)
-	log_message "INFO" "Verifying DB connectivity..."
-	# Note: Actual server list will be fetched inside process_gateway_servers()
-	# This is just a connectivity check
-	
-	# Save initialization complete (server_count will be set by process_gateway_servers)
-	init_complete_details="{\"db_connectivity\":\"will_verify\",\"server_count\":0}"
-	save_execution_log "gateway_init" "$init_complete_details"
-	
-	# ================================================================
-	# Auto-Discover Phase (before Gateway processing)
-	# ================================================================
-	
-	log_message "INFO" "Running auto-discover phase..."
-	if run_auto_discover "${lssn}" "${hn}" "${os}" "${SCRIPT_DIR}"; then
-		log_message "INFO" "Auto-discover phase completed successfully"
-	else
-		log_message "WARN" "Auto-discover phase failed but continuing"
-	fi
-	
-	# Gateway main loop (run once per execution, cron will re-run)
-	log_message "INFO" "Starting Gateway cycle..."
-	
-	# 🔴 [로깅 포인트 #5.5] Gateway 리모트 서버 처리 시작
-	echo "[giipAgent3.sh] 🟢 [5.5] Gateway 리모트 서버 처리 시작"
-	
-	# Process gateway servers (query DB each cycle)
-	if process_gateway_servers; then
-		log_message "INFO" "Gateway servers processed successfully"
-		echo "[giipAgent3.sh] 🟢 [5.6] Gateway 리모트 서버 처리 완료"
-		kvs_put "lssn" "${lssn}" "gateway_remote_processing" "{\"status\":\"success\",\"phase\":\"[5.6]\"}"
-	else
-		log_message "WARN" "Gateway server processing returned error code"
-		echo "[giipAgent3.sh] ⚠️  [5.6] Gateway 리모트 서버 처리 경고"
-		kvs_put "lssn" "${lssn}" "gateway_remote_processing" "{\"status\":\"warning\",\"phase\":\"[5.6]\"}"
-	fi
-	
-	# Check managed databases (tManagedDatabase)
-	log_message "INFO" "Checking managed databases..."
-	check_managed_databases
-	
-	log_message "INFO" "Gateway cycle completed"
+	log_message "INFO" "SSH test script completed"
 	
 	# Shutdown log
 	save_execution_log "shutdown" "{\"mode\":\"gateway\",\"status\":\"normal_exit\"}"
