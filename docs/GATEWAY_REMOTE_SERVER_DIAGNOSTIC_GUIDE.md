@@ -205,6 +205,76 @@ Gateway 서버가 갑자기 리모트 서버 처리를 중단한 경우 체계�
 
 ---
 
+## 📱 KVS 데이터 조회 방법
+
+### 1️⃣ **PowerShell 스크립트 사용** (giipdb 디렉토리)
+
+```powershell
+# giipdb/mgmt/check-latest.ps1 사용
+
+# 최근 30분 KVS 데이터 전체 조회
+cd c:\Users\{username}\Downloads\projects\giipprj\giipdb
+.\mgmt\check-latest.ps1 -Minutes 30
+
+# 특정 시간대 조회 (60분)
+.\mgmt\check-latest.ps1 -Minutes 60
+
+# 특정 포인트 필터링 예시
+.\mgmt\check-latest.ps1 -Minutes 30 | Select-String "ssh_connection_info"
+.\mgmt\check-latest.ps1 -Minutes 30 | Select-String "gateway_ssh_test"
+```
+
+### 2️⃣ **최신 KVS 데이터 즉시 확인**
+
+```powershell
+# 최근 5분 데이터만 (가장 빠름)
+cd c:\Users\{username}\Downloads\projects\giipprj\giipdb
+.\mgmt\check-latest.ps1 -Minutes 5 | Head -50
+```
+
+### 3️⃣ **특정 Factor 조회**
+
+**SSH 접속 정보 (phase [5.8.5]) 조회:**
+```powershell
+.\mgmt\check-latest.ps1 -Minutes 30 | Select-String "ssh_connection_info_before_attempt"
+```
+
+**SSH 테스트 결과 조회:**
+```powershell
+# 성공
+.\mgmt\check-latest.ps1 -Minutes 30 | Select-String "gateway_ssh_test_success"
+
+# 실패
+.\mgmt\check-latest.ps1 -Minutes 30 | Select-String "gateway_ssh_test_failed"
+```
+
+**서버 추출 정보 조회:**
+```powershell
+.\mgmt\check-latest.ps1 -Minutes 30 | Select-String "gateway_server_extract"
+```
+
+### 4️⃣ **KVS 데이터 구조**
+
+```
+시간: 2025-11-27 09:25:14.123
+lssn: 71241
+Factor: ssh_connection_info_before_attempt
+kValue: 
+{
+  "phase": "[5.8.5]",
+  "hostname": "web-server-01",
+  "lssn": 7515,
+  "ssh_host": "192.168.1.100",
+  "ssh_port": 22,
+  "ssh_user": "admin",
+  "auth_method": "key",
+  "has_password": false,
+  "os_info": "Linux"
+}
+```
+
+---
+
 ## 🔧 코드 수정 가이드 (lib/gateway.sh)
 
 ### 📌 KVS kValue 처리 규칙 (중요!)
