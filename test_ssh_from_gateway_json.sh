@@ -492,13 +492,6 @@ main() {
 	log_message "INFO" "Server count: ${server_count}"
 	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 	
-	echo ""
-	echo "DEBUG: RAW JSON FILE CONTENT:" >&2
-	cat "$json_file" >&2
-	echo ""
-	echo "DEBUG: END OF RAW JSON" >&2
-	echo ""
-	
 	# Parse JSON and extract servers
 	local actual_server_count=0
 	declare -a server_list
@@ -516,17 +509,9 @@ main() {
 		local temp_servers="/tmp/servers_to_test_$$.jsonl"
 		jq -c '.data[]? // .[]? // .' "$json_file" 2>/dev/null > "$temp_servers"
 		
-		echo ""
-		echo "DEBUG: EXTRACTED SERVERS FROM JQ:" >&2
-		cat "$temp_servers" >&2
-		echo "DEBUG: END OF EXTRACTED SERVERS" >&2
-		echo ""
-		
 		local list_count=0
 		while IFS= read -r server_json; do
 			[ -z "$server_json" ] && continue
-			
-			echo "DEBUG: Raw server_json: $server_json" >&2
 			
 			local hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null)
 			local lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null)
@@ -557,42 +542,22 @@ main() {
 		fi
 		
 		# Step 8.2: Second pass - test connections
-		echo "DEBUG: Starting for loop with ${#server_list[@]} servers" >&2
 		for server_json in "${server_list[@]}"; do
-			echo "DEBUG: In loop iteration, server_json length: ${#server_json}" >&2
 			((TOTAL_SERVERS++))
 			((actual_server_count++))
 			
-			echo "DEBUG: Extracting hostname..." >&2
 			# Extract parameters using jq
 			local hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null) || true
-			echo "DEBUG: hostname='$hostname'" >&2
-			
 			local lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null) || true
-			echo "DEBUG: lssn='$lssn'" >&2
-			
 			local ssh_host=$(echo "$server_json" | jq -r '.ssh_host // empty' 2>/dev/null) || true
-			echo "DEBUG: ssh_host='$ssh_host'" >&2
-			
 			local ssh_user=$(echo "$server_json" | jq -r '.ssh_user // empty' 2>/dev/null) || true
-			echo "DEBUG: ssh_user='$ssh_user'" >&2
-			
 			local ssh_port=$(echo "$server_json" | jq -r '.ssh_port // 22' 2>/dev/null) || true
-			echo "DEBUG: ssh_port='$ssh_port'" >&2
-			
 			local ssh_key_path=$(echo "$server_json" | jq -r '.ssh_key_path // empty' 2>/dev/null) || true
-			echo "DEBUG: ssh_key_path='$ssh_key_path'" >&2
-			
 			local ssh_password=$(echo "$server_json" | jq -r '.ssh_password // empty' 2>/dev/null) || true
-			echo "DEBUG: ssh_password='$ssh_password'" >&2
 			
-			echo "DEBUG: About to call test_ssh_connection for server $actual_server_count: $hostname" >&2
-			print_info "Processing server $actual_server_count: $hostname"
 			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn" || true
-			echo "DEBUG: Returned from test_ssh_connection for server $actual_server_count" >&2
 			
 		done
-		echo "DEBUG: Exited for loop" >&2
 	else
 		# Fallback: use grep for JSON parsing
 		print_warning "jq not found, using grep fallback for JSON parsing"
@@ -661,12 +626,13 @@ main() {
 	# Print test results
 	echo ""
 	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
-	print_info "🧪 Test Results by Server:"
+	print_info "🧪 Test Results:"
 	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+	echo ""
 	
 	# Parse and display results
 	if command -v jq &> /dev/null; then
-		jq -r '.servers[] | "[\(.status | if . == "SUCCESS" then "✓" elif . == "FAILED" then "✗" else "⊘" end)] \(.hostname) (\(.ssh_host):\(.ssh_port)) - LSSN:\(.lssn) - \(if .connection_time_sec then .connection_time_sec + "s" else "N/A" end)"' "$RESULT_JSON" | while read line; do
+		jq -r '.servers[] | "[\(.status | if . == "SUCCESS" then "✓" elif . == "FAILED" then "✗" else "⊘" end)] \(.hostname) (\(.ssh_host):\(.ssh_port)) - LSSN:\(.lssn)"' "$RESULT_JSON" 2>/dev/null | while read line; do
 			if [[ "$line" == *"✓"* ]]; then
 				print_success "  $line"
 			elif [[ "$line" == *"✗"* ]]; then
@@ -679,56 +645,10 @@ main() {
 	
 	echo ""
 	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
-	echo "" | tee -a "$REPORT_FILE"
-	
-	# Print summary
-	echo ""
-	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
-	echo "" | tee -a "$REPORT_FILE"
-	print_info "📊 Test Summary"
-	echo "" | tee -a "$REPORT_FILE"
-	log_message "SUMMARY" "Total servers: ${TOTAL_SERVERS}"
-	log_message "SUMMARY" "Successfully connected: ${SUCCESS_COUNT}"
-	log_message "SUMMARY" "Connection failed: ${FAILURE_COUNT}"
-	log_message "SUMMARY" "Skipped: ${SKIPPED_COUNT}"
-	log_message "SUMMARY" "Actually processed: ${actual_server_count}"
-	log_message "END" "SSH Connection Test Completed"
-	
-	# Print statistics in table format
-	echo "" | tee -a "$REPORT_FILE"
-	print_success "✓ Successful:     ${SUCCESS_COUNT}/${TOTAL_SERVERS}"
-	print_error "✗ Failed:         ${FAILURE_COUNT}/${TOTAL_SERVERS}"
-	print_warning "⊘ Skipped:        ${SKIPPED_COUNT}/${TOTAL_SERVERS}"
-	echo "" | tee -a "$REPORT_FILE"
-	
-	# Calculate success rate
-	if [ "$TOTAL_SERVERS" -gt 0 ]; then
-		local success_rate=$((SUCCESS_COUNT * 100 / TOTAL_SERVERS))
-		if [ "$success_rate" -eq 100 ]; then
-			print_success "Success Rate:    ${success_rate}% (모든 서버 연결 성공!)"
-		elif [ "$success_rate" -ge 75 ]; then
-			print_info "Success Rate:    ${success_rate}%"
-		elif [ "$success_rate" -ge 50 ]; then
-			print_warning "Success Rate:    ${success_rate}%"
-		else
-			print_error "Success Rate:    ${success_rate}% (연결 문제 있음)"
-		fi
-	fi
-	
-	echo "" | tee -a "$REPORT_FILE"
-	
-	# Print JSON results file content for quick review
 	echo ""
 	print_success "✓ Report saved to: ${REPORT_FILE}"
 	print_success "✓ JSON results saved to: ${RESULT_JSON}"
 	echo ""
-	print_info "JSON Results Preview:"
-	
-	if command -v jq &> /dev/null; then
-		cat "$RESULT_JSON" | jq . 2>/dev/null || cat "$RESULT_JSON"
-	else
-		cat "$RESULT_JSON"
-	fi
 }
 
 ################################################################################
