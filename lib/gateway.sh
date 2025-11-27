@@ -79,6 +79,12 @@ process_single_server() {
 	local ssh_password=$(echo "$server_params" | jq -r '.ssh_password' 2>/dev/null)
 	local os_info=$(echo "$server_params" | jq -r '.os_info' 2>/dev/null)
 	
+	# Step 3.5: Save server connection info to file (diagnostic purpose)
+	# File: gateway_servers_{lssn}.json
+	local server_info_file="${tmpdir}/gateway_servers_${server_lssn}.json"
+	echo "$server_params" > "$server_info_file"
+	gateway_log "🔵" "[5.5.9-FILE]" "Server connection info saved to file: $server_info_file"
+	
 	gateway_log "🟢" "[5.6]" "Server parsed: hostname=${hostname}, lssn=${server_lssn}"
 	echo "[$(date '+%Y%m%d%H%M%S')] [Gateway] Processing: $hostname (LSSN:$server_lssn)" >> $LogFileName
 	type log_remote_execution >/dev/null 2>&1 && log_remote_execution "started" "$hostname" "$server_lssn" "$ssh_host" "$ssh_port" "unknown"
@@ -96,11 +102,19 @@ process_single_server() {
 		else
 			gateway_log "🟢" "[5.8]" "Queue fetched successfully"
 			
-			# Log SSH connection attempt parameters
-			local ssh_attempt_params="{\"action\":\"ssh_attempt_before_connect\",\"hostname\":\"${hostname}\",\"lssn\":${server_lssn},\"ssh_host\":\"${ssh_host}\",\"ssh_port\":${ssh_port},\"ssh_user\":\"${ssh_user}\",\"has_password\":$([ -n \"$ssh_password\" ] && echo 'true' || echo 'false')}"
-			gateway_log "🔵" "[5.8.5]" "SSH 접속 파라미터 저장 시작"
-			type kvs_put >/dev/null 2>&1 && kvs_put "lssn" "${lssn:-0}" "ssh_connection_attempt" "$ssh_attempt_params" 2>/dev/null
-			gateway_log "🟢" "[5.8.5]" "SSH 접속 파라미터 저장 완료"
+			# ✅ Step 4.5: Save complete connection info to KVS BEFORE SSH attempt
+			# This includes: hostname, IP, port, user, auth method, and original server params
+			local auth_method="unknown"
+			[ -n "$ssh_password" ] && auth_method="password"
+			[ -n "$ssh_key_path" ] && [ -f "$ssh_key_path" ] && auth_method="key"
+			
+			local ssh_connection_info="{\"phase\":\"[5.8.5]\",\"hostname\":\"${hostname}\",\"lssn\":${server_lssn},\"ssh_host\":\"${ssh_host}\",\"ssh_port\":${ssh_port},\"ssh_user\":\"${ssh_user}\",\"auth_method\":\"${auth_method}\",\"ssh_key_path\":\"${ssh_key_path}\",\"has_password\":$([ -n \"$ssh_password\" ] && echo 'true' || echo 'false'),\"os_info\":\"${os_info}\",\"server_info_file\":\"$(basename $server_info_file)\"}"
+			
+			gateway_log "🔵" "[5.8.5-KVS]" "SSH 접속 정보 KVS 기록 시작"
+			if type kvs_put >/dev/null 2>&1; then
+				kvs_put "lssn" "${lssn:-0}" "ssh_connection_info_before_attempt" "$ssh_connection_info" 2>/dev/null
+				gateway_log "🟢" "[5.8.5-KVS]" "SSH 접속 정보 KVS 기록 완료"
+			fi
 			
 			# Step 5: Execute SSH
 			gateway_log "🟢" "[5.9]" "SSH attempt to ${ssh_host}:${ssh_port}"
