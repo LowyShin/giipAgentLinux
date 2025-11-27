@@ -350,9 +350,10 @@ cleanup_old_temp_files "kvs_put_auto_discover_servers_*.log"
 cleanup_old_temp_files "kvs_put_auto_discover_networks_*.log"
 cleanup_old_temp_files "kvs_put_auto_discover_services_*.log"
 
-# Clean up old kvs_post_data.txt (from old kvs.sh implementations)
-rm -f /tmp/kvs_post_data.txt 2>/dev/null
-cleanup_old_temp_files "gateway_stderr_*.log"
+# Clean up gateway-related temporary files
+cleanup_old_temp_files "gateway_servers_*.json"
+cleanup_old_temp_files "gateway_self_queue_*.sh"
+cleanup_old_temp_files "giipAgent_gateway_*"
 
 log_message "INFO" "GIIP Agent V${sv} completed"
 exit 0
