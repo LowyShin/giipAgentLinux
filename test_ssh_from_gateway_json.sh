@@ -105,9 +105,9 @@ test_ssh_connection() {
 	local ssh_cmd="ssh"
 	local ssh_opts="-o ConnectTimeout=10 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
 	
-	echo "[Server #$((TOTAL_SERVERS))] Testing: ${hostname}"
-	echo "  └─ Address: ${ssh_host}:${ssh_port}"
-	echo "  └─ User: ${ssh_user}"
+	print_info "[Server #$((TOTAL_SERVERS))] Testing: ${hostname}"
+	echo "  ├─ Address: ${ssh_host}:${ssh_port}"
+	echo "  ├─ User: ${ssh_user}"
 	echo "  └─ LSSN: ${lssn}"
 	
 	# ========================================================================
@@ -498,10 +498,34 @@ main() {
 	if command -v jq &> /dev/null; then
 		print_info "Using jq for JSON parsing"
 		
-		# Extract array of servers
+		# Step 8.1: First pass - collect and display all servers
+		print_info ""
+		print_info "📋 Servers found in JSON file:"
+		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+		
+		local server_list=()
 		while IFS= read -r server_json; do
 			[ -z "$server_json" ] && continue
 			
+			local hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null)
+			local lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null)
+			local ssh_host=$(echo "$server_json" | jq -r '.ssh_host // empty' 2>/dev/null)
+			local ssh_user=$(echo "$server_json" | jq -r '.ssh_user // empty' 2>/dev/null)
+			local ssh_port=$(echo "$server_json" | jq -r '.ssh_port // 22' 2>/dev/null)
+			
+			server_list+=("$server_json")
+			print_info "  ├─ [$(($((actual_server_count))+1))] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user} lssn:${lssn}"
+			((actual_server_count++))
+		done < <(jq -c '.data[]? // .[]? // .' "$json_file" 2>/dev/null)
+		
+		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+		print_info ""
+		print_info "🔄 Starting connection tests..."
+		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+		
+		# Step 8.2: Second pass - test connections
+		actual_server_count=0
+		for server_json in "${server_list[@]}"; do
 			((TOTAL_SERVERS++))
 			((actual_server_count++))
 			
@@ -517,15 +541,42 @@ main() {
 			echo ""
 			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn"
 			
-		done < <(jq -c '.data[]? // .[]? // .' "$json_file" 2>/dev/null)
+		done
 	else
 		# Fallback: use grep for JSON parsing
 		print_warning "jq not found, using grep fallback for JSON parsing"
+		
+		# Step 8.1: First pass - collect and display all servers
+		print_info ""
+		print_info "📋 Servers found in JSON file:"
+		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+		
+		local server_list=()
+		local temp_count=0
 		
 		# Normalize JSON and extract objects
 		while IFS= read -r server_json; do
 			[ -z "$server_json" ] && continue
 			
+			local hostname=$(echo "$server_json" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+			local lssn=$(echo "$server_json" | grep -o '"lssn"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
+			local ssh_host=$(echo "$server_json" | grep -o '"ssh_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+			local ssh_user=$(echo "$server_json" | grep -o '"ssh_user"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+			local ssh_port=$(echo "$server_json" | grep -o '"ssh_port"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/' || echo "22")
+			
+			server_list+=("$server_json")
+			print_info "  ├─ [$(($temp_count+1))] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user} lssn:${lssn}"
+			((temp_count++))
+		done < <(tr -d '\n' < "$json_file" | sed 's/}/}\n/g' | grep -o '{[^}]*}')
+		
+		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+		print_info ""
+		print_info "🔄 Starting connection tests..."
+		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+		
+		# Step 8.2: Second pass - test connections
+		actual_server_count=0
+		for server_json in "${server_list[@]}"; do
 			((TOTAL_SERVERS++))
 			((actual_server_count++))
 			
@@ -541,7 +592,7 @@ main() {
 			echo ""
 			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn"
 			
-		done < <(tr -d '\n' < "$json_file" | sed 's/}/}\n/g' | grep -o '{[^}]*}')
+		done
 	fi
 	
 	# ============================================================================
@@ -551,6 +602,29 @@ main() {
 	# Close JSON results file
 	echo "]," >> "$RESULT_JSON"
 	echo "\"test_end\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"summary\":{\"total\":${TOTAL_SERVERS},\"success\":${SUCCESS_COUNT},\"failed\":${FAILURE_COUNT},\"skipped\":${SKIPPED_COUNT},\"actual_processed\":${actual_server_count}}}" >> "$RESULT_JSON"
+	
+	# Print test results
+	echo ""
+	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+	print_info "🧪 Test Results by Server:"
+	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+	
+	# Parse and display results
+	if command -v jq &> /dev/null; then
+		jq -r '.servers[] | "[\(.status | if . == "SUCCESS" then "✓" elif . == "FAILED" then "✗" else "⊘" end)] \(.hostname) (\(.ssh_host):\(.ssh_port)) - LSSN:\(.lssn) - \(if .connection_time_sec then .connection_time_sec + "s" else "N/A" end)"' "$RESULT_JSON" | while read line; do
+			if [[ "$line" == *"✓"* ]]; then
+				print_success "  $line"
+			elif [[ "$line" == *"✗"* ]]; then
+				print_error "  $line"
+			else
+				print_warning "  $line"
+			fi
+		done
+	fi
+	
+	echo ""
+	echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+	echo "" | tee -a "$REPORT_FILE"
 	
 	# Print summary
 	echo ""
