@@ -1,28 +1,65 @@
 #!/bin/bash
-# giipAgent Gateway Mode Library
-# Version: 2.00
-# Date: 2025-01-10
-# Purpose: Gateway mode functions for managing remote servers and database queries
+# giipAgent Gateway Mode Library (Main Coordinator)
+# Version: 3.00
+# Date: 2025-11-27
+# Purpose: Coordinate gateway mode processing by delegating to specialized modules
 # Rule: Follow giipapi_rules.md - text contains parameter names only, jsondata contains actual values
+#
+# ARCHITECTURE:
+# - gateway.sh (THIS FILE): Main coordinator, logging, API calls, process orchestration
+# - gateway_server.sh: Server JSON parsing and validation
+# - gateway_remote.sh: SSH connection and remote execution
+# - gateway_queue.sh: Queue fetching and script management
+# - ssh_connection_logger.sh: SSH connection attempt/result logging
+# - remote_ssh_test.sh: SSH test result reporting to API
+
+# ============================================================================
+# Module Loading (Dependency Injection)
+# ============================================================================
+
+SCRIPT_DIR_GATEWAY="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Load server management module
+if [ -f "${SCRIPT_DIR_GATEWAY}/gateway_server.sh" ]; then
+	. "${SCRIPT_DIR_GATEWAY}/gateway_server.sh"
+else
+	echo "❌ FATAL: gateway_server.sh not found" >&2
+	exit 1
+fi
+
+# Load remote execution module
+if [ -f "${SCRIPT_DIR_GATEWAY}/gateway_remote.sh" ]; then
+	. "${SCRIPT_DIR_GATEWAY}/gateway_remote.sh"
+else
+	echo "❌ FATAL: gateway_remote.sh not found" >&2
+	exit 1
+fi
+
+# Load queue management module
+if [ -f "${SCRIPT_DIR_GATEWAY}/gateway_queue.sh" ]; then
+	. "${SCRIPT_DIR_GATEWAY}/gateway_queue.sh"
+else
+	echo "❌ FATAL: gateway_queue.sh not found" >&2
+	exit 1
+fi
 
 # Load SSH connection logger module
-SCRIPT_DIR_GATEWAY_SSH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/ssh_connection_logger.sh" ]; then
-	. "${SCRIPT_DIR_GATEWAY_SSH}/ssh_connection_logger.sh"
+if [ -f "${SCRIPT_DIR_GATEWAY}/ssh_connection_logger.sh" ]; then
+	. "${SCRIPT_DIR_GATEWAY}/ssh_connection_logger.sh"
 else
 	echo "⚠️  Warning: ssh_connection_logger.sh not found" >&2
 fi
 
 # Load remote SSH test result reporting module
-if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/remote_ssh_test.sh" ]; then
-	. "${SCRIPT_DIR_GATEWAY_SSH}/remote_ssh_test.sh"
+if [ -f "${SCRIPT_DIR_GATEWAY}/remote_ssh_test.sh" ]; then
+	. "${SCRIPT_DIR_GATEWAY}/remote_ssh_test.sh"
 else
 	echo "⚠️  Warning: remote_ssh_test.sh not found" >&2
 fi
 
 # Load KVS logging module for tKVS storage
-if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/kvs.sh" ]; then
-	. "${SCRIPT_DIR_GATEWAY_SSH}/kvs.sh"
+if [ -f "${SCRIPT_DIR_GATEWAY}/kvs.sh" ]; then
+	. "${SCRIPT_DIR_GATEWAY}/kvs.sh"
 else
 	# Provide stub function if kvs.sh not available
 	kvs_put() {
@@ -32,8 +69,8 @@ else
 fi
 
 # Load normal mode queue fetching module (for Gateway self-queue processing via CQEQueueGet API)
-if [ -f "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh" ]; then
-	. "${SCRIPT_DIR_GATEWAY_SSH}/normal.sh"
+if [ -f "${SCRIPT_DIR_GATEWAY}/normal.sh" ]; then
+	. "${SCRIPT_DIR_GATEWAY}/normal.sh"
 else
 	# Provide stub function if normal.sh not available
 	fetch_queue() {
@@ -42,9 +79,12 @@ else
 	}
 fi
 
+# ============================================================================
+# Core Logging Function (Specialized for Gateway)
+# ============================================================================
+
 # Function: Log gateway operation to both stderr AND tKVS
 # Usage: gateway_log "🟢" "[5.4]" "Gateway 서버 목록 조회 시작" "additional_json_data"
-# Function: Gateway Operation Logging
 # Purpose: Log to both stderr (console) and tKVS with point tracking
 # Usage: gateway_log "emoji" "point_code" "message" "optional_json_fragment"
 # Example: gateway_log "🟢" "[5.6]" "Server processed" ""
@@ -82,7 +122,7 @@ gateway_log() {
 }
 
 # ============================================================================
-# Server Management Functions
+# Server API Wrapper Functions
 # ============================================================================
 
 # Function: Get remote servers from database (real-time query, no cache)
@@ -131,9 +171,6 @@ get_gateway_servers() {
 	return 0
 }
 
-# Legacy function removed: sync_gateway_servers
-# Reason: Database as Single Source of Truth - no CSV caching
-
 # Function: Get DB queries from database (real-time query, no cache)
 # Returns: temp file path with JSON data (caller must delete!)
 get_db_queries() {
@@ -157,9 +194,6 @@ get_db_queries() {
 	echo "$temp_file"
 	return 0
 }
-
-# Legacy function removed: sync_db_queries
-# Reason: Database as Single Source of Truth - no CSV caching
 
 # Function: Get managed databases from tManagedDatabase (real-time query, no cache)
 # Returns: temp file path with JSON data (caller must delete!)
@@ -195,293 +229,10 @@ get_managed_databases() {
 }
 
 # ============================================================================
-# Remote Execution Functions
+# Server Processing (Orchestrator - delegates to modules)
 # ============================================================================
 
-# Function: Execute command on remote server
-execute_remote_command() {
-	local remote_host=$1
-	local remote_user=$2
-	local remote_port=$3
-	local ssh_key=$4
-	local ssh_password=$5
-	local script_file=$6
-	local remote_lssn=${7:-0}      # Optional LSSN parameter
-	local hostname=${8:-"unknown"}  # Optional hostname parameter
-	
-	local ssh_opts="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -o BatchMode=yes"
-	local start_time=$(date +%s)
-	local auth_method="none"
-	
-	# Determine authentication method
-	if [ -n "${ssh_password}" ]; then
-		auth_method="password"
-	elif [ -n "${ssh_key}" ] && [ -f "${ssh_key}" ]; then
-		auth_method="key"
-	fi
-	
-	# 🔍 Log SSH connection attempt
-	if type log_ssh_attempt >/dev/null 2>&1; then
-		log_ssh_attempt "$remote_host" "$remote_port" "$remote_user" "$auth_method" "$remote_lssn" "$hostname"
-	fi
-	
-	local exit_code=1
-	
-	if [ -n "${ssh_password}" ]; then
-		if ! command -v sshpass &> /dev/null; then
-			echo "  ❌ sshpass not available"
-			local duration=$(($(date +%s) - start_time))
-			
-			# Log failure
-			if type log_ssh_result >/dev/null 2>&1; then
-				log_ssh_result "$remote_host" "$remote_port" "127" "$duration" "$remote_lssn" "$hostname"
-			fi
-			return 1
-		fi
-		
-		# SSH 테스트 결과를 임시 파일에 저장
-		local ssh_test_output="/tmp/ssh_test_${remote_lssn}_$$.txt"
-		
-		sshpass -p "${ssh_password}" scp ${ssh_opts} -P ${remote_port} \
-		    ${script_file} ${remote_user}@${remote_host}:/tmp/giipTmpScript.sh 2>&1 | tee -a "$ssh_test_output"
-		
-		if [ $? -ne 0 ]; then
-			local duration=$(($(date +%s) - start_time))
-			
-			# Log SCP failure
-			if type log_ssh_result >/dev/null 2>&1; then
-				log_ssh_result "$remote_host" "$remote_port" "126" "$duration" "$remote_lssn" "$hostname"
-			fi
-			
-			# 실패 결과도 KVS에 기록
-			if [ -f "$ssh_test_output" ]; then
-				local ssh_error=$(cat "$ssh_test_output")
-				kvs_put "lssn" "${lssn:-0}" "gateway_ssh_test_failed" "$ssh_error" 2>/dev/null
-			fi
-			rm -f "$ssh_test_output"
-			return 1
-		fi
-		
-		sshpass -p "${ssh_password}" ssh ${ssh_opts} -p ${remote_port} \
-		    ${remote_user}@${remote_host} \
-		    "chmod +x /tmp/giipTmpScript.sh && /tmp/giipTmpScript.sh && rm -f /tmp/giipTmpScript.sh" 2>&1 | tee -a "$ssh_test_output"
-		
-		exit_code=$?
-		
-		# SSH 테스트 성공/실패 결과를 KVS에 기록
-		if [ -f "$ssh_test_output" ]; then
-			local ssh_result=$(cat "$ssh_test_output")
-			if [ $exit_code -eq 0 ]; then
-				kvs_put "lssn" "${lssn:-0}" "gateway_ssh_test_success" "$ssh_result" 2>/dev/null
-			else
-				kvs_put "lssn" "${lssn:-0}" "gateway_ssh_test_failed" "$ssh_result" 2>/dev/null
-			fi
-			rm -f "$ssh_test_output"
-		fi
-		
-	elif [ -n "${ssh_key}" ] && [ -f "${ssh_key}" ]; then
-		# SSH 테스트 결과를 임시 파일에 저장
-		local ssh_test_output="/tmp/ssh_test_${remote_lssn}_$$.txt"
-		
-		scp ${ssh_opts} -i ${ssh_key} -P ${remote_port} \
-		    ${script_file} ${remote_user}@${remote_host}:/tmp/giipTmpScript.sh 2>&1 | tee -a "$ssh_test_output"
-		
-		if [ $? -ne 0 ]; then
-			local duration=$(($(date +%s) - start_time))
-			
-			# Log SCP failure
-			if type log_ssh_result >/dev/null 2>&1; then
-				log_ssh_result "$remote_host" "$remote_port" "126" "$duration" "$remote_lssn" "$hostname"
-			fi
-			
-			# 실패 결과도 KVS에 기록
-			if [ -f "$ssh_test_output" ]; then
-				local ssh_error=$(cat "$ssh_test_output")
-				kvs_put "lssn" "${lssn:-0}" "gateway_ssh_test_failed" "$ssh_error" 2>/dev/null
-			fi
-			rm -f "$ssh_test_output"
-			return 1
-		fi
-		
-		ssh ${ssh_opts} -i ${ssh_key} -p ${remote_port} \
-		    ${remote_user}@${remote_host} \
-		    "chmod +x /tmp/giipTmpScript.sh && /tmp/giipTmpScript.sh && rm -f /tmp/giipTmpScript.sh" 2>&1 | tee -a "$ssh_test_output"
-		
-		exit_code=$?
-		
-		# SSH 테스트 성공/실패 결과를 KVS에 기록
-		if [ -f "$ssh_test_output" ]; then
-			local ssh_result=$(cat "$ssh_test_output")
-			if [ $exit_code -eq 0 ]; then
-				kvs_put "lssn" "${lssn:-0}" "gateway_ssh_test_success" "$ssh_result" 2>/dev/null
-			else
-				kvs_put "lssn" "${lssn:-0}" "gateway_ssh_test_failed" "$ssh_result" 2>/dev/null
-			fi
-			rm -f "$ssh_test_output"
-		fi
-	else
-		echo "  ❌ No authentication method available"
-		local duration=$(($(date +%s) - start_time))
-		
-		# Log no auth failure
-		if type log_ssh_result >/dev/null 2>&1; then
-			log_ssh_result "$remote_host" "$remote_port" "125" "$duration" "$remote_lssn" "$hostname"
-		fi
-		return 1
-	fi
-	
-	# Calculate duration
-	local duration=$(($(date +%s) - start_time))
-	
-	# 🔍 Log SSH connection result
-	if type log_ssh_result >/dev/null 2>&1; then
-		log_ssh_result "$remote_host" "$remote_port" "$exit_code" "$duration" "$remote_lssn" "$hostname"
-	fi
-	
-	return $exit_code
-}
-
-# ============================================================================
-# Queue Management Functions
-# ============================================================================
-
-# Function: Get script by mssn (from repository)
-get_script_by_mssn() {
-	local mssn=$1
-	local output_file=$2
-	
-	local api_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
-	
-	local text="CQERepoScript mssn"
-	local jsondata="{\"mssn\":${mssn}}"
-	
-	wget -O "$output_file" \
-		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
-		--header="Content-Type: application/x-www-form-urlencoded" \
-		"$api_url" \
-		--no-check-certificate -q 2>&1
-	
-	if [ -s "$output_file" ]; then
-		dos2unix "$output_file" 2>/dev/null
-		return 0
-	fi
-	return 1
-}
-
-# Function: Get queue for specific server
-get_remote_queue() {
-	local lssn=$1
-	local hostname=$2
-	local os=$3
-	local output_file=$4
-	
-	local api_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
-	
-	local text="CQEQueueGet lssn hostname os op"
-	local jsondata="{\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"os\":\"${os}\",\"op\":\"op\"}"
-	
-	wget -O "$output_file" \
-		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
-		--header="Content-Type: application/x-www-form-urlencoded" \
-		"$api_url" \
-		--no-check-certificate -q 2>&1
-	
-	if [ -s "$output_file" ]; then
-		local is_json=$(cat "$output_file" | grep -o '^{.*}$')
-		if [ -n "$is_json" ]; then
-			local rstval=$(cat "$output_file" | grep -o '"RstVal":"[^"]*"' | sed 's/"RstVal":"//; s/"$//' | head -1)
-			local script_body=$(cat "$output_file" | grep -o '"ms_body":"[^"]*"' | sed 's/"ms_body":"//; s/"$//' | sed 's/\\n/\n/g')
-			local mssn=$(cat "$output_file" | grep -o '"mssn":[0-9]*' | sed 's/"mssn"://' | head -1)
-			
-			[ "$rstval" = "404" ] && return 1
-			
-			if [ "$rstval" = "200" ]; then
-				if [ -n "$script_body" ] && [ "$script_body" != "null" ]; then
-					echo "$script_body" > "$output_file"
-					dos2unix "$output_file" 2>/dev/null
-					return 0
-				elif [ -n "$mssn" ] && [ "$mssn" != "null" ] && [ "$mssn" != "0" ]; then
-					get_script_by_mssn "$mssn" "$output_file"
-					return $?
-				fi
-			fi
-			return 1
-		else
-			dos2unix "$output_file" 2>/dev/null
-			return 0
-		fi
-	fi
-	return 1
-}
-
-# Function: Process gateway servers
-# ============================================================================
-# Server Processing Sub-Functions (Refactored from process_gateway_servers)
-# ============================================================================
-
-# ============================================================================
-# Server Processing - Self-Contained Functions
-# Each function is INDEPENDENT and returns results, no global variable magic
-# ============================================================================
-
-# Function: Parse server JSON and return extracted values
-# Returns: JSON string with all server parameters
-# Usage: server_params=$(extract_server_params "$server_json")
-# Note: 'enabled' field is no longer parsed or checked
-extract_server_params() {
-	local server_json="$1"
-	local hostname ssh_user ssh_host ssh_port ssh_key_path ssh_password os_info lssn
-	
-	# 🔴 DEBUG: 입력 JSON 확인
-	gateway_log "🔵" "[5.4.9-INPUT]" "extract_server_params input: $(echo -n "$server_json" | head -c 100)..."
-	
-	if command -v jq &> /dev/null; then
-		# jq method
-		hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null)
-		lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null)
-		ssh_host=$(echo "$server_json" | jq -r '.ssh_host // empty' 2>/dev/null)
-		ssh_user=$(echo "$server_json" | jq -r '.ssh_user // empty' 2>/dev/null)
-		ssh_port=$(echo "$server_json" | jq -r '.ssh_port // empty' 2>/dev/null)
-		ssh_key_path=$(echo "$server_json" | jq -r '.ssh_key_path // empty' 2>/dev/null)
-		ssh_password=$(echo "$server_json" | jq -r '.ssh_password // empty' 2>/dev/null)
-		os_info=$(echo "$server_json" | jq -r '.os_info // empty' 2>/dev/null)
-	else
-		# grep fallback
-		hostname=$(echo "$server_json" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		lssn=$(echo "$server_json" | grep -o '"lssn"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-		ssh_host=$(echo "$server_json" | grep -o '"ssh_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		ssh_user=$(echo "$server_json" | grep -o '"ssh_user"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		ssh_port=$(echo "$server_json" | grep -o '"ssh_port"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-		ssh_key_path=$(echo "$server_json" | grep -o '"ssh_key_path"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		ssh_password=$(echo "$server_json" | grep -o '"ssh_password"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-		os_info=$(echo "$server_json" | grep -o '"os_info"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-	fi
-	
-	# Return as JSON string (without enabled field)
-	echo "{\"hostname\":\"${hostname}\",\"lssn\":\"${lssn}\",\"ssh_host\":\"${ssh_host}\",\"ssh_user\":\"${ssh_user}\",\"ssh_port\":${ssh_port:-22},\"ssh_key_path\":\"${ssh_key_path}\",\"ssh_password\":\"${ssh_password}\",\"os_info\":\"${os_info:-Linux}\"}"
-}
-
-# Function: Validate server parameters
-# Returns: 0 if valid, 1 if should skip
-# Usage: if validate_server_params "$server_params"; then...
-# Note: No longer checks 'enabled' field - all servers are processed regardless of enabled status
-validate_server_params() {
-	local server_params="$1"
-	
-	# Check if hostname is empty
-	local hostname=$(echo "$server_params" | jq -r '.hostname // empty' 2>/dev/null)
-	if [ -z "$hostname" ]; then
-		# Fallback: try grep
-		hostname=$(echo "$server_params" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-	fi
-	
-	[[ -z "$hostname" ]] && return 1
-	return 0
-}
-
-# Function: Process single server - all-in-one handler
+# Function: Process single server - orchestrates all steps
 # Returns: 0 on success, 1 on failure
 # Usage: process_single_server "$server_json" "$tmpdir"
 process_single_server() {
@@ -679,7 +430,7 @@ process_server_list() {
 }
 
 # ============================================================================
-# Main Gateway Server Processing Function
+# Main Gateway Processing Function
 # ============================================================================
 
 process_gateway_servers() {
@@ -764,7 +515,6 @@ process_gateway_servers() {
 
 # Load managed database check module (separate file for maintainability)
 # This module handles tManagedDatabase health checks and last_check_dt updates
-SCRIPT_DIR_GATEWAY="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 if [ -f "${SCRIPT_DIR_GATEWAY}/check_managed_databases.sh" ]; then
 	. "${SCRIPT_DIR_GATEWAY}/check_managed_databases.sh"
 else
@@ -784,11 +534,6 @@ export -f gateway_log
 export -f get_gateway_servers
 export -f get_db_queries
 export -f get_managed_databases
-export -f execute_remote_command
-export -f get_script_by_mssn
-export -f get_remote_queue
-export -f extract_server_params
-export -f validate_server_params
 export -f process_single_server
 export -f process_server_list
 export -f process_gateway_servers
