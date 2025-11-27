@@ -447,7 +447,7 @@ if [ "${gateway_mode}" = "1" ]; then
 		# 3. auto_discover_networks: Extract and store networks
 		# ⚠️ NOTE: DO NOT use @json here! We need RAW JSON for kvs_put!
 		echo "DEBUG STEP-6: Creating file for auto_discover_networks" | tee -a /tmp/auto_discover_debug_$$.log
-		networks_data=$(echo "$auto_discover_json" | jq '.networks // empty' 2>/dev/null)
+		networks_data=$(echo "$auto_discover_json" | jq '.network // empty' 2>/dev/null)
 		auto_discover_networks_kvalue_file="/tmp/kvs_kValue_auto_discover_networks_$$.json"
 		echo "$networks_data" > "$auto_discover_networks_kvalue_file"
 		echo "DEBUG STEP-6: Created $auto_discover_networks_kvalue_file (size: $(wc -c < "$auto_discover_networks_kvalue_file"))" | tee -a /tmp/auto_discover_debug_$$.log
