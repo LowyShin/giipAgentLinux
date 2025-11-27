@@ -19,7 +19,8 @@
 #   - Color-coded output for easy reading
 ################################################################################
 
-set -e
+# set -e 제거 - 개별 에러 처리로 변경
+# set -e
 
 # Color codes
 RED='\033[0;31m'
@@ -549,30 +550,30 @@ main() {
 			
 			echo "DEBUG: Extracting hostname..." >&2
 			# Extract parameters using jq
-			local hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null)
+			local hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null) || true
 			echo "DEBUG: hostname='$hostname'" >&2
 			
-			local lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null)
+			local lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null) || true
 			echo "DEBUG: lssn='$lssn'" >&2
 			
-			local ssh_host=$(echo "$server_json" | jq -r '.ssh_host // empty' 2>/dev/null)
+			local ssh_host=$(echo "$server_json" | jq -r '.ssh_host // empty' 2>/dev/null) || true
 			echo "DEBUG: ssh_host='$ssh_host'" >&2
 			
-			local ssh_user=$(echo "$server_json" | jq -r '.ssh_user // empty' 2>/dev/null)
+			local ssh_user=$(echo "$server_json" | jq -r '.ssh_user // empty' 2>/dev/null) || true
 			echo "DEBUG: ssh_user='$ssh_user'" >&2
 			
-			local ssh_port=$(echo "$server_json" | jq -r '.ssh_port // 22' 2>/dev/null)
+			local ssh_port=$(echo "$server_json" | jq -r '.ssh_port // 22' 2>/dev/null) || true
 			echo "DEBUG: ssh_port='$ssh_port'" >&2
 			
-			local ssh_key_path=$(echo "$server_json" | jq -r '.ssh_key_path // empty' 2>/dev/null)
+			local ssh_key_path=$(echo "$server_json" | jq -r '.ssh_key_path // empty' 2>/dev/null) || true
 			echo "DEBUG: ssh_key_path='$ssh_key_path'" >&2
 			
-			local ssh_password=$(echo "$server_json" | jq -r '.ssh_password // empty' 2>/dev/null)
+			local ssh_password=$(echo "$server_json" | jq -r '.ssh_password // empty' 2>/dev/null) || true
 			echo "DEBUG: ssh_password='$ssh_password'" >&2
 			
 			echo "DEBUG: About to call test_ssh_connection for server $actual_server_count: $hostname" >&2
 			print_info "Processing server $actual_server_count: $hostname"
-			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn"
+			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn" || true
 			echo "DEBUG: Returned from test_ssh_connection for server $actual_server_count" >&2
 			
 		done
@@ -621,15 +622,15 @@ main() {
 			((actual_server_count++))
 			
 			# Extract parameters using grep fallback
-			local hostname=$(echo "$server_json" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-			local lssn=$(echo "$server_json" | grep -o '"lssn"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/')
-			local ssh_host=$(echo "$server_json" | grep -o '"ssh_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-			local ssh_user=$(echo "$server_json" | grep -o '"ssh_user"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+			local hostname=$(echo "$server_json" | grep -o '"hostname"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/') || true
+			local lssn=$(echo "$server_json" | grep -o '"lssn"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/') || true
+			local ssh_host=$(echo "$server_json" | grep -o '"ssh_host"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/') || true
+			local ssh_user=$(echo "$server_json" | grep -o '"ssh_user"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/') || true
 			local ssh_port=$(echo "$server_json" | grep -o '"ssh_port"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/' || echo "22")
-			local ssh_key_path=$(echo "$server_json" | grep -o '"ssh_key_path"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
-			local ssh_password=$(echo "$server_json" | grep -o '"ssh_password"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+			local ssh_key_path=$(echo "$server_json" | grep -o '"ssh_key_path"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/') || true
+			local ssh_password=$(echo "$server_json" | grep -o '"ssh_password"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/') || true
 			
-			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn"
+			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn" || true
 			
 		done
 	fi
