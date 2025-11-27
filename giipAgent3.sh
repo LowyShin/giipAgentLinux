@@ -291,6 +291,8 @@ else
 	# Run normal mode (single execution)
 	run_normal_mode "$lssn" "$hn" "$os"
 	
+	# Shutdown log
+	save_execution_log "shutdown" "{\"mode\":\"normal\",\"status\":\"normal_exit\"}"
 fi
 
 # ============================================================================
