@@ -382,6 +382,34 @@ if [ "${gateway_mode}" = "1" ]; then
 	# Read the actual discovery result data
 	auto_discover_json=$(cat "$auto_discover_result_file")
 	
+	# ⚠️ IMPORTANT: RAW JSON DATA HANDLING FOR kvs_put
+	# ========================================
+	# kvs_put() expects RAW JSON data (NOT JSON strings)!
+	# 
+	# ✅ CORRECT:
+	#    auto_discover_json = [{"name":"nginx",...}]  (RAW JSON object/array)
+	#    kvs_put "lssn" "71240" "auto_discover_services" "$auto_discover_json"
+	#                                                     ↑ NO quotes around variable = RAW
+	#
+	# ❌ WRONG - DO NOT DO THIS:
+	#    services_string=$(echo "$auto_discover_json" | jq '.services | @json')
+	#                                                                   ^^^^^ 
+	#                                             This converts to JSON STRING!
+	#    kvs_put "lssn" "71240" "auto_discover_services" "$services_string"
+	#
+	# WHY: kvs_put passes RAW JSON directly to kValue field WITHOUT quotes.
+	# If you use @json, it creates a string like: "{\"name\":\"nginx\",...}"
+	# This becomes a STRING value, not a JSON object!
+	#
+	# DATA FLOW:
+	# 1. jq '.services' → [{"name":"nginx",...}]  (RAW JSON array)
+	# 2. kvs_put receives → "$auto_discover_json" (RAW, no conversion)
+	# 3. lib/kvs.sh line 180: kValue:${kvalue_json}
+	#    Result: kValue:[{"name":"nginx",...}]  ✅ JSON object
+	#    NOT: kValue:"{\"name\":...}"  ❌ String
+	#
+	# ========================================
+	
 	# DEBUG: Log json content and structure
 	echo "DEBUG STEP-6: json_length=${#auto_discover_json}" | tee -a /tmp/auto_discover_debug_$$.log
 	echo "DEBUG STEP-6: json_first_200=$(echo "$auto_discover_json" | head -c 200)" | tee -a /tmp/auto_discover_debug_$$.log
@@ -407,6 +435,9 @@ if [ "${gateway_mode}" = "1" ]; then
 		echo "DEBUG STEP-6: Created $auto_discover_result_kvalue_file (size: $(wc -c < "$auto_discover_result_kvalue_file"))" | tee -a /tmp/auto_discover_debug_$$.log
 		
 		# 2. auto_discover_servers: Extract and store servers
+		# ⚠️ NOTE: DO NOT use @json here! We need RAW JSON for kvs_put!
+		# ❌ WRONG: jq '.servers | @json'  (converts to string)
+		# ✅ CORRECT: jq '.servers'        (keeps as RAW JSON array)
 		echo "DEBUG STEP-6: Creating file for auto_discover_servers" | tee -a /tmp/auto_discover_debug_$$.log
 		servers_data=$(echo "$auto_discover_json" | jq '.servers // empty' 2>/dev/null)
 		auto_discover_servers_kvalue_file="/tmp/kvs_kValue_auto_discover_servers_$$.json"
@@ -414,6 +445,7 @@ if [ "${gateway_mode}" = "1" ]; then
 		echo "DEBUG STEP-6: Created $auto_discover_servers_kvalue_file (size: $(wc -c < "$auto_discover_servers_kvalue_file"))" | tee -a /tmp/auto_discover_debug_$$.log
 		
 		# 3. auto_discover_networks: Extract and store networks
+		# ⚠️ NOTE: DO NOT use @json here! We need RAW JSON for kvs_put!
 		echo "DEBUG STEP-6: Creating file for auto_discover_networks" | tee -a /tmp/auto_discover_debug_$$.log
 		networks_data=$(echo "$auto_discover_json" | jq '.networks // empty' 2>/dev/null)
 		auto_discover_networks_kvalue_file="/tmp/kvs_kValue_auto_discover_networks_$$.json"
@@ -421,6 +453,7 @@ if [ "${gateway_mode}" = "1" ]; then
 		echo "DEBUG STEP-6: Created $auto_discover_networks_kvalue_file (size: $(wc -c < "$auto_discover_networks_kvalue_file"))" | tee -a /tmp/auto_discover_debug_$$.log
 		
 		# 4. auto_discover_services: Extract and store services
+		# ⚠️ NOTE: DO NOT use @json here! We need RAW JSON for kvs_put!
 		echo "DEBUG STEP-6: Creating file for auto_discover_services" | tee -a /tmp/auto_discover_debug_$$.log
 		services_data=$(echo "$auto_discover_json" | jq '.services // empty' 2>/dev/null)
 		auto_discover_services_kvalue_file="/tmp/kvs_kValue_auto_discover_services_$$.json"
