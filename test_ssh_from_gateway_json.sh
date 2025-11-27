@@ -543,18 +543,32 @@ main() {
 		# Step 8.2: Second pass - test connections
 		echo "DEBUG: Starting for loop with ${#server_list[@]} servers" >&2
 		for server_json in "${server_list[@]}"; do
-			echo "DEBUG: In loop iteration" >&2
+			echo "DEBUG: In loop iteration, server_json length: ${#server_json}" >&2
 			((TOTAL_SERVERS++))
 			((actual_server_count++))
 			
+			echo "DEBUG: Extracting hostname..." >&2
 			# Extract parameters using jq
 			local hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null)
+			echo "DEBUG: hostname='$hostname'" >&2
+			
 			local lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null)
+			echo "DEBUG: lssn='$lssn'" >&2
+			
 			local ssh_host=$(echo "$server_json" | jq -r '.ssh_host // empty' 2>/dev/null)
+			echo "DEBUG: ssh_host='$ssh_host'" >&2
+			
 			local ssh_user=$(echo "$server_json" | jq -r '.ssh_user // empty' 2>/dev/null)
+			echo "DEBUG: ssh_user='$ssh_user'" >&2
+			
 			local ssh_port=$(echo "$server_json" | jq -r '.ssh_port // 22' 2>/dev/null)
+			echo "DEBUG: ssh_port='$ssh_port'" >&2
+			
 			local ssh_key_path=$(echo "$server_json" | jq -r '.ssh_key_path // empty' 2>/dev/null)
+			echo "DEBUG: ssh_key_path='$ssh_key_path'" >&2
+			
 			local ssh_password=$(echo "$server_json" | jq -r '.ssh_password // empty' 2>/dev/null)
+			echo "DEBUG: ssh_password='$ssh_password'" >&2
 			
 			echo "DEBUG: About to call test_ssh_connection for server $actual_server_count: $hostname" >&2
 			print_info "Processing server $actual_server_count: $hostname"
