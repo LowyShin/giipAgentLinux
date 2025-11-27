@@ -433,29 +433,47 @@ if [ "${gateway_mode}" = "1" ]; then
 	# STEP-6 직접 kvs_put: 파일들을 KVS에 저장 (파일명 먼저, 그 다음 내용)
 	echo "[AUTO-DISCOVER] STEP-6: Direct kvs_put - Storing files to KVS" >&2
 	
+	# DEBUG: 파일 크기 확인
+	echo "[AUTO-DISCOVER] STEP-6: File sizes:" >&2
+	ls -la /tmp/kvs_kValue_auto_discover_*.json 2>/dev/null | tee -a /tmp/auto_discover_debug_$$.log >&2
+	
 	if [ -f "/tmp/kvs_kValue_auto_discover_result_$$.json" ]; then
 		result_data=$(cat "/tmp/kvs_kValue_auto_discover_result_$$.json" 2>/dev/null)
-		kvs_put "lssn" "${lssn}" "auto_discover_result" "$result_data" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
-		echo "[AUTO-DISCOVER] STEP-6: auto_discover_result kvs_put completed" >&2
+		echo "[AUTO-DISCOVER] STEP-6: result_data length=${#result_data}" >&2
+		kvs_put_result_output=$(kvs_put "lssn" "${lssn}" "auto_discover_result" "$result_data" 2>&1)
+		kvs_put_result_code=$?
+		echo "[AUTO-DISCOVER] STEP-6: auto_discover_result kvs_put exit_code=$kvs_put_result_code" >&2
+		echo "$kvs_put_result_output" | tee -a /tmp/auto_discover_debug_$$.log >&2
 	fi
 	
 	if [ -f "/tmp/kvs_kValue_auto_discover_servers_$$.json" ]; then
 		servers_data=$(cat "/tmp/kvs_kValue_auto_discover_servers_$$.json" 2>/dev/null)
-		kvs_put "lssn" "${lssn}" "auto_discover_servers" "$servers_data" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
-		echo "[AUTO-DISCOVER] STEP-6: auto_discover_servers kvs_put completed" >&2
+		echo "[AUTO-DISCOVER] STEP-6: servers_data length=${#servers_data}, content=$(echo "$servers_data" | head -c 100)" >&2
+		kvs_put_servers_output=$(kvs_put "lssn" "${lssn}" "auto_discover_servers" "$servers_data" 2>&1)
+		kvs_put_servers_code=$?
+		echo "[AUTO-DISCOVER] STEP-6: auto_discover_servers kvs_put exit_code=$kvs_put_servers_code" >&2
+		echo "$kvs_put_servers_output" | tee -a /tmp/auto_discover_debug_$$.log >&2
 	fi
 	
 	if [ -f "/tmp/kvs_kValue_auto_discover_networks_$$.json" ]; then
 		networks_data=$(cat "/tmp/kvs_kValue_auto_discover_networks_$$.json" 2>/dev/null)
-		kvs_put "lssn" "${lssn}" "auto_discover_networks" "$networks_data" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
-		echo "[AUTO-DISCOVER] STEP-6: auto_discover_networks kvs_put completed" >&2
+		echo "[AUTO-DISCOVER] STEP-6: networks_data length=${#networks_data}, content=$(echo "$networks_data" | head -c 100)" >&2
+		kvs_put_networks_output=$(kvs_put "lssn" "${lssn}" "auto_discover_networks" "$networks_data" 2>&1)
+		kvs_put_networks_code=$?
+		echo "[AUTO-DISCOVER] STEP-6: auto_discover_networks kvs_put exit_code=$kvs_put_networks_code" >&2
+		echo "$kvs_put_networks_output" | tee -a /tmp/auto_discover_debug_$$.log >&2
 	fi
 	
 	if [ -f "/tmp/kvs_kValue_auto_discover_services_$$.json" ]; then
 		services_data=$(cat "/tmp/kvs_kValue_auto_discover_services_$$.json" 2>/dev/null)
-		kvs_put "lssn" "${lssn}" "auto_discover_services" "$services_data" 2>&1 | tee -a /tmp/auto_discover_debug_$$.log
-		echo "[AUTO-DISCOVER] STEP-6: auto_discover_services kvs_put completed" >&2
+		echo "[AUTO-DISCOVER] STEP-6: services_data length=${#services_data}" >&2
+		kvs_put_services_output=$(kvs_put "lssn" "${lssn}" "auto_discover_services" "$services_data" 2>&1)
+		kvs_put_services_code=$?
+		echo "[AUTO-DISCOVER] STEP-6: auto_discover_services kvs_put exit_code=$kvs_put_services_code" >&2
+		echo "$kvs_put_services_output" | tee -a /tmp/auto_discover_debug_$$.log >&2
 	fi
+	
+	echo "[AUTO-DISCOVER] STEP-6: kvs_put operations summary - result:$kvs_put_result_code, servers:$kvs_put_servers_code, networks:$kvs_put_networks_code, services:$kvs_put_services_code" >&2
 	
 	# STEP-7: Store All Data to KVS (확인 메시지만)
 	log_auto_discover_step "STEP-7" "Store Discovery Data to KVS" "auto_discover_step_7_complete" "{\"status\":\"storing_data\"}"
