@@ -272,8 +272,19 @@ if [ "${gateway_mode}" = "1" ]; then
 	# Gateway main loop (run once per execution, cron will re-run)
 	log_message "INFO" "Starting Gateway cycle..."
 	
+	# 🔴 [로깅 포인트 #5.5] Gateway 리모트 서버 처리 시작
+	echo "[giipAgent3.sh] 🟢 [5.5] Gateway 리모트 서버 처리 시작"
+	
 	# Process gateway servers (query DB each cycle)
-	process_gateway_servers >/dev/null 2>&1
+	if process_gateway_servers; then
+		log_message "INFO" "Gateway servers processed successfully"
+		echo "[giipAgent3.sh] 🟢 [5.6] Gateway 리모트 서버 처리 완료"
+		kvs_put "lssn" "${lssn}" "gateway_remote_processing" "{\"status\":\"success\",\"phase\":\"[5.6]\"}"
+	else
+		log_message "WARN" "Gateway server processing returned error code"
+		echo "[giipAgent3.sh] ⚠️  [5.6] Gateway 리모트 서버 처리 경고"
+		kvs_put "lssn" "${lssn}" "gateway_remote_processing" "{\"status\":\"warning\",\"phase\":\"[5.6]\"}"
+	fi
 	
 	# Check managed databases (tManagedDatabase)
 	log_message "INFO" "Checking managed databases..."
