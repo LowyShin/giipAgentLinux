@@ -69,11 +69,10 @@ api_url=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
 config_text="LSvrGetConfig lssn hostname"
 config_jsondata="{\"lssn\":${lssn},\"hostname\":\"${hn}\"}"
 
-wget -O "$config_tmpfile" \
-	--post-data="text=${config_text}&token=${sk}&jsondata=${config_jsondata}" \
-	--header="Content-Type: application/x-www-form-urlencoded" \
-	"${api_url}" \
-	--no-check-certificate -q 2>&1
+curl -s -X POST "${api_url}" \
+	-d "text=${config_text}&token=${sk}&jsondata=${config_jsondata}" \
+	-H "Content-Type: application/x-www-form-urlencoded" \
+	--insecure -o "$config_tmpfile" 2>&1
 
 if [ -f "$config_tmpfile" ]; then
 	# Log API response to KVS for debugging
@@ -189,11 +188,10 @@ if [ "${lssn}" = "0" ]; then
 	local lwAPIURL=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
 	local lwDownloadText="CQEQueueGet 0 ${hn} ${os} op"
 	
-	wget -O $tmpFileName \
-		--post-data="text=${lwDownloadText}&token=${sk}" \
-		--header="Content-Type: application/x-www-form-urlencoded" \
-		"${lwAPIURL}" \
-		--no-check-certificate -q
+	curl -s -X POST "${lwAPIURL}" \
+		-d "text=${lwDownloadText}&token=${sk}" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		--insecure -o $tmpFileName 2>&1
 	
 	lssn=$(cat ${tmpFileName})
 	cnfdmp=$(cat ../giipAgent.cnf | sed -e "s|lssn=\"0\"|lssn=\"${lssn}\"|g")

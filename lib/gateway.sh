@@ -97,11 +97,10 @@ get_gateway_servers() {
 	local text="GatewayRemoteServerListForAgent lssn"
 	local jsondata="{\"lssn\":${lssn}}"
 	
-	wget -O "$temp_file" \
-		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
-		--header="Content-Type: application/x-www-form-urlencoded" \
-		"$api_url" \
-		--no-check-certificate -q 2>&1
+	curl -s -X POST "$api_url" \
+		-d "text=${text}&token=${sk}&jsondata=${jsondata}" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		--insecure -o "$temp_file" 2>&1
 	
 	if [ ! -s "$temp_file" ]; then
 		# 🔴 [로깅 포인트 #5.4-ERROR] 서버 목록 조회 실패
@@ -143,11 +142,10 @@ get_db_queries() {
 	local text="GatewayDBQueryList lssn"
 	local jsondata="{\"lssn\":${lssn}}"
 	
-	wget -O "$temp_file" \
-		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
-		--header="Content-Type: application/x-www-form-urlencoded" \
-		"$api_url" \
-		--no-check-certificate -q 2>&1
+	curl -s -X POST "$api_url" \
+		-d "text=${text}&token=${sk}&jsondata=${jsondata}" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		--insecure -o "$temp_file" 2>&1
 	
 	if [ ! -s "$temp_file" ]; then
 		rm -f "$temp_file"
@@ -171,11 +169,10 @@ get_managed_databases() {
 	local text="GatewayManagedDatabaseList lssn"
 	local jsondata="{\"lssn\":${lssn}}"
 	
-	wget -O "$temp_file" \
-		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
-		--header="Content-Type: application/x-www-form-urlencoded" \
-		"$api_url" \
-		--no-check-certificate -q 2>&1
+	curl -s -X POST "$api_url" \
+		-d "text=${text}&token=${sk}&jsondata=${jsondata}" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		--insecure -o "$temp_file" 2>&1
 	
 	if [ ! -s "$temp_file" ]; then
 		echo "[Gateway] ⚠️  Failed to fetch managed databases from DB" >&2

@@ -11,6 +11,7 @@
 
 # Function: Fetch queue from API
 # Usage: fetch_queue "lssn" "hostname" "os" "output_file"
+# Automatically extracts script from JSON response and saves to output_file
 fetch_queue() {
 	local lssn=$1
 	local hostname=$2
@@ -23,13 +24,54 @@ fetch_queue() {
 	local text="CQEQueueGet lssn hostname os op"
 	local jsondata="{\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"os\":\"${os}\",\"op\":\"op\"}"
 	
-	wget -O "$output_file" \
-		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
-		--header="Content-Type: application/x-www-form-urlencoded" \
-		"$api_url" \
-		--no-check-certificate -q
+	local temp_response="/tmp/queue_response_$$.json"
 	
-	return $?
+	curl -s -X POST "$api_url" \
+		-d "text=${text}&token=${sk}&jsondata=${jsondata}" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		--insecure -o "$temp_response" 2>&1
+	
+	if [ ! -s "$temp_response" ]; then
+		rm -f "$temp_response"
+		return 1
+	fi
+	
+	# Extract script from JSON response
+	# Try multiple methods to extract the script body
+	
+	# Method 1: Using jq (most reliable)
+	if command -v jq >/dev/null 2>&1; then
+		local script=$(jq -r '.data[0].ms_body // .ms_body // empty' "$temp_response" 2>/dev/null)
+		if [ -n "$script" ] && [ "$script" != "null" ]; then
+			echo "$script" > "$output_file"
+			rm -f "$temp_response"
+			return 0
+		fi
+	fi
+	
+	# Method 2: Using sed/grep (fallback)
+	if [ ! -s "$output_file" ]; then
+		local script=$(cat "$temp_response" | sed -n 's/.*"ms_body"\s*:\s*"\([^"]*\)".*/\1/p' | head -1)
+		if [ -n "$script" ] && [ "$script" != "null" ]; then
+			# Unescape JSON string (e.g., \n to actual newline)
+			echo "$script" | sed 's/\\n/\n/g; s/\\r//g; s/\\"/"/g; s/\\\\/\\/g' > "$output_file"
+			rm -f "$temp_response"
+			return 0
+		fi
+	fi
+	
+	# Method 3: If entire response looks like a script (no JSON wrapper)
+	if [ ! -s "$output_file" ]; then
+		if grep -q '^#!/bin/bash' "$temp_response" 2>/dev/null; then
+			cp "$temp_response" "$output_file"
+			rm -f "$temp_response"
+			return 0
+		fi
+	fi
+	
+	# No script found
+	rm -f "$temp_response"
+	return 1
 }
 
 # ============================================================================
