@@ -514,14 +514,17 @@ main() {
 			local ssh_port=$(echo "$server_json" | jq -r '.ssh_port // 22' 2>/dev/null)
 			
 			server_list+=("$server_json")
-			print_info "  ├─ [$(($((actual_server_count))+1))] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user} lssn:${lssn}"
-			((actual_server_count++))
+			print_info "  ├─ [${#server_list[@]}] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user} lssn:${lssn}"
 		done < <(jq -c '.data[]? // .[]? // .' "$json_file" 2>/dev/null)
 		
 		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		print_info ""
 		print_info "🔄 Starting connection tests..."
 		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+		
+		# Debug: show how many servers in array
+		print_info "Found ${#server_list[@]} server(s) in array"
+		print_info ""
 		
 		# Step 8.2: Second pass - test connections
 		actual_server_count=0
@@ -565,14 +568,17 @@ main() {
 			local ssh_port=$(echo "$server_json" | grep -o '"ssh_port"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/' || echo "22")
 			
 			server_list+=("$server_json")
-			print_info "  ├─ [$(($temp_count+1))] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user} lssn:${lssn}"
-			((temp_count++))
+			print_info "  ├─ [${#server_list[@]}] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user} lssn:${lssn}"
 		done < <(tr -d '\n' < "$json_file" | sed 's/}/}\n/g' | grep -o '{[^}]*}')
 		
 		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		print_info ""
 		print_info "🔄 Starting connection tests..."
 		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
+		
+		# Debug: show how many servers in array
+		print_info "Found ${#server_list[@]} server(s) in array"
+		print_info ""
 		
 		# Step 8.2: Second pass - test connections
 		actual_server_count=0
