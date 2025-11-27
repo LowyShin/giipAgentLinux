@@ -493,6 +493,7 @@ main() {
 	
 	# Parse JSON and extract servers
 	local actual_server_count=0
+	declare -a server_list
 	
 	# Try using jq first
 	if command -v jq &> /dev/null; then
@@ -503,7 +504,11 @@ main() {
 		print_info "📋 Servers found in JSON file:"
 		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		
-		local server_list=()
+		# Extract to temp file first to preserve array in main shell
+		local temp_servers="/tmp/servers_to_test_$$.jsonl"
+		jq -c '.data[]? // .[]? // .' "$json_file" 2>/dev/null > "$temp_servers"
+		
+		local list_count=0
 		while IFS= read -r server_json; do
 			[ -z "$server_json" ] && continue
 			
@@ -514,8 +519,10 @@ main() {
 			local ssh_port=$(echo "$server_json" | jq -r '.ssh_port // 22' 2>/dev/null)
 			
 			server_list+=("$server_json")
-			print_info "  ├─ [${#server_list[@]}] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user} lssn:${lssn}"
-		done < <(jq -c '.data[]? // .[]? // .' "$json_file" 2>/dev/null)
+			list_count=$((list_count + 1))
+			print_info "  ├─ [$list_count] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user} lssn:${lssn}"
+		done < "$temp_servers"
+		rm -f "$temp_servers"
 		
 		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		print_info ""
@@ -527,7 +534,6 @@ main() {
 		print_info ""
 		
 		# Step 8.2: Second pass - test connections
-		actual_server_count=0
 		for server_json in "${server_list[@]}"; do
 			((TOTAL_SERVERS++))
 			((actual_server_count++))
@@ -541,7 +547,6 @@ main() {
 			local ssh_key_path=$(echo "$server_json" | jq -r '.ssh_key_path // empty' 2>/dev/null)
 			local ssh_password=$(echo "$server_json" | jq -r '.ssh_password // empty' 2>/dev/null)
 			
-			echo ""
 			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn"
 			
 		done
@@ -554,10 +559,11 @@ main() {
 		print_info "📋 Servers found in JSON file:"
 		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		
-		local server_list=()
-		local temp_count=0
+		# Extract to temp file first to preserve array in main shell
+		local temp_servers="/tmp/servers_to_test_$$.jsonl"
+		tr -d '\n' < "$json_file" | sed 's/}/}\n/g' | grep -o '{[^}]*}' > "$temp_servers"
 		
-		# Normalize JSON and extract objects
+		local list_count=0
 		while IFS= read -r server_json; do
 			[ -z "$server_json" ] && continue
 			
@@ -568,8 +574,10 @@ main() {
 			local ssh_port=$(echo "$server_json" | grep -o '"ssh_port"[[:space:]]*:[[:space:]]*[0-9]*' | sed 's/.*:\s*\([0-9]*\).*/\1/' || echo "22")
 			
 			server_list+=("$server_json")
-			print_info "  ├─ [${#server_list[@]}] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user} lssn:${lssn}"
-		done < <(tr -d '\n' < "$json_file" | sed 's/}/}\n/g' | grep -o '{[^}]*}')
+			list_count=$((list_count + 1))
+			print_info "  ├─ [$list_count] ${hostname} (${ssh_host}:${ssh_port}) user:${ssh_user} lssn:${lssn}"
+		done < "$temp_servers"
+		rm -f "$temp_servers"
 		
 		echo "═══════════════════════════════════════════════════════════════" | tee -a "$REPORT_FILE"
 		print_info ""
@@ -581,7 +589,6 @@ main() {
 		print_info ""
 		
 		# Step 8.2: Second pass - test connections
-		actual_server_count=0
 		for server_json in "${server_list[@]}"; do
 			((TOTAL_SERVERS++))
 			((actual_server_count++))
@@ -595,7 +602,6 @@ main() {
 			local ssh_key_path=$(echo "$server_json" | grep -o '"ssh_key_path"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
 			local ssh_password=$(echo "$server_json" | grep -o '"ssh_password"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
 			
-			echo ""
 			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn"
 			
 		done
