@@ -624,6 +624,201 @@ should_run_discovery() {
 # ============================================================================
 # 메인 진입점 (직접 실행 시)
 # ============================================================================
+# ============================================================================
+# Auto-Discover Functions (STEP-1 ~ STEP-7)
+# ============================================================================
+
+# Helper function: Resolve auto-discover script path
+_resolve_auto_discover_script() {
+	local base_dir="$1"
+	
+	# Handle case where SCRIPT_DIR might already include /lib
+	if [[ "$base_dir" == */lib ]]; then
+		base_dir="${base_dir%/lib}"
+	fi
+	
+	echo "${base_dir}/giipscripts/auto-discover-linux.sh"
+}
+
+# STEP-1: Configuration Check
+_auto_discover_step1_config_check() {
+	local lssn="$1"
+	
+	log_auto_discover_step "STEP-1" "Configuration Check" "auto_discover_step_1_config" \
+		"{\"lssn\":${lssn},\"sk_length\":${#sk},\"apiaddrv2_set\":$([ -n \"$apiaddrv2\" ] && echo 'true' || echo 'false')}"
+	
+	if [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
+		log_auto_discover_error "STEP-1" "CONFIG_MISSING" "Required variables not set" \
+			"{\"sk_set\":$([ -n \"$sk\" ] && echo 'true' || echo 'false'),\"apiaddrv2_set\":$([ -n \"$apiaddrv2\" ] && echo 'true' || echo 'false')}"
+		return 1
+	fi
+	
+	return 0
+}
+
+# STEP-2: Script Path Check
+_auto_discover_step2_script_check() {
+	local script_path="$1"
+	
+	log_auto_discover_step "STEP-2" "Script Path Check" "auto_discover_step_2_scriptpath" \
+		"{\"path\":\"${script_path}\",\"exists\":$([ -f \"$script_path\" ] && echo 'true' || echo 'false')}"
+	
+	if [ ! -f "$script_path" ]; then
+		log_auto_discover_error "STEP-2" "SCRIPT_NOT_FOUND" "auto-discover script not found" \
+			"{\"searched_path\":\"${script_path}\"}"
+		return 1
+	fi
+	
+	return 0
+}
+
+# STEP-3: Initialize KVS
+_auto_discover_step3_init_kvs() {
+	local lssn="$1"
+	local hostname="$2"
+	local os="$3"
+	local script_path="$4"
+	
+	log_auto_discover_step "STEP-3" "Initialize KVS Records" "auto_discover_step_3_init" \
+		"{\"action\":\"storing_init_marker\",\"lssn\":${lssn}}"
+	
+	local init_data="{\"status\":\"starting\",\"script_path\":\"${script_path}\",\"hostname\":\"${hostname}\",\"os\":\"${os}\"}"
+	kvs_put "lssn" "${lssn}" "auto_discover_init" "$init_data" >/dev/null 2>&1
+	
+	return $?
+}
+
+# STEP-4: Execute Auto-Discover Script
+_auto_discover_step4_execute() {
+	local script_path="$1"
+	local lssn="$2"
+	local hostname="$3"
+	local os="$4"
+	
+	log_auto_discover_step "STEP-4" "Execute Auto-Discover Script" "auto_discover_step_4_execution" \
+		"{\"script\":\"${script_path}\",\"timeout_sec\":60}"
+	
+	local result_file="/tmp/auto_discover_result_$$.json"
+	local log_file="/tmp/auto_discover_log_$$.log"
+	
+	timeout 60 bash "$script_path" "$lssn" "$hostname" "$os" > "$result_file" 2> "$log_file"
+	local exit_code=$?
+	
+	if [ $exit_code -eq 0 ]; then
+		log_auto_discover_validation "STEP-4" "script_execution" "PASS" "{\"exit_code\":0}"
+		echo "$result_file"
+		return 0
+	elif [ $exit_code -eq 124 ]; then
+		log_auto_discover_error "STEP-4" "SCRIPT_TIMEOUT" "Script execution timed out" "{\"exit_code\":124}"
+		return 1
+	else
+		local error=$(tail -5 "$log_file" 2>/dev/null | tr '\n' ';')
+		log_auto_discover_error "STEP-4" "SCRIPT_EXECUTION_FAILED" "Script failed" "{\"exit_code\":${exit_code}}"
+		return 1
+	fi
+}
+
+# STEP-5: Validate Result File
+_auto_discover_step5_validate() {
+	local result_file="$1"
+	
+	local result_size=$(wc -c < "$result_file" 2>/dev/null || echo "0")
+	log_auto_discover_step "STEP-5" "Validate Result File" "auto_discover_step_5_validation" \
+		"{\"result_file\":\"${result_file}\"}"
+	
+	if [ $result_size -eq 0 ]; then
+		log_auto_discover_error "STEP-5" "RESULT_FILE_EMPTY" "Result file is empty" "{\"file\":\"${result_file}\",\"size\":0}"
+		return 1
+	fi
+	
+	log_auto_discover_validation "STEP-5" "result_file_size" "PASS" "{\"bytes\":${result_size}}"
+	return 0
+}
+
+# STEP-6: Extract and Store Components
+_auto_discover_step6_extract() {
+	local result_file="$1"
+	local lssn="$2"
+	
+	log_auto_discover_step "STEP-6" "Extract Components" "auto_discover_step_6_extract" "{\"file\":\"${result_file}\"}"
+	
+	local auto_discover_json=$(cat "$result_file" 2>/dev/null)
+	if [ -z "$auto_discover_json" ]; then
+		log_auto_discover_error "STEP-6" "JSON_EMPTY" "Failed to read discovery JSON" "{}"
+		return 1
+	fi
+	
+	# Store complete result
+	local result_kvalue="/tmp/kvs_kValue_auto_discover_result_$$.json"
+	echo "$auto_discover_json" > "$result_kvalue"
+	kvs_put "lssn" "${lssn}" "auto_discover_result" "$auto_discover_json" >/dev/null 2>&1
+	
+	# Extract and store networks
+	local networks_data=$(echo "$auto_discover_json" | jq '.network // empty' 2>/dev/null)
+	if [ -n "$networks_data" ]; then
+		kvs_put "lssn" "${lssn}" "auto_discover_networks" "$networks_data" >/dev/null 2>&1
+	fi
+	
+	# Extract and store services
+	local services_data=$(echo "$auto_discover_json" | jq '.services // empty' 2>/dev/null)
+	if [ -n "$services_data" ]; then
+		kvs_put "lssn" "${lssn}" "auto_discover_services" "$services_data" >/dev/null 2>&1
+	fi
+	
+	log_auto_discover_validation "STEP-6" "components_extracted" "PASS" "{}"
+	return 0
+}
+
+# STEP-7: Complete
+_auto_discover_step7_complete() {
+	local lssn="$1"
+	
+	log_auto_discover_step "STEP-7" "Store Complete Marker" "auto_discover_step_7_complete" "{\"status\":\"completed\"}"
+	
+	local complete_data="{\"status\":\"completed\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+	kvs_put "lssn" "${lssn}" "auto_discover_complete" "$complete_data" >/dev/null 2>&1
+	
+	return 0
+}
+
+# Main: Run Auto-Discover (all steps)
+run_auto_discover() {
+	local lssn="$1"
+	local hostname="$2"
+	local os="$3"
+	local script_base_dir="$4"
+	
+	# STEP-1: Configuration check
+	_auto_discover_step1_config_check "$lssn" || return 1
+	
+	# STEP-2: Script path check
+	local script_path=$(_resolve_auto_discover_script "$script_base_dir")
+	_auto_discover_step2_script_check "$script_path" || return 1
+	
+	# STEP-3: Initialize KVS
+	_auto_discover_step3_init_kvs "$lssn" "$hostname" "$os" "$script_path" || return 1
+	
+	# STEP-4: Execute script
+	local result_file=$(_auto_discover_step4_execute "$script_path" "$lssn" "$hostname" "$os")
+	if [ -z "$result_file" ]; then
+		return 1
+	fi
+	
+	# STEP-5: Validate result
+	_auto_discover_step5_validate "$result_file" || return 1
+	
+	# STEP-6: Extract and store
+	_auto_discover_step6_extract "$result_file" "$lssn" || return 1
+	
+	# STEP-7: Complete marker
+	_auto_discover_step7_complete "$lssn" || return 1
+	
+	# Cleanup
+	rm -f "$result_file" "/tmp/auto_discover_log_$$.log" >/dev/null 2>&1
+	
+	return 0
+}
+
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     # 직접 실행된 경우
     if [[ $# -lt 1 ]]; then
