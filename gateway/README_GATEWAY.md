@@ -345,7 +345,7 @@ ssh-keyscan -H 192.168.1.10 >> ~/.ssh/known_hosts
 curl "https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=YOUR_SK&lssn=1001&hn=test&os=Linux&df=os&sv=1.0"
 
 # Check configuration
-cat ~/giipAgentGateway/giipAgent.cnf | grep sk=
+cat <installation_directory>/giipAgent.cnf | grep sk=  # e.g., /opt/giipAgent.cnf
 ```
 
 ### Agent Not Running
@@ -429,7 +429,7 @@ If you have existing servers with standard agent and want to migrate to gateway:
 
 1. **Get LSSN from existing servers:**
    ```bash
-   ssh server1 "grep lssn ~/giipAgent/giipAgent.cnf"
+   ssh server1 "grep lssn <installation_directory>/giipAgent.cnf"  # e.g., /opt/giipAgent.cnf
    ```
 
 2. **Add to gateway server list:**

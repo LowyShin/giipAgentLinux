@@ -87,10 +87,10 @@ giipAgentLinux/
 
 #### 실행 방법:
 ```bash
-# Cron에서 자동 실행
+# Cron에서 자동 실햖
 */5 * * * * /root/giipAgentLinux/giip-auto-discover.sh
 
-# 수동 실행
+# 수동 실햖
 ./giip-auto-discover.sh
 ```
 
@@ -312,9 +312,9 @@ wait
 
 ### 설정 파일 보호
 ```bash
-# giipAgent.cnf는 민감 정보 포함 (sk, lssn)
-chmod 600 /root/giipAgent.cnf
-chown root:root /root/giipAgent.cnf
+# giipAgent.cnf는 민감 정보 포함 (sk, lssn) - 부모 디렉토리에 위치
+chmod 600 /opt/giipAgent.cnf  # 설치 디렉토리 부모에 위치, 예: /opt/
+chown root:root /opt/giipAgent.cnf
 
 # Git에 커밋 금지
 echo "giipAgent.cnf" >> .gitignore
@@ -354,7 +354,7 @@ echo "giipAgent.cnf" >> .gitignore
 ### 에러 케이스
 ```bash
 [2025-10-28 12:00:00] Starting auto-discovery...
-[2025-10-28 12:00:01] ERROR: Discovery script not found: /root/giipAgentLinux/giipscripts/auto-discover-linux.sh
+[2025-10-28 12:00:01] ERROR: Discovery script not found: /opt/giipAgentLinux/giipscripts/auto-discover-linux.sh
 
 [2025-10-28 13:00:00] Starting auto-discovery...
 [2025-10-28 13:00:01] Collected service-related packages: 37
@@ -386,7 +386,7 @@ chmod +x giipscripts/auto-discover-linux.sh
 ```bash
 crontab -e
 
-# 5분마다 실행
+# 5분마다 실햖
 */5 * * * * /root/giipAgentLinux/giip-auto-discover.sh
 ```
 

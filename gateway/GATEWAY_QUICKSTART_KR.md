@@ -194,7 +194,7 @@ ssh-keyscan -H 192.168.1.10 >> ~/.ssh/known_hosts
 curl "https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=YOUR_SK&lssn=1001&hn=test&os=Linux&df=os&sv=1.0"
 
 # 설정 확인
-cat ~/giipAgentGateway/giipAgent.cnf | grep sk=
+cat <installation_directory>/giipAgent.cnf | grep sk=  # e.g., /opt/giipAgent.cnf
 ```
 
 ### Agent 실행되지 않음
@@ -250,7 +250,7 @@ vi giipAgentGateway_servers.csv
 
 ```bash
 # 1. 원격 서버의 LSSN 확인
-ssh server1 "grep lssn ~/giipAgent/giipAgent.cnf"
+ssh server1 "grep lssn <installation_directory>/giipAgent.cnf"  # e.g., /opt/giipAgent.cnf
 
 # 2. Gateway 서버 목록에 추가
 vi ~/giipAgentGateway/giipAgentGateway_servers.csv
