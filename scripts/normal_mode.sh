@@ -84,9 +84,8 @@ export FILE_MODIFIED=$(stat -c %y "${BASH_SOURCE[0]}" 2>/dev/null || stat -f "%S
 # ============================================================================
 # Early Cleanup: Remove old GIIP temporary files
 # ============================================================================
-
-cleanup_all_temp_files
-echo ""
+# Note: Cleanup is handled by caller (giipAgent3.sh) when needed
+# Skipped here to avoid unnecessary operations
 
 echo "[normal_mode.sh] 🟢 Starting GIIP Agent Normal Mode"
 
