@@ -112,9 +112,29 @@ export sk apiaddrv2 apiaddrcode
 - [ ] 문제 재현 확인
 - [ ] 테스트 성공 확인
 
-## 다음 단계
+## 수정된 해결책 (v2)
 
-1. **즉시 수정**: export 추가 (1줄)
-2. **추가 수정**: wrapper에서 설정 파일 로드 (안정성)
-3. **테스트**: 실제 실행하여 검증
-4. **문서화**: 해결 방법을 주석으로 기록
+### 문제 재진단
+giipAgent3.sh와 test-queue-get.sh의 차이점:
+
+```bash
+# giipAgent3.sh (위치: giipAgentLinux/giipAgent3.sh)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"  # giipAgentLinux 폴더
+load_config "../giipAgent.cnf"  # ✅ 작동 (giipAgent.cnf는 giipAgentLinux 상위)
+
+# test-queue-get.sh (위치: giipAgentLinux/tests/test-queue-get.sh)
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"  # tests 폴더
+CONFIG_FILE="${SCRIPT_DIR}/../giipAgent.cnf"  # ❌ 잘못됨! (tests 폴더로부터)
+# 실제로는: tests/../giipAgent.cnf = giipAgentLinux/giipAgent.cnf (있음)
+```
+
+### 최종 해결책 (v2)
+1. **CONFIG_FILE 경로 수정**: `${SCRIPT_DIR}/../giipAgent.cnf`로 명시적 설정
+2. **fallback 경로 추가**: 여러 위치에서 찾기 시도
+3. **wrapper에서 config 로드**: 반드시 CONFIG_FILE 로드 (export와 별도)
+4. **변수 검증**: config 로드 후 즉시 변수 확인
+
+결과:
+- Config 파일을 정확히 찾음
+- Wrapper에서 명시적으로 로드
+- 자식 프로세스에서 변수 사용 가능

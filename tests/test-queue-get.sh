@@ -23,7 +23,17 @@ set -o pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PARENT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
 LIB_DIR="${PARENT_DIR}/lib"
-CONFIG_FILE="${PARENT_DIR}/../giipAgent.cnf"
+
+# 🔴 IMPORTANT: Config file path - same as giipAgent3.sh
+# giipAgent3.sh uses: "../giipAgent.cnf" (relative to giipAgent3.sh location)
+# tests/ is sibling of giipAgentLinux/, so we need to go up to find it
+# From tests/test-queue-get.sh → ../giipAgent.cnf (go to giipAgentLinux folder)
+CONFIG_FILE="${SCRIPT_DIR}/../giipAgent.cnf"
+
+# Fallback: also check parent directory
+if [ ! -f "$CONFIG_FILE" ]; then
+	CONFIG_FILE="${PARENT_DIR}/../giipAgent.cnf"
+fi
 
 # Load configuration from giipAgent.cnf
 if [ -f "$CONFIG_FILE" ]; then
@@ -31,6 +41,9 @@ if [ -f "$CONFIG_FILE" ]; then
 	# 🔴 CRITICAL: Export variables for child processes (wrapper script)
 	# Without export, new bash processes won't have access to these variables
 	export sk apiaddrv2 apiaddrcode lssn
+else
+	echo "❌ Config file not found at: ${SCRIPT_DIR}/../giipAgent.cnf or ${PARENT_DIR}/../giipAgent.cnf"
+	exit 1
 fi
 
 # Test output directory
@@ -128,22 +141,26 @@ TEST_HOSTNAME="$4"
 TEST_OS="$5"
 TEST_OUTPUT_FILE="$6"
 
-# Load config file (fallback if not exported)
+# Load config file first (same as how giipAgent3.sh does it)
 if [ -f "$CONFIG_FILE" ]; then
-	. "$CONFIG_FILE" || true
+	. "$CONFIG_FILE" || { echo "[wrapper] Failed to load config"; exit 1; }
+else
+	echo "[wrapper] Config file not found: $CONFIG_FILE" >&2
+	exit 1
+fi
+
+# Verify required variables are available BEFORE loading modules
+if [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
+	echo "[wrapper] ❌ FAILED: sk or apiaddrv2 not loaded from config" >&2
+	echo "[wrapper] DEBUG: sk='$sk' apiaddrv2='$apiaddrv2'" >&2
+	exit 1
 fi
 
 # Load common module
 [ -f "${LIB_DIR}/common.sh" ] && . "${LIB_DIR}/common.sh" 2>/dev/null || true
 
 # Load CQE module with functions
-. "${LIB_DIR}/cqe.sh" || exit 1
-
-# Verify required variables are available
-if [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
-	echo "[queue_get] ❌ CRITICAL: sk or apiaddrv2 not available in wrapper" >&2
-	exit 1
-fi
+. "${LIB_DIR}/cqe.sh" || { echo "[wrapper] Failed to load cqe.sh"; exit 1; }
 
 # Call queue_get
 queue_get "$TEST_LSSN" "$TEST_HOSTNAME" "$TEST_OS" "$TEST_OUTPUT_FILE"
