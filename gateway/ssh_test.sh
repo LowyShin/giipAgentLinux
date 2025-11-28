@@ -145,12 +145,15 @@ test_ssh_connection() {
 	# ========================================================================
 	
 	local ssh_succeeded=0
+	local remote_os_info=""
 	
 	if [ -n "$ssh_key_path" ] && [ "$ssh_key_path" != "null" ] && [ -f "$ssh_key_path" ]; then
 		# Try key-based auth
 		if timeout 15 $ssh_cmd $ssh_opts -i "$ssh_key_path" -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'OK'" &>/dev/null; then
 			test_result="SUCCESS"
 			ssh_succeeded=1
+			# Get OS information after successful connection
+			remote_os_info=$(timeout 15 $ssh_cmd $ssh_opts -i "$ssh_key_path" -p "$ssh_port" "${ssh_user}@${ssh_host}" "cat /etc/os-release 2>/dev/null | grep '^NAME=' | cut -d'=' -f2 | tr -d '\"' || uname -s" 2>/dev/null | head -1)
 		fi
 	fi
 	
@@ -160,6 +163,8 @@ test_ssh_connection() {
 		if timeout 15 sshpass -p "$ssh_password" $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'OK'" &>/dev/null; then
 			test_result="SUCCESS"
 			ssh_succeeded=1
+			# Get OS information after successful connection
+			remote_os_info=$(timeout 15 sshpass -p "$ssh_password" $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "cat /etc/os-release 2>/dev/null | grep '^NAME=' | cut -d'=' -f2 | tr -d '\"' || uname -s" 2>/dev/null | head -1)
 		fi
 	fi
 	
@@ -168,9 +173,16 @@ test_ssh_connection() {
 		if timeout 15 $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'OK'" &>/dev/null; then
 			test_result="SUCCESS"
 			ssh_succeeded=1
+			# Get OS information after successful connection
+			remote_os_info=$(timeout 15 $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "cat /etc/os-release 2>/dev/null | grep '^NAME=' | cut -d'=' -f2 | tr -d '\"' || uname -s" 2>/dev/null | head -1)
 		else
 			test_result="FAILED"
 		fi
+	fi
+	
+	# Set default OS if detection failed
+	if [ -z "$remote_os_info" ]; then
+		remote_os_info="Linux"
 	fi
 	
 	# ========================================================================
@@ -183,7 +195,7 @@ test_ssh_connection() {
 	# Display simple output
 	case $test_result in
 		SUCCESS)
-			print_success "  └─ ✓ ${hostname} (${ssh_host}:${ssh_port}) - LSSN:${lssn}"
+			print_success "  └─ ✓ ${hostname} (${ssh_host}:${ssh_port}) - LSSN:${lssn} - OS: ${remote_os_info}"
 			((SUCCESS_COUNT++))
 			;;
 		FAILED)
@@ -196,8 +208,8 @@ test_ssh_connection() {
 			;;
 	esac
 	
-	# Append to JSON results (with comma handling)
-	local json_entry="{\"hostname\":\"${hostname}\",\"ssh_host\":\"${ssh_host}\",\"ssh_user\":\"${ssh_user}\",\"ssh_port\":${ssh_port},\"lssn\":${lssn},\"status\":\"${test_result}\",\"error\":\"${error_msg}\"}"
+	# Append to JSON results (with comma handling) - Include OS information
+	local json_entry="{\"hostname\":\"${hostname}\",\"ssh_host\":\"${ssh_host}\",\"ssh_user\":\"${ssh_user}\",\"ssh_port\":${ssh_port},\"lssn\":${lssn},\"os\":\"${remote_os_info}\",\"status\":\"${test_result}\",\"error\":\"${error_msg}\"}"
 	
 	# Remove trailing comma from previous entry if needed
 	if [ -f "$RESULT_JSON" ]; then
@@ -211,6 +223,11 @@ test_ssh_connection() {
 	fi
 	
 	echo "$json_entry" >> "$RESULT_JSON" 2>/dev/null || true
+	
+	# Export OS information for use by queue_get (via environment variable)
+	if [ "$test_result" = "SUCCESS" ]; then
+		export "SSH_OS_${lssn}=${remote_os_info}"
+	fi
 	
 	# Return exit code based on result
 	case $test_result in
@@ -426,8 +443,12 @@ main() {
 		# Call queue_get on successful SSH connection (only if SSH test passed)
 		if [ $test_result -eq 0 ]; then
 			if declare -f queue_get &>/dev/null; then
+				# Get OS information from environment variable set by test_ssh_connection
+				local os_var_name="SSH_OS_${lssn}"
+				local detected_os="${!os_var_name:-Linux}"
+				
 				local queue_file="/tmp/giip_queue_${lssn}_$$.sh"
-				queue_get "$lssn" "$hostname" "Linux" "$queue_file"
+				queue_get "$lssn" "$hostname" "$detected_os" "$queue_file"
 				local queue_result=$?
 				if [ $queue_result -eq 0 ]; then
 					if [ -s "$queue_file" ]; then
@@ -472,8 +493,12 @@ main() {
 		# Call queue_get on successful SSH connection (only if SSH test passed)
 		if [ $test_result -eq 0 ]; then
 			if declare -f queue_get &>/dev/null; then
+				# Get OS information from environment variable set by test_ssh_connection
+				local os_var_name="SSH_OS_${lssn}"
+				local detected_os="${!os_var_name:-Linux}"
+				
 				local queue_file="/tmp/giip_queue_${lssn}_$$.sh"
-				queue_get "$lssn" "$hostname" "Linux" "$queue_file"
+				queue_get "$lssn" "$hostname" "$detected_os" "$queue_file"
 				local queue_result=$?
 				if [ $queue_result -eq 0 ]; then
 					if [ -s "$queue_file" ]; then
