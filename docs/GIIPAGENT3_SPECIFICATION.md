@@ -857,9 +857,66 @@ grep -r "timestamp" lib/*.sh giipAgent3.sh | grep -v "# " | grep -v "⏰"
 
 ---
 
+### ⚠️ 절대 규칙: bash 독립 호출 (2025-11-28 신규)
+
+**모든 모듈은 bash로 독립적으로 호출되어야 함** (실행 권한 부여 금지)
+
+#### 올바른 호출 방식
+
+```bash
+# ✅ 올바른 방식: bash로 직접 실행
+if [ -f "$script_file" ]; then
+    bash "$script_file"  # 실행 권한 필수 X
+else
+    log_message "ERROR" "Script not found"
+    exit 1
+fi
+```
+
+#### 절대 하면 안 될 것
+
+```bash
+# ❌ 잘못된 방식 1: chmod로 실행 권한 부여
+chmod +x "$script_file"  # 금지!
+"$script_file"  # 직접 실행 금지!
+
+# ❌ 잘못된 방식 2: 파일 실행 권한 확인
+if [ ! -x "$script_file" ]; then
+    chmod +x "$script_file"  # 금지!
+fi
+```
+
+#### 적용 범위
+
+| 모듈 | 호출 방식 | 위치 |
+|------|---------|------|
+| **gateway/ssh_test.sh** | `bash "${SCRIPT_DIR}/gateway/ssh_test.sh"` | giipAgent3.sh Line 279 |
+| **lib/gateway.sh** | `. "${LIB_DIR}/gateway.sh"` | giipAgent3.sh (load) |
+| **lib/normal.sh** | `. "${LIB_DIR}/normal.sh"` | giipAgent3.sh (load) |
+| 기타 스크립트 | `bash "$script_path"` | 모두 동일 |
+
+**이유**: 파일 시스템 권한이 불일치할 수 있으므로, bash 인터프리터로 실행하여 독립적 실행 보장
+
+---
+
 ### ✅ 모듈 수정 전 체크리스트
 
 **각 모듈별로 수정할 때 반드시 확인**:
+
+#### 모든 모듈 공통
+```markdown
+[ ] 1. ⚠️ bash 독립 호출 확인
+       - 호출: bash "$script_file"
+       - 금지: chmod +x / 직접 실행
+[ ] 2. 파일 존재 여부 확인
+       if [ ! -f "$script_file" ]; then ... fi
+[ ] 3. 에러 처리 추가
+       if bash "$script_file"; then ... else ... fi
+[ ] 4. 문법 오류 확인
+       bash -n $script_file
+[ ] 5. 사양서 업데이트
+       GIIPAGENT3_SPECIFICATION.md 수정
+```
 
 #### gateway.sh 수정 시
 ```markdown

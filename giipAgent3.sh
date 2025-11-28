@@ -271,7 +271,15 @@ if [ "${gateway_mode}" = "1" ]; then
 		exit 1
 	fi
 	
-	# Call SSH test script
+	# ========================================================================
+	# Call SSH test script (bash independent execution - NO chmod!)
+	# ========================================================================
+	# ⭐ RULE: All external scripts called with bash for independent execution
+	#    - NO chmod +x (avoid file permission issues)
+	#    - YES bash "$script_file" (portable, reliable)
+	# See: GIIPAGENT3_SPECIFICATION.md > 절대 규칙: bash 독립 호출
+	# ========================================================================
+	
 	log_message "INFO" "Calling gateway/ssh_test.sh..."
 	
 	ssh_test_script="${SCRIPT_DIR}/gateway/ssh_test.sh"
