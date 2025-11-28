@@ -22,6 +22,7 @@
 # Script configuration
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PARENT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
+CONFIG_FILE="$( cd "${PARENT_DIR}/.." && pwd )/giipAgent.cnf"
 LIB_DIR="${PARENT_DIR}/lib"
 LOG_DIR="/tmp/ssh_test_logs"
 mkdir -p "$LOG_DIR"
@@ -48,20 +49,20 @@ else
 fi
 
 # Load configuration variables (lssn, sk, apiaddrv2, etc.)
-if [ -f "${PARENT_DIR}/../giipAgent.cnf" ]; then
-	. "${PARENT_DIR}/../giipAgent.cnf"
+if [ -f "${CONFIG_FILE}" ]; then
+	. "${CONFIG_FILE}"
 	
 	# ⚠️ WARNING: This file in git repository is ONLY A TEMPLATE!
-	# The ACTUAL configuration file must be in parent directory
+	# The ACTUAL configuration file must be in installation directory
 	if [ "$sk" = "<your secret key>" ] || [ -z "$sk" ]; then
 		echo "🚨 ERROR: sk variable not configured properly!"
 		echo "   This file (${PARENT_DIR}/giipAgent.cnf) is a TEMPLATE ONLY"
-		echo "   Place REAL config file at: ${PARENT_DIR}/../giipAgent.cnf"
-		echo "   To verify: cat ${PARENT_DIR}/../giipAgent.cnf | grep -E '^(sk|apiaddrv2|apiaddrcode)='"
+		echo "   Place REAL config file at: ${CONFIG_FILE}"
+		echo "   To verify: cat ${CONFIG_FILE} | grep -E '^(sk|apiaddrv2|apiaddrcode)='"
 		exit 1
 	fi
 else
-	echo "⚠️  Warning: giipAgent.cnf not found at ${PARENT_DIR}/../giipAgent.cnf"
+	echo "⚠️  Warning: giipAgent.cnf not found at ${CONFIG_FILE}"
 	echo "⚠️  queue_get will not work without API configuration"
 fi
 
