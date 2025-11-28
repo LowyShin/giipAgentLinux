@@ -338,11 +338,96 @@ save_dpa_data() {
 # ============================================================================
 # Export Functions
 # ============================================================================
+# Queue Fetching Function (CQEQueueGet API wrapper)
+# ============================================================================
 
-export -f save_execution_log
-export -f kvs_put
-export -f save_gateway_status
-export -f save_dpa_data
+# Function: Fetch queue from API with unified error handling
+# Usage: queue_get "lssn" "hostname" "os" "output_file"
+# Returns: 0 on success, 1 on failure
+# Output: Extracted script saved to output_file
+# 
+# ✅ API Rules (giipapi_rules.md):
+# - text: Parameter names only
+# - jsondata: Actual values as JSON
+queue_get() {
+	local lssn=$1
+	local hostname=$2
+	local os=$3
+	local output_file=$4
+	
+	# Validate required parameters
+	if [ -z "$lssn" ] || [ -z "$hostname" ] || [ -z "$os" ] || [ -z "$output_file" ]; then
+		echo "[queue_get] ⚠️  Missing required parameters (lssn, hostname, os, output_file)" >&2
+		return 1
+	fi
+	
+	# Validate required global variables
+	if [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
+		echo "[queue_get] ⚠️  Missing required variables (sk, apiaddrv2)" >&2
+		return 1
+	fi
+	
+	# Build API URL
+	local api_url="${apiaddrv2}"
+	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
+	
+	# ✅ Follow giipapi_rules.md: text contains parameter names only!
+	local text="CQEQueueGet lssn hostname os op"
+	local jsondata="{\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"os\":\"${os}\",\"op\":\"op\"}"
+	
+	local temp_response="/tmp/queue_response_$$.json"
+	
+	# Clean up old temp files
+	rm -f /tmp/queue_response_* 2>/dev/null
+	
+	# Call CQEQueueGet API
+	curl -s -X POST "$api_url" \
+		-d "text=${text}&token=${sk}&jsondata=${jsondata}" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		--insecure -o "$temp_response" 2>&1
+	
+	# Check if response file was created and has content
+	if [ ! -s "$temp_response" ]; then
+		rm -f "$temp_response"
+		echo "[queue_get] ❌ API call failed or no response" >&2
+		return 1
+	fi
+	
+	# Extract script from JSON response
+	# Try multiple methods to ensure robust parsing
+	
+	# Method 1: Using jq (most reliable)
+	if command -v jq >/dev/null 2>&1; then
+		local script=$(jq -r '.data[0].ms_body // .ms_body // empty' "$temp_response" 2>/dev/null)
+		if [ -n "$script" ] && [ "$script" != "null" ]; then
+			echo "$script" > "$output_file"
+			rm -f "$temp_response"
+			return 0
+		fi
+	fi
+	
+	# Method 2: Try sed/grep for fallback parsing
+	if [ ! -s "$output_file" ] 2>/dev/null; then
+		local normalized=$(tr -d '\n\r' < "$temp_response")
+		local script=$(echo "$normalized" | sed -n 's/.*"ms_body"\s*:\s*"\([^"]*\)".*/\1/p' | head -1)
+		if [ -n "$script" ]; then
+			echo "$script" | sed 's/\\n/\n/g' > "$output_file"
+			rm -f "$temp_response"
+			return 0
+		fi
+	fi
+	
+	# If we reach here, extraction failed
+	rm -f "$temp_response"
+	echo "[queue_get] ❌ Failed to extract script from API response" >&2
+	return 1
+}
+
+export -f queue_get
+
+# ============================================================================
+
+
 
 # ============================================================================
 # Backward Compatibility Aliases
