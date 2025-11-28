@@ -511,7 +511,7 @@ execute_db_query() {
 				return 1
 			fi
 			
-			local python_helper="${GIIP_HOME}/giipscripts/db_query_helper.py"
+			local python_helper="${GIIP_HOME}/scripts/db_query_helper.py"
 			if [ ! -f "${python_helper}" ]; then
 				echo "[Gateway-DB] ❌ Python helper script not found: ${python_helper}"
 				return 1
@@ -537,7 +537,7 @@ execute_db_query() {
 				return 1
 			fi
 			
-			local python_helper="${GIIP_HOME}/giipscripts/db_query_helper.py"
+			local python_helper="${GIIP_HOME}/scripts/db_query_helper.py"
 			if [ ! -f "${python_helper}" ]; then
 				echo "[Gateway-DB] ❌ Python helper script not found: ${python_helper}"
 				return 1

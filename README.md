@@ -29,7 +29,7 @@ giipAgentLinux/
 │
 ├── 📁 docs/                  # 상세 문서 모음
 ├── 📁 lib/                   # 핵심 라이브러리 함수
-├── 📁 giipscripts/           # 기본 스크립트 (auto-discover 등)
+├── 📁 scripts/               # 기본 스크립트 및 운영 관리 스크립트
 ├── 📁 scripts/               # 유틸리티 스크립트 (진단, 모니터링)
 ├── 📁 gateway/               # Gateway 모드 관련
 ├── 📁 cqe/                   # CQE (Command Queue Execution)
