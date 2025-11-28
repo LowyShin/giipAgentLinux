@@ -30,6 +30,47 @@
 
 **파일 위치**: `lib/cqe.sh`
 
+### 관련 Stored Procedure
+
+| SP명 | 설명 | 링크 |
+|------|------|------|
+| `pApiCQEQueueGetbySk` | **활성** - CQEQueueGet API 호출 시 실행되는 메인 SP (최신 버전) | [giipdb/SP/pApiCQEQueueGetbySk.sql](../../giipdb/SP/pApiCQEQueueGetbySk.sql) |
+| `pCQEQueueGetbySK02` | 레거시 버전 (호환용) | [giipdb/SP/pCQEQueueGetbySK02.sql](../../giipdb/SP/pCQEQueueGetbySK02.sql) |
+| `pCQEQueueGetbySK` | 구버전 (사용 중단) | [giipdb/SP/pCQEQueueGetbySK.sql](../../giipdb/SP/pCQEQueueGetbySK.sql) |
+
+#### SP 주요 기능 (pApiCQEQueueGetbySk)
+
+**입력 파라미터**:
+```
+@sk varchar(200)           -- API 세션 키
+@lsSn int                  -- Logical Server Serial Number
+@hostname nvarchar(200)    -- 서버 호스트명
+@os nvarchar(255)          -- 운영 체제 (Linux, Windows, Darwin)
+@op nvarchar(32)           -- 옵션 ('debug' 등)
+```
+
+**실행 흐름**:
+1. SK로부터 CSN (Customer Serial Number) 조회
+2. 서버 OS 정보 업데이트 (tLSvr 테이블)
+3. 호스트명 업데이트 (신규 추가 기능)
+4. 실행 대기 중인 스크립트 큐 조회 (tMgmtQue)
+   - 반복 실행 여부 확인 (repeat=1: 일회, repeat=2: 반복)
+   - 스케줄 기반 큐 강제 생성 필요 여부 확인
+5. 큐 상태 업데이트 (send_flag=1, enddate=현재시간)
+6. 스크립트 내용(ms_body) 반환
+
+**반환 값**:
+- `RstVal`: 200 (성공), 201 (신규 서버), 404 (큐 없음), 500 (에러)
+- `ms_body`: Base64 또는 평문 스크립트 내용
+- `mslsn`: Management Script List Serial Number
+- `script_type`: 스크립트 타입
+- `mssn`: Management Script Serial Number
+
+**관련 테이블**:
+- `tMgmtScriptList`: 관리 스크립트 목록 (active, repeat, interval 등)
+- `tMgmtQue`: 실행 대기 큐 (qsn, ms_body, send_flag 등)
+- `tLSvr`: 논리 서버 정보 (LSHostname, LSOSVer 등)
+
 ---
 
 ## queue_get 함수
@@ -229,6 +270,26 @@ exit 0
 
 ## API 호출 흐름
 
+### 클라이언트 → 서버 호출 흐름
+
+```
+queue_get 함수 (lib/cqe.sh)
+    ↓
+curl POST 요청
+    ↓
+giipApiSk2 함수 (giipfaw Azure Function)
+    ↓
+pApiCQEQueueGetbySk Stored Procedure (giipdb)
+    ↓
+Database 조회 & 업데이트 (tMgmtScriptList, tMgmtQue, tLSvr)
+    ↓
+JSON 응답 반환
+    ↓
+queue_get 함수에서 ms_body 추출
+```
+
+### 상세 처리 흐름
+
 ```
 ┌─ queue_get 호출
 │
@@ -418,12 +479,37 @@ esac
 
 ---
 
-## 관련 문서
+## 관련 문서 및 리소스
 
-- [API 규칙](giipapi_rules.md) - text/jsondata 포맷 정의
+### 코드 참고
+- [CQE 라이브러리](../lib/cqe.sh) - queue_get 함수 구현
 - [테스트 스크립트](../tests/test-queue-get.sh) - 테스트 방법
-- [KVS 라이브러리](kvs.sh) - 실행 결과 로깅
-- [Common 라이브러리](common.sh) - 공통 유틸리티
+- [KVS 라이브러리](../lib/kvs.sh) - 실행 결과 로깅
+- [Common 라이브러리](../lib/common.sh) - 공통 유틸리티
+
+### Database Resources
+- **pApiCQEQueueGetbySk** (메인 SP)
+  - 경로: [giipdb/SP/pApiCQEQueueGetbySk.sql](../../giipdb/SP/pApiCQEQueueGetbySk.sql)
+  - 용도: CQEQueueGet API의 백엔드 SP
+  - 최신 기능: 호스트명 업데이트, 스케줄 기반 큐 관리
+
+- **pCQEQueueGetbySK02** (레거시)
+  - 경로: [giipdb/SP/pCQEQueueGetbySK02.sql](../../giipdb/SP/pCQEQueueGetbySK02.sql)
+  - 용도: 이전 버전 호환성
+
+- **pCQEQueueGetbySK** (구버전)
+  - 경로: [giipdb/SP/pCQEQueueGetbySK.sql](../../giipdb/SP/pCQEQueueGetbySK.sql)
+  - 용도: 역사적 참고 (더 이상 사용 안 함)
+
+### API 규칙 및 설정
+- [API 규칙](giipapi_rules.md) - text/jsondata 포맷 정의
+- [giipAgent.cnf](../giipAgent.cnf) - 설정 파일 (sk, apiaddrv2 등)
+
+### 관련 개념
+- **LSSN** (Logical Server Serial Number): 서버를 고유하게 식별하는 번호
+- **CSN** (Customer Serial Number): 고객을 식별하는 번호
+- **ms_body**: Management Script Body - 실행할 스크립트 내용
+- **send_flag**: 큐 송신 상태 플래그 (0=미송신, 1=송신)
 
 ---
 
