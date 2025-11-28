@@ -63,15 +63,6 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 
-# ⚠️ WARNING: Check if configuration is from template (not set properly)
-if [ "$sk" = "<your secret key>" ] || [ -z "$sk" ]; then
-	echo "🚨 ERROR: sk variable not configured properly!"
-	echo "   This file (../giipAgent.cnf) is a TEMPLATE ONLY"
-	echo "   Use REAL config file on production server: ~/giipAgent/giipAgent.cnf"
-	echo "   Command: cat ~/giipAgent/giipAgent.cnf | grep -E '^(sk|apiaddrv2|apiaddrcode)='"
-	exit 1
-fi
-
 # ============================================================================
 # Early Cleanup: Remove old GIIP temporary files from previous executions
 # ============================================================================
