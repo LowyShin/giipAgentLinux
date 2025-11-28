@@ -176,12 +176,24 @@ validate_environment() {
 test_queue_get() {
 	print_header "Step 2: Testing queue_get Function"
 	
+	# Load common module first (for any dependencies)
+	if [ -f "${LIB_DIR}/common.sh" ]; then
+		. "${LIB_DIR}/common.sh" 2>/dev/null || true
+	fi
+	
 	# Load cqe module
 	if ! . "${LIB_DIR}/cqe.sh"; then
 		print_error "Failed to load cqe.sh"
 		return 1
 	fi
 	print_success "Loaded cqe.sh module"
+	
+	# Verify queue_get function is available
+	if ! declare -f queue_get >/dev/null 2>&1; then
+		print_error "queue_get function not found after loading cqe.sh"
+		return 1
+	fi
+	print_success "queue_get function is available"
 	
 	# Display test parameters
 	echo ""
@@ -364,6 +376,16 @@ main() {
 	fi
 	
 	echo ""
+	
+	# Debug: Show API response if test failed
+	if [ $queue_get_exit_code -ne 0 ]; then
+		print_info "Debug Information:"
+		echo "  API URL: ${apiaddrv2}${apiaddrcode:+?code=}${apiaddrcode}"
+		echo "  LSSN: ${TEST_LSSN}"
+		echo "  Hostname: ${TEST_HOSTNAME}"
+		echo "  OS: ${TEST_OS}"
+		echo ""
+	fi
 	
 	# Step 3: Validate results
 	validate_results

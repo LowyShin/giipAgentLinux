@@ -54,10 +54,12 @@ queue_get() {
 		-H "Content-Type: application/x-www-form-urlencoded" \
 		--insecure -o "$temp_response" 2>&1
 	
+	local curl_exit_code=$?
+	
 	# Check if response file was created and has content
 	if [ ! -s "$temp_response" ]; then
 		rm -f "$temp_response"
-		echo "[queue_get] ❌ API call failed or no response" >&2
+		echo "[queue_get] ❌ API call failed or no response (curl exit code: $curl_exit_code)" >&2
 		return 1
 	fi
 	
@@ -86,8 +88,16 @@ queue_get() {
 	fi
 	
 	# If we reach here, extraction failed
+	# Save response for debugging
+	local response_content=$(cat "$temp_response" 2>/dev/null | head -c 1000)
 	rm -f "$temp_response"
+	
 	echo "[queue_get] ❌ Failed to extract script from API response" >&2
+	echo "[queue_get] DEBUG: Response content (first 1000 chars):" >&2
+	echo "$response_content" >&2
+	echo "[queue_get] DEBUG: API URL: $api_url" >&2
+	echo "[queue_get] DEBUG: jsondata: $jsondata" >&2
+	
 	return 1
 }
 
