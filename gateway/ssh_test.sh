@@ -50,6 +50,16 @@ fi
 # Load configuration variables (lssn, sk, apiaddrv2, etc.)
 if [ -f "${PARENT_DIR}/giipAgent.cnf" ]; then
 	. "${PARENT_DIR}/giipAgent.cnf"
+	
+	# ⚠️ WARNING: This file in git repository is ONLY A TEMPLATE!
+	# The ACTUAL configuration file is at: ~/giipAgent/giipAgent.cnf on production server
+	if [ "$sk" = "<your secret key>" ] || [ -z "$sk" ]; then
+		echo "🚨 ERROR: sk variable not configured properly!"
+		echo "   This file (${PARENT_DIR}/giipAgent.cnf) is a TEMPLATE ONLY"
+		echo "   Use REAL config file on production server: ~/giipAgent/giipAgent.cnf"
+		echo "   Command: cat ~/giipAgent/giipAgent.cnf | grep -E '^(sk|apiaddrv2|apiaddrcode)='"
+		exit 1
+	fi
 else
 	echo "⚠️  Warning: giipAgent.cnf not found at ${PARENT_DIR}/giipAgent.cnf"
 	echo "⚠️  queue_get will not work without API configuration"
