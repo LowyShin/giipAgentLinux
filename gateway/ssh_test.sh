@@ -39,6 +39,22 @@ SKIPPED_COUNT=0
 # Load required modules
 # ============================================================================
 
+# Load common module (prerequisite for other modules)
+if [ -f "${LIB_DIR}/common.sh" ]; then
+	. "${LIB_DIR}/common.sh"
+else
+	echo "❌ Error: common.sh not found in ${LIB_DIR}"
+	exit 1
+fi
+
+# Load configuration variables (lssn, sk, apiaddrv2, etc.)
+if [ -f "${PARENT_DIR}/giipAgent.cnf" ]; then
+	. "${PARENT_DIR}/giipAgent.cnf"
+else
+	echo "⚠️  Warning: giipAgent.cnf not found at ${PARENT_DIR}/giipAgent.cnf"
+	echo "⚠️  queue_get will not work without API configuration"
+fi
+
 # Load target list module for display and color functions
 if [ -f "${LIB_DIR}/target_list.sh" ]; then
 	. "${LIB_DIR}/target_list.sh"
