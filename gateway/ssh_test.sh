@@ -148,40 +148,37 @@ test_ssh_connection() {
 	local remote_os_info=""
 	
 	if [ -n "$ssh_key_path" ] && [ "$ssh_key_path" != "null" ] && [ -f "$ssh_key_path" ]; then
-		# Try key-based auth
-		if timeout 15 $ssh_cmd $ssh_opts -i "$ssh_key_path" -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'OK'" &>/dev/null; then
+		# Try key-based auth - Get OS info directly
+		remote_os_info=$(timeout 15 $ssh_cmd $ssh_opts -i "$ssh_key_path" -p "$ssh_port" "${ssh_user}@${ssh_host}" "cat /etc/os-release 2>/dev/null | grep '^NAME=' | cut -d'=' -f2 | tr -d '\"' || uname -s" 2>/dev/null | head -1)
+		if [ -n "$remote_os_info" ] && [ "$remote_os_info" != "null" ]; then
 			test_result="SUCCESS"
 			ssh_succeeded=1
-			# Get OS information after successful connection
-			remote_os_info=$(timeout 15 $ssh_cmd $ssh_opts -i "$ssh_key_path" -p "$ssh_port" "${ssh_user}@${ssh_host}" "cat /etc/os-release 2>/dev/null | grep '^NAME=' | cut -d'=' -f2 | tr -d '\"' || uname -s" 2>/dev/null | head -1)
 		fi
 	fi
 	
 	# If key auth failed or not available, try password auth
 	if [ "$ssh_succeeded" -eq 0 ] && [ -n "$ssh_password" ] && [ "$ssh_password" != "null" ] && command -v sshpass &> /dev/null; then
-		# Try password-based auth
-		if timeout 15 sshpass -p "$ssh_password" $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'OK'" &>/dev/null; then
+		# Try password-based auth - Get OS info directly
+		remote_os_info=$(timeout 15 sshpass -p "$ssh_password" $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "cat /etc/os-release 2>/dev/null | grep '^NAME=' | cut -d'=' -f2 | tr -d '\"' || uname -s" 2>/dev/null | head -1)
+		if [ -n "$remote_os_info" ] && [ "$remote_os_info" != "null" ]; then
 			test_result="SUCCESS"
 			ssh_succeeded=1
-			# Get OS information after successful connection
-			remote_os_info=$(timeout 15 sshpass -p "$ssh_password" $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "cat /etc/os-release 2>/dev/null | grep '^NAME=' | cut -d'=' -f2 | tr -d '\"' || uname -s" 2>/dev/null | head -1)
 		fi
 	fi
 	
-	# If all methods failed or unavailable, try default SSH key
+	# If all methods failed or unavailable, try default SSH key - Get OS info directly
 	if [ "$ssh_succeeded" -eq 0 ]; then
-		if timeout 15 $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "echo 'OK'" &>/dev/null; then
+		remote_os_info=$(timeout 15 $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "cat /etc/os-release 2>/dev/null | grep '^NAME=' | cut -d'=' -f2 | tr -d '\"' || uname -s" 2>/dev/null | head -1)
+		if [ -n "$remote_os_info" ] && [ "$remote_os_info" != "null" ]; then
 			test_result="SUCCESS"
 			ssh_succeeded=1
-			# Get OS information after successful connection
-			remote_os_info=$(timeout 15 $ssh_cmd $ssh_opts -p "$ssh_port" "${ssh_user}@${ssh_host}" "cat /etc/os-release 2>/dev/null | grep '^NAME=' | cut -d'=' -f2 | tr -d '\"' || uname -s" 2>/dev/null | head -1)
 		else
 			test_result="FAILED"
 		fi
 	fi
 	
 	# Set default OS if detection failed
-	if [ -z "$remote_os_info" ]; then
+	if [ -z "$remote_os_info" ] || [ "$remote_os_info" = "null" ]; then
 		remote_os_info="Linux"
 	fi
 	
