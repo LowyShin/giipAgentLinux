@@ -17,7 +17,6 @@
 ################################################################################
 
 set -e  # Exit on error
-set -x  # Debug: print all commands
 
 # ============================================================================
 # Initialize Script Paths
@@ -59,7 +58,8 @@ fi
 # ============================================================================
 
 # Use provided config file or default
-CONFIG_FILE="${1:-../giipAgent.cnf}"
+# Note: When called from scripts/ folder, parent is giipAgentLinux root
+CONFIG_FILE="${1:-${SCRIPT_DIR}/../giipAgent.cnf}"
 
 load_config "$CONFIG_FILE"
 if [ $? -ne 0 ]; then
