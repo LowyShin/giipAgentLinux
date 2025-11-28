@@ -23,7 +23,9 @@ set -e  # Exit on error
 # ============================================================================
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-LIB_DIR="${SCRIPT_DIR}/../lib"
+PARENT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
+CONFIG_FILE="$( cd "${PARENT_DIR}/.." && pwd )/giipAgent.cnf"
+LIB_DIR="${PARENT_DIR}/lib"
 
 # ============================================================================
 # Load Library Modules
@@ -58,8 +60,7 @@ fi
 # ============================================================================
 
 # Use provided config file or default
-# Note: When called from scripts/ folder, parent is giipAgentLinux root
-CONFIG_FILE="${1:-${SCRIPT_DIR}/../giipAgent.cnf}"
+CONFIG_FILE="${1:-${CONFIG_FILE}}"
 
 load_config "$CONFIG_FILE"
 if [ $? -ne 0 ]; then
