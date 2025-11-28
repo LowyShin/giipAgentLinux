@@ -110,29 +110,36 @@ validate_environment() {
 test_queue_get() {
 	print_header "Step 2: Running queue_get"
 	
-	# Load modules
-	if [ -f "${LIB_DIR}/common.sh" ]; then
-		. "${LIB_DIR}/common.sh" 2>/dev/null || true
-	fi
-	
-	if ! . "${LIB_DIR}/cqe.sh"; then
-		print_error "Failed to load cqe.sh"
-		return 1
-	fi
-	
-	if ! declare -f queue_get >/dev/null 2>&1; then
-		print_error "queue_get function not available"
-		return 1
-	fi
-	
 	echo "  LSSN: $TEST_LSSN | Host: $TEST_HOSTNAME | OS: $TEST_OS"
 	echo "  Output: $TEST_OUTPUT_FILE"
 	echo ""
 	
-	# Execute queue_get
-	timeout 30 queue_get "${TEST_LSSN}" "${TEST_HOSTNAME}" "${TEST_OS}" "${TEST_OUTPUT_FILE}" 2>&1
+	# Create temporary wrapper script to avoid function scope issues
+	local wrapper_script="/tmp/queue_wrapper_$$.sh"
+	cat > "$wrapper_script" << 'WRAPPER_EOF'
+#!/bin/bash
+LIB_DIR="$1"
+TEST_LSSN="$2"
+TEST_HOSTNAME="$3"
+TEST_OS="$4"
+TEST_OUTPUT_FILE="$5"
+
+# Load common module
+[ -f "${LIB_DIR}/common.sh" ] && . "${LIB_DIR}/common.sh" 2>/dev/null || true
+
+# Load CQE module with functions
+. "${LIB_DIR}/cqe.sh" || exit 1
+
+# Call queue_get
+queue_get "$TEST_LSSN" "$TEST_HOSTNAME" "$TEST_OS" "$TEST_OUTPUT_FILE"
+exit $?
+WRAPPER_EOF
+	
+	# Execute wrapper with timeout
+	timeout 30 bash "$wrapper_script" "$LIB_DIR" "$TEST_LSSN" "$TEST_HOSTNAME" "$TEST_OS" "$TEST_OUTPUT_FILE" 2>&1
 	local exit_code=$?
 	
+	rm -f "$wrapper_script"
 	return $exit_code
 }
 
