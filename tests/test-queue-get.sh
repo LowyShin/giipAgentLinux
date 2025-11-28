@@ -13,8 +13,10 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PARENT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
 LIB_DIR="${PARENT_DIR}/lib"
 
-# Config file is at same level as giipAgent3.sh (in giipAgentLinux root)
-CONFIG_FILE="${PARENT_DIR}/giipAgent.cnf"
+# Config file: Follow giipAgent3.sh pattern
+# giipAgent3.sh is in giipAgentLinux/, uses ../giipAgent.cnf (sibling of giipAgent3.sh)
+# test-queue-get.sh is in tests/, so it also needs ../giipAgent.cnf (same location)
+CONFIG_FILE="${SCRIPT_DIR}/../giipAgent.cnf"
 
 # Load config
 if [ ! -f "$CONFIG_FILE" ]; then
