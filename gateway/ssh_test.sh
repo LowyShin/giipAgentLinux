@@ -48,21 +48,20 @@ else
 fi
 
 # Load configuration variables (lssn, sk, apiaddrv2, etc.)
-INSTALL_PATH="$( cd "${PARENT_DIR}/.." && pwd )"
-if [ -f "${INSTALL_PATH}/giipAgent.cnf" ]; then
-	. "${INSTALL_PATH}/giipAgent.cnf"
+if [ -f "${PARENT_DIR}/../giipAgent.cnf" ]; then
+	. "${PARENT_DIR}/../giipAgent.cnf"
 	
 	# ⚠️ WARNING: This file in git repository is ONLY A TEMPLATE!
-	# The ACTUAL configuration file must be in installation directory
+	# The ACTUAL configuration file must be in parent directory
 	if [ "$sk" = "<your secret key>" ] || [ -z "$sk" ]; then
 		echo "🚨 ERROR: sk variable not configured properly!"
 		echo "   This file (${PARENT_DIR}/giipAgent.cnf) is a TEMPLATE ONLY"
-		echo "   Place REAL config file at: ${INSTALL_PATH}/giipAgent.cnf"
-		echo "   To verify: cat ${INSTALL_PATH}/giipAgent.cnf | grep -E '^(sk|apiaddrv2|apiaddrcode)='"
+		echo "   Place REAL config file at: ${PARENT_DIR}/../giipAgent.cnf"
+		echo "   To verify: cat ${PARENT_DIR}/../giipAgent.cnf | grep -E '^(sk|apiaddrv2|apiaddrcode)='"
 		exit 1
 	fi
 else
-	echo "⚠️  Warning: giipAgent.cnf not found at ${INSTALL_PATH}/giipAgent.cnf"
+	echo "⚠️  Warning: giipAgent.cnf not found at ${PARENT_DIR}/../giipAgent.cnf"
 	echo "⚠️  queue_get will not work without API configuration"
 fi
 
