@@ -23,13 +23,25 @@ set -o pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PARENT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
 LIB_DIR="${PARENT_DIR}/lib"
+CONFIG_FILE="${PARENT_DIR}/../giipAgent.cnf"
+
+# Load configuration from giipAgent.cnf
+if [ -f "$CONFIG_FILE" ]; then
+	. "$CONFIG_FILE"
+fi
 
 # Test output directory
 TEST_OUTPUT_DIR="/tmp/queue_get_test_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$TEST_OUTPUT_DIR"
 
 # Test parameters (can be overridden by command line arguments)
-TEST_LSSN="${1:-12345}"
+# If lssn not provided and config loaded, use lssn from config
+if [ -z "$1" ]; then
+	TEST_LSSN="${lssn:-12345}"
+else
+	TEST_LSSN="$1"
+fi
+
 TEST_HOSTNAME="${2:-test-server}"
 TEST_OS="${3:-Linux}"
 TEST_OUTPUT_FILE="${TEST_OUTPUT_DIR}/queue_output.sh"
@@ -76,6 +88,16 @@ validate_environment() {
 	
 	local errors=0
 	
+	# Check configuration file
+	if [ ! -f "$CONFIG_FILE" ]; then
+		print_warning "Configuration file not found: $CONFIG_FILE"
+		print_info "Trying to use environment variables instead"
+	else
+		print_success "Found configuration file: $CONFIG_FILE"
+	fi
+	
+	echo ""
+	
 	# Check required libraries
 	if [ ! -f "${LIB_DIR}/cqe.sh" ]; then
 		print_error "cqe.sh not found in ${LIB_DIR}"
@@ -105,23 +127,41 @@ validate_environment() {
 		print_success "Found sed"
 	fi
 	
+	echo ""
+	
 	# Check API environment variables
 	if [ -z "$sk" ]; then
 		print_error "sk variable not set (API session key)"
 		((errors++))
 	else
-		print_success "sk variable is set"
+		print_success "sk variable is set (length: ${#sk})"
 	fi
 	
 	if [ -z "$apiaddrv2" ]; then
 		print_error "apiaddrv2 variable not set (API endpoint URL)"
 		((errors++))
 	else
-		print_success "apiaddrv2 is set: ${apiaddrv2:0:50}..."
+		print_success "apiaddrv2 is set: ${apiaddrv2:0:60}..."
 	fi
+	
+	if [ -n "$apiaddrcode" ]; then
+		print_success "apiaddrcode is set: ${apiaddrcode:0:20}..."
+	else
+		print_info "apiaddrcode not set (optional)"
+	fi
+	
+	echo ""
 	
 	if [ $errors -gt 0 ]; then
 		print_error "Environment validation failed with $errors error(s)"
+		echo ""
+		print_info "💡 How to fix:"
+		echo "   1. Make sure giipAgent.cnf exists in parent directory"
+		echo "   2. Or set environment variables:"
+		echo "      export sk='your_session_key'"
+		echo "      export apiaddrv2='https://api.example.com/endpoint'"
+		echo "      export apiaddrcode='optional_code'"
+		echo ""
 		return 1
 	fi
 	
