@@ -91,14 +91,6 @@ test_ssh_connection() {
 	local ssh_key_path="$5"
 	local ssh_password="$6"
 	local lssn="$7"
-test_ssh_connection() {
-	local hostname="$1"
-	local ssh_host="$2"
-	local ssh_user="$3"
-	local ssh_port="${4:-22}"
-	local ssh_key_path="$5"
-	local ssh_password="$6"
-	local lssn="$7"
 	
 	local test_result="PENDING"
 	local error_msg=""
@@ -226,7 +218,6 @@ test_ssh_connection() {
 		FAILED) return 1 ;;
 		SKIPPED) return 2 ;;
 	esac
-}
 }
 
 ################################################################################
