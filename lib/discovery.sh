@@ -118,7 +118,8 @@ _collect_local_data() {
     _log_to_kvs "LOCAL_SCRIPT_CHECK" "$lssn" "SUCCESS" "Script found: $DISCOVERY_SCRIPT_LOCAL"
     
     local discovery_json
-    if ! discovery_json=$("$DISCOVERY_SCRIPT_LOCAL" 2>&1); then
+    # ⭐ RULE: Call with bash for independent execution (NO chmod +x)
+    if ! discovery_json=$(bash "$DISCOVERY_SCRIPT_LOCAL" 2>&1); then
         local error_msg="Failed to execute auto-discover-linux.sh: $discovery_json"
         echo "[Discovery] ❌ Error: $error_msg" >&2
         _log_to_kvs "LOCAL_EXECUTION" "$lssn" "ERROR" "$error_msg"

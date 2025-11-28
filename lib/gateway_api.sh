@@ -13,7 +13,7 @@ get_gateway_servers() {
 	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 	
 	# 🔴 [로깅 포인트 #5.4] Gateway 서버 목록 조회 시작
-	gateway_log "🟢" "[5.4]" "Gateway 서버 목록 조회 시작"
+	log_message "INFO" "[5.4] Gateway 서버 목록 조회 시작"
 	
 	local text="GatewayRemoteServerListForAgent lssn"
 	local jsondata="{\"lssn\":${lssn}}"
@@ -25,7 +25,7 @@ get_gateway_servers() {
 	
 	if [ ! -s "$temp_file" ]; then
 		# 🔴 [로깅 포인트 #5.4-ERROR] 서버 목록 조회 실패
-		gateway_log "❌" "[5.4-ERROR]" "Gateway 서버 목록 조회 실패: file_empty=true"
+		log_message "ERROR" "[5.4-ERROR] Gateway 서버 목록 조회 실패: file_empty=true"
 		rm -f "$temp_file"
 		return 1
 	fi
@@ -34,17 +34,17 @@ get_gateway_servers() {
 	local err_check=$(cat "$temp_file" | grep -i "rstval.*40[0-9]")
 	if [ -n "$err_check" ]; then
 		# 🔴 [로깅 포인트 #5.4-ERROR] API 에러 응답
-		gateway_log "❌" "[5.4-ERROR]" "Gateway 서버 목록 API 에러"
+		log_message "ERROR" "[5.4-ERROR] Gateway 서버 목록 API 에러"
 		rm -f "$temp_file"
 		return 1
 	fi
 	
 	# 🔴 [로깅 포인트 #5.4-SUCCESS] 서버 목록 조회 성공
 	local server_count=$(cat "$temp_file" | grep -o '{[^}]*}' | wc -l)
-	gateway_log "🟢" "[5.4-SUCCESS]" "Gateway 서버 목록 조회 성공"
+	log_message "INFO" "[5.4-SUCCESS] Gateway 서버 목록 조회 성공"
 	
 	# 🔴 DEBUG: 다음 함수 호출 확인
-	gateway_log "🔵" "[5.4-RETURN]" "server_list_file 반환: $temp_file"
+	log_message "DEBUG" "[5.4-RETURN] server_list_file 반환: $temp_file"
 	
 	echo "$temp_file"
 	return 0

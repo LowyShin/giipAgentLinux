@@ -133,5 +133,3 @@ run_normal_mode() {
 export -f execute_script
 export -f run_normal_mode
 export -f parse_json_response
-export -f execute_script
-export -f run_normal_mode

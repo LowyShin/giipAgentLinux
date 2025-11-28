@@ -455,7 +455,7 @@ main() {
 				fi
 			fi
 		fi
-		done
+	done
 	else
 		# Fallback: use grep for JSON parsing
 		print_warning "jq not found, using grep fallback for JSON parsing"
