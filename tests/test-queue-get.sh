@@ -28,6 +28,9 @@ CONFIG_FILE="${PARENT_DIR}/../giipAgent.cnf"
 # Load configuration from giipAgent.cnf
 if [ -f "$CONFIG_FILE" ]; then
 	. "$CONFIG_FILE"
+	# 🔴 CRITICAL: Export variables for child processes (wrapper script)
+	# Without export, new bash processes won't have access to these variables
+	export sk apiaddrv2 apiaddrcode lssn
 fi
 
 # Test output directory
@@ -119,10 +122,16 @@ test_queue_get() {
 	cat > "$wrapper_script" << 'WRAPPER_EOF'
 #!/bin/bash
 LIB_DIR="$1"
-TEST_LSSN="$2"
-TEST_HOSTNAME="$3"
-TEST_OS="$4"
-TEST_OUTPUT_FILE="$5"
+CONFIG_FILE="$2"
+TEST_LSSN="$3"
+TEST_HOSTNAME="$4"
+TEST_OS="$5"
+TEST_OUTPUT_FILE="$6"
+
+# Load config file (fallback if not exported)
+if [ -f "$CONFIG_FILE" ]; then
+	. "$CONFIG_FILE" || true
+fi
 
 # Load common module
 [ -f "${LIB_DIR}/common.sh" ] && . "${LIB_DIR}/common.sh" 2>/dev/null || true
@@ -130,13 +139,19 @@ TEST_OUTPUT_FILE="$5"
 # Load CQE module with functions
 . "${LIB_DIR}/cqe.sh" || exit 1
 
+# Verify required variables are available
+if [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
+	echo "[queue_get] ❌ CRITICAL: sk or apiaddrv2 not available in wrapper" >&2
+	exit 1
+fi
+
 # Call queue_get
 queue_get "$TEST_LSSN" "$TEST_HOSTNAME" "$TEST_OS" "$TEST_OUTPUT_FILE"
 exit $?
 WRAPPER_EOF
 	
-	# Execute wrapper with timeout
-	timeout 30 bash "$wrapper_script" "$LIB_DIR" "$TEST_LSSN" "$TEST_HOSTNAME" "$TEST_OS" "$TEST_OUTPUT_FILE" 2>&1
+	# Execute wrapper with timeout, passing CONFIG_FILE
+	timeout 30 bash "$wrapper_script" "$LIB_DIR" "$CONFIG_FILE" "$TEST_LSSN" "$TEST_HOSTNAME" "$TEST_OS" "$TEST_OUTPUT_FILE" 2>&1
 	local exit_code=$?
 	
 	rm -f "$wrapper_script"
