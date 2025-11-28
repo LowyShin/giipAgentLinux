@@ -39,22 +39,6 @@ SKIPPED_COUNT=0
 # Load required modules
 # ============================================================================
 
-# Load common module (prerequisite for other modules)
-if [ -f "${LIB_DIR}/common.sh" ]; then
-	. "${LIB_DIR}/common.sh"
-else
-	echo "❌ Error: common.sh not found in ${LIB_DIR}"
-	exit 1
-fi
-
-# Load configuration variables (lssn, sk, apiaddrv2, etc.)
-if [ -f "${PARENT_DIR}/giipAgent.cnf" ]; then
-	. "${PARENT_DIR}/giipAgent.cnf"
-else
-	echo "⚠️  Warning: giipAgent.cnf not found at ${PARENT_DIR}/giipAgent.cnf"
-	echo "⚠️  queue_get will not work without API configuration"
-fi
-
 # Load target list module for display and color functions
 if [ -f "${LIB_DIR}/target_list.sh" ]; then
 	. "${LIB_DIR}/target_list.sh"
@@ -466,15 +450,9 @@ main() {
 				if [ $queue_result -eq 0 ]; then
 					if [ -s "$queue_file" ]; then
 						log_message "INFO" "Queue fetched for LSSN:$lssn ($(wc -c < "$queue_file") bytes)"
-					else
-						log_message "INFO" "Queue empty (no queue available) for LSSN:$lssn"
 					fi
 					rm -f "$queue_file"
-				else
-					log_message "ERROR" "queue_get failed for LSSN:$lssn with exit code $queue_result"
 				fi
-			else
-				log_message "WARN" "queue_get function not available for LSSN:$lssn"
 			fi
 		fi
 	done
@@ -522,15 +500,9 @@ main() {
 				if [ $queue_result -eq 0 ]; then
 					if [ -s "$queue_file" ]; then
 						log_message "INFO" "Queue fetched for LSSN:$lssn ($(wc -c < "$queue_file") bytes)"
-					else
-						log_message "INFO" "Queue empty (no queue available) for LSSN:$lssn"
 					fi
 					rm -f "$queue_file"
-				else
-					log_message "ERROR" "queue_get failed for LSSN:$lssn with exit code $queue_result"
 				fi
-			else
-				log_message "WARN" "queue_get function not available for LSSN:$lssn"
 			fi
 		fi
 	done
