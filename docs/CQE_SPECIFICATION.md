@@ -57,19 +57,38 @@
    - 반복 실행 여부 확인 (repeat=1: 일회, repeat=2: 반복)
    - 스케줄 기반 큐 강제 생성 필요 여부 확인
 5. 큐 상태 업데이트 (send_flag=1, enddate=현재시간)
-6. 스크립트 내용(ms_body) 반환
+6. **스크립트 소스 코드 반환** (`ms_body` - 실제 실행할 스크립트 내용)
 
 **반환 값**:
-- `RstVal`: 200 (성공), 201 (신규 서버), 404 (큐 없음), 500 (에러)
-- `ms_body`: Base64 또는 평문 스크립트 내용
+- `RstVal`: 상태 코드 (200=성공, 201=신규서버, 404=큐없음, 500=에러)
+- `ms_body`: **실제 스크립트 소스 코드** (bash, powershell 등 텍스트 형식)
 - `mslsn`: Management Script List Serial Number
 - `script_type`: 스크립트 타입
 - `mssn`: Management Script Serial Number
 
-**관련 테이블**:
-- `tMgmtScriptList`: 관리 스크립트 목록 (active, repeat, interval 등)
-- `tMgmtQue`: 실행 대기 큐 (qsn, ms_body, send_flag 등)
+**data 테이블 참조**:
+- `tMgmtScriptList`: 관리 스크립트 정의 (active, repeat, interval 등)
+- `tMgmtQue`: 실행 대기 큐 (qsn, ms_body=스크립트소스, send_flag 등)
 - `tLSvr`: 논리 서버 정보 (LSHostname, LSOSVer 등)
+
+**sp 흐름도**:
+```
+입력 (@sk, @lsSn, @hostname, @os)
+  ↓
+[1] CSN 조회 (고객 확인)
+[2] tLSvr 업데이트 (OS, hostname)
+[3] tMgmtScriptList + tMgmtQue 조인 (실행대기 스크립트 찾기)
+[4] send_flag 확인
+  ├─ 0 (미송신) → 아래 처리
+  └─ 1 (송신완료) → 404 에러 반환
+[5] repeat 타입별 처리
+  ├─ repeat=2 (반복) → tMgmtQue/tMgmtScriptList 상태 업데이트
+  └─ repeat=1 (일회) → tMgmtQue/tMgmtScriptList 상태 업데이트
+[6] ms_body(스크립트 소스) 가져오기
+[7] ms_body를 '' 로 초기화 (한 번만 전송하도록)
+  ↓
+반환 (RstVal=200, ms_body=스크립트소스, 메타정보)
+```
 
 ---
 
@@ -83,13 +102,14 @@ queue_get "lssn" "hostname" "os" "output_file"
 
 ### 함수 설명
 
-CQEQueueGet API를 호출하여 원격 큐에서 대기 중인 스크립트를 가져와 로컬 파일에 저장합니다.
+CQEQueueGet API를 호출하여 원격 큐에서 대기 중인 **스크립트 소스 코드**를 가져와 로컬 파일에 저장합니다.
 
 | 항목 | 값 |
 |------|-----|
 | **반환값** | 0 = 성공, 1 = 실패 |
 | **출력** | stdout: 없음, stderr: 에러 메시지 (필요시) |
-| **파일 출력** | `output_file`에 스크립트 내용 저장 |
+| **파일 출력** | `output_file`에 **실행 가능한 스크립트 소스 코드** 저장 |
+| **처리 결과** | 다운로드된 스크립트는 즉시 실행 가능 상태 |
 
 ---
 
@@ -223,18 +243,23 @@ curl -X POST "${api_url}" \
 ${output_file}에 스크립트 저장
 ```
 
-**파일 내용 예시**:
+**파일 내용**:
+- **형식**: 텍스트 파일 (`.sh`, `.ps1`, `.bat` 등 스크립트 확장자는 선택사항)
+- **내용**: API로부터 받은 `ms_body` 필드의 **실제 스크립트 소스 코드**
+- **예시**:
 ```bash
 #!/bin/bash
-# 이것은 CQE로부터 다운로드받은 스크립트
-echo "Hello from Queue"
-exit 0
+# 이것은 CQE로부터 다운로드받은 실제 스크립트 소스
+echo "Server status check"
+df -h
+ps aux | grep java
 ```
 
 **파일 속성**:
 - 경로: 함수 호출 시 지정한 경로
-- 권한: 기본 umask (보안 권장사항: 추후 chmod 600으로 변경)
-- 크기: API 응답에 포함된 스크립트 크기
+- 권한: 기본 umask (추후 chmod 600으로 변경 권장)
+- 크기: API 응답의 `ms_body` 크기
+- **주의**: 반환된 스크립트는 즉시 실행 가능해야 함 (shebang 포함)
 
 ### 실패 (반환값: 1)
 
