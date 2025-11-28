@@ -84,88 +84,22 @@ print_info() {
 # ============================================================================
 
 validate_environment() {
-	print_header "Step 1: Validating Environment"
+	print_header "Step 1: Environment Check"
 	
 	local errors=0
 	
-	# Check configuration file
-	if [ ! -f "$CONFIG_FILE" ]; then
-		print_warning "Configuration file not found: $CONFIG_FILE"
-		print_info "Trying to use environment variables instead"
-	else
-		print_success "Found configuration file: $CONFIG_FILE"
-	fi
+	# Quick checks - minimal output
+	[ ! -f "$CONFIG_FILE" ] && print_warning "Config file not found: $CONFIG_FILE" || print_success "Config file loaded"
+	[ ! -f "${LIB_DIR}/cqe.sh" ] && { print_error "cqe.sh not found"; ((errors++)); } || print_success "cqe.sh found"
+	! command -v curl &> /dev/null && { print_error "curl not found"; ((errors++)); } || print_success "curl found"
+	! command -v jq &> /dev/null && print_warning "jq not found (grep fallback will be used)" || print_success "jq found"
+	
+	[ -z "$sk" ] && { print_error "sk not set"; ((errors++)); } || print_success "sk: ${#sk} chars"
+	[ -z "$apiaddrv2" ] && { print_error "apiaddrv2 not set"; ((errors++)); } || print_success "apiaddrv2: ${apiaddrv2:0:40}..."
 	
 	echo ""
-	
-	# Check required libraries
-	if [ ! -f "${LIB_DIR}/cqe.sh" ]; then
-		print_error "cqe.sh not found in ${LIB_DIR}"
-		((errors++))
-	else
-		print_success "Found cqe.sh"
-	fi
-	
-	# Check required tools
-	if ! command -v curl &> /dev/null; then
-		print_error "curl not found"
-		((errors++))
-	else
-		print_success "Found curl"
-	fi
-	
-	if ! command -v jq &> /dev/null; then
-		print_warning "jq not found (will use grep fallback)"
-	else
-		print_success "Found jq"
-	fi
-	
-	if ! command -v sed &> /dev/null; then
-		print_error "sed not found"
-		((errors++))
-	else
-		print_success "Found sed"
-	fi
-	
-	echo ""
-	
-	# Check API environment variables
-	if [ -z "$sk" ]; then
-		print_error "sk variable not set (API session key)"
-		((errors++))
-	else
-		print_success "sk variable is set (length: ${#sk})"
-	fi
-	
-	if [ -z "$apiaddrv2" ]; then
-		print_error "apiaddrv2 variable not set (API endpoint URL)"
-		((errors++))
-	else
-		print_success "apiaddrv2 is set: ${apiaddrv2:0:60}..."
-	fi
-	
-	if [ -n "$apiaddrcode" ]; then
-		print_success "apiaddrcode is set: ${apiaddrcode:0:20}..."
-	else
-		print_info "apiaddrcode not set (optional)"
-	fi
-	
-	echo ""
-	
-	if [ $errors -gt 0 ]; then
-		print_error "Environment validation failed with $errors error(s)"
-		echo ""
-		print_info "💡 How to fix:"
-		echo "   1. Make sure giipAgent.cnf exists in parent directory"
-		echo "   2. Or set environment variables:"
-		echo "      export sk='your_session_key'"
-		echo "      export apiaddrv2='https://api.example.com/endpoint'"
-		echo "      export apiaddrcode='optional_code'"
-		echo ""
-		return 1
-	fi
-	
-	print_success "Environment validation passed"
+	[ $errors -gt 0 ] && return 1
+	print_success "✅ Environment OK"
 	return 0
 }
 
@@ -174,43 +108,29 @@ validate_environment() {
 # ============================================================================
 
 test_queue_get() {
-	print_header "Step 2: Testing queue_get Function"
+	print_header "Step 2: Running queue_get"
 	
-	# Load common module first (for any dependencies)
+	# Load modules
 	if [ -f "${LIB_DIR}/common.sh" ]; then
 		. "${LIB_DIR}/common.sh" 2>/dev/null || true
 	fi
 	
-	# Load cqe module
 	if ! . "${LIB_DIR}/cqe.sh"; then
 		print_error "Failed to load cqe.sh"
 		return 1
 	fi
-	print_success "Loaded cqe.sh module"
 	
-	# Verify queue_get function is available
 	if ! declare -f queue_get >/dev/null 2>&1; then
-		print_error "queue_get function not found after loading cqe.sh"
+		print_error "queue_get function not available"
 		return 1
 	fi
-	print_success "queue_get function is available"
 	
-	# Display test parameters
-	echo ""
-	print_info "Test Parameters:"
-	echo "  LSSN: ${TEST_LSSN}"
-	echo "  Hostname: ${TEST_HOSTNAME}"
-	echo "  OS: ${TEST_OS}"
-	echo "  Output File: ${TEST_OUTPUT_FILE}"
+	echo "  LSSN: $TEST_LSSN | Host: $TEST_HOSTNAME | OS: $TEST_OS"
+	echo "  Output: $TEST_OUTPUT_FILE"
 	echo ""
 	
-	# Call queue_get function
-	print_info "Calling queue_get function..."
-	echo "  Command: queue_get \"${TEST_LSSN}\" \"${TEST_HOSTNAME}\" \"${TEST_OS}\" \"${TEST_OUTPUT_FILE}\""
-	echo ""
-	
-	# Execute queue_get with timeout (30 seconds)
-	timeout 30 queue_get "${TEST_LSSN}" "${TEST_HOSTNAME}" "${TEST_OS}" "${TEST_OUTPUT_FILE}"
+	# Execute queue_get
+	timeout 30 queue_get "${TEST_LSSN}" "${TEST_HOSTNAME}" "${TEST_OS}" "${TEST_OUTPUT_FILE}" 2>&1
 	local exit_code=$?
 	
 	return $exit_code
@@ -221,32 +141,26 @@ test_queue_get() {
 # ============================================================================
 
 validate_results() {
-	print_header "Step 3: Validating Results"
+	print_header "Step 3: Results"
 	
 	local errors=0
 	
 	# Check if output file was created
 	if [ ! -f "${TEST_OUTPUT_FILE}" ]; then
-		print_error "Output file not created: ${TEST_OUTPUT_FILE}"
+		print_error "Output file not created"
 		((errors++))
 	else
-		print_success "Output file created"
-		
-		# Check if file is not empty
 		if [ -s "${TEST_OUTPUT_FILE}" ]; then
-			print_success "Output file is not empty"
-			
-			# Get file size
 			local file_size=$(wc -c < "${TEST_OUTPUT_FILE}")
-			print_info "Output file size: ${file_size} bytes"
+			print_success "Output file created (${file_size} bytes)"
 			
-			# Display first 500 characters
+			# Show first 200 chars
 			echo ""
-			print_info "Output file contents (first 500 characters):"
-			echo "---"
-			head -c 500 "${TEST_OUTPUT_FILE}"
-			echo ""
-			echo "---"
+			echo "  Content preview:"
+			head -c 200 "${TEST_OUTPUT_FILE}" | sed 's/^/    /'
+			if [ $file_size -gt 200 ]; then
+				echo "    ... ($(($file_size - 200)) more bytes)"
+			fi
 			echo ""
 		else
 			print_error "Output file is empty"
@@ -254,21 +168,7 @@ validate_results() {
 		fi
 	fi
 	
-	# Check for shell script indicators
-	if [ -f "${TEST_OUTPUT_FILE}" ] && [ -s "${TEST_OUTPUT_FILE}" ]; then
-		if grep -q "#!/bin/bash\|#!/bin/sh\|^#\|^\s*[a-zA-Z_]" "${TEST_OUTPUT_FILE}"; then
-			print_success "Output file appears to contain shell script content"
-		else
-			print_warning "Output file may not contain valid shell script"
-		fi
-	fi
-	
-	if [ $errors -gt 0 ]; then
-		print_error "Result validation failed with $errors error(s)"
-		return 1
-	fi
-	
-	print_success "Result validation passed"
+	[ $errors -gt 0 ] && return 1
 	return 0
 }
 
@@ -276,38 +176,10 @@ validate_results() {
 # Report Generation
 # ============================================================================
 
-generate_report() {
-	print_header "Test Report"
-	
-	echo ""
-	echo "Test Results:"
-	echo "  Test Time: $(date '+%Y-%m-%d %H:%M:%S')"
-	echo "  LSSN: ${TEST_LSSN}"
-	echo "  Hostname: ${TEST_HOSTNAME}"
-	echo "  OS: ${TEST_OS}"
-	echo ""
-	
-	echo "API Configuration:"
-	echo "  API Endpoint: ${apiaddrv2:0:50}..."
-	[ -n "$apiaddrcode" ] && echo "  API Code: ${apiaddrcode:0:20}..."
-	echo "  Session Key: ${sk:0:20}..."
-	echo ""
-	
-	echo "Output Files:"
-	echo "  Test Output Directory: ${TEST_OUTPUT_DIR}"
-	echo "  Queue Output File: ${TEST_OUTPUT_FILE}"
-	if [ -f "${TEST_OUTPUT_FILE}" ]; then
-		echo "  File Size: $(wc -c < "${TEST_OUTPUT_FILE}") bytes"
-		echo "  File Status: ✅ Exists and readable"
-	else
-		echo "  File Status: ❌ Not created"
-	fi
-	echo ""
-	
-	# Save report to file
-	local report_file="${TEST_OUTPUT_DIR}/test_report.txt"
-	cat > "$report_file" << EOF
-Queue Get Test Report
+# Simplified report (if needed for debugging)
+report_detail() {
+	cat > "${TEST_OUTPUT_DIR}/test_report_detailed.txt" << EOF
+Queue Get Test Detailed Report
 Generated: $(date '+%Y-%m-%d %H:%M:%S')
 
 Test Parameters:
@@ -319,48 +191,25 @@ API Configuration:
 - Endpoint: ${apiaddrv2}
 - Code: ${apiaddrcode}
 
-Output Directory: ${TEST_OUTPUT_DIR}
-Output File: ${TEST_OUTPUT_FILE}
+Output: ${TEST_OUTPUT_FILE}
 
 Test artifacts:
 EOF
-	
-	if [ -d "${TEST_OUTPUT_DIR}" ]; then
-		ls -lah "${TEST_OUTPUT_DIR}" >> "$report_file"
-	fi
-	
-	print_success "Report saved to: ${report_file}"
+	ls -lah "${TEST_OUTPUT_DIR}" >> "${TEST_OUTPUT_DIR}/test_report_detailed.txt" 2>/dev/null || true
 }
 
 # ============================================================================
-# Cleanup Functions
-# ============================================================================
-
-cleanup() {
-	print_header "Cleanup"
-	
-	# Optional: Remove old temp files (older than 24 hours)
-	print_info "Cleaning up old temporary files..."
-	find /tmp -name "queue_response_*" -type f -mtime +1 -delete 2>/dev/null
-	find /tmp -name "queue_get_test_*" -type d -mtime +1 -exec rm -rf {} \; 2>/dev/null
-	
-	print_success "Cleanup completed"
-	print_info "Test output directory: ${TEST_OUTPUT_DIR}"
-}
-
-# ============================================================================
-# Main Execution
+# Helper Functions (coloring)
 # ============================================================================
 
 main() {
-	print_header "Queue Get Function Test Suite"
-	echo "Version: 1.0"
+	print_header "Queue Get Test"
 	echo "Date: $(date '+%Y-%m-%d %H:%M:%S')"
 	echo ""
 	
 	# Step 1: Validate environment
 	if ! validate_environment; then
-		print_error "Environment validation failed. Exiting."
+		print_error "Environment check failed"
 		exit 1
 	fi
 	
@@ -368,24 +217,21 @@ main() {
 	
 	# Step 2: Test queue_get function
 	if test_queue_get; then
-		print_success "queue_get function executed successfully"
+		print_success "✅ queue_get executed"
 		queue_get_exit_code=0
 	else
 		queue_get_exit_code=$?
-		print_error "queue_get function failed with exit code: $queue_get_exit_code"
+		print_error "❌ queue_get failed (exit code: $queue_get_exit_code)"
+		
+		# Show debug info on failure
+		echo ""
+		print_header "Debug Info"
+		echo "  API: ${apiaddrv2}${apiaddrcode:+?code=}${apiaddrcode}"
+		echo "  Params: LSSN=$TEST_LSSN, Host=$TEST_HOSTNAME, OS=$TEST_OS"
+		echo ""
 	fi
 	
 	echo ""
-	
-	# Debug: Show API response if test failed
-	if [ $queue_get_exit_code -ne 0 ]; then
-		print_info "Debug Information:"
-		echo "  API URL: ${apiaddrv2}${apiaddrcode:+?code=}${apiaddrcode}"
-		echo "  LSSN: ${TEST_LSSN}"
-		echo "  Hostname: ${TEST_HOSTNAME}"
-		echo "  OS: ${TEST_OS}"
-		echo ""
-	fi
 	
 	# Step 3: Validate results
 	validate_results
@@ -393,31 +239,30 @@ main() {
 	
 	echo ""
 	
-	# Step 4: Generate report
-	generate_report
+	# Save minimal report
+	local report_file="${TEST_OUTPUT_DIR}/test_report.txt"
+	cat > "$report_file" << EOF
+Queue Get Test Report
+Generated: $(date '+%Y-%m-%d %H:%M:%S')
+
+Parameters: LSSN=$TEST_LSSN, Host=$TEST_HOSTNAME, OS=$TEST_OS
+Output: ${TEST_OUTPUT_FILE}
+Status: $([ $queue_get_exit_code -eq 0 ] && echo "SUCCESS" || echo "FAILED")
+EOF
 	
-	echo ""
-	
-	# Step 5: Cleanup
-	cleanup
-	
-	echo ""
-	print_header "Test Execution Summary"
-	echo ""
-	
+	print_header "Summary"
 	if [ $queue_get_exit_code -eq 0 ] && [ $validation_exit_code -eq 0 ]; then
-		print_success "✅ ALL TESTS PASSED"
+		print_success "✅ TEST PASSED"
 		echo ""
-		print_info "Queue was successfully fetched from API"
-		print_info "Output saved to: ${TEST_OUTPUT_FILE}"
+		echo "  Queue fetched successfully"
+		echo "  Output: $TEST_OUTPUT_FILE"
 		exit 0
 	else
-		print_error "❌ SOME TESTS FAILED"
+		print_error "❌ TEST FAILED"
 		echo ""
-		print_info "queue_get exit code: $queue_get_exit_code"
-		print_info "validation exit code: $validation_exit_code"
-		echo ""
-		print_warning "Check the output above for details"
+		echo "  queue_get: $queue_get_exit_code"
+		echo "  validation: $validation_exit_code"
+		echo "  Report: $report_file"
 		exit 1
 	fi
 }
