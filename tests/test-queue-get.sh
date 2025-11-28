@@ -24,6 +24,31 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 . "$CONFIG_FILE"
 
+# ⚠️ DEBUG: Show which config file is being used and loaded values
+echo "📋 Configuration loaded:"
+echo "   File: $CONFIG_FILE"
+echo "   sk: ${sk:-(not set)}"
+echo "   apiaddrv2: ${apiaddrv2:-(not set)}"
+echo "   apiaddrcode: ${apiaddrcode:-(not set)}"
+echo "   lssn: ${lssn:-(not set)}"
+echo ""
+
+# Validate required variables
+if [ -z "$sk" ] || [ "$sk" = "<your secret key>" ]; then
+	echo "❌ ERROR: sk not configured in $CONFIG_FILE"
+	echo "   Current value: $sk"
+	echo "   You must set a real session key value"
+	exit 1
+fi
+
+if [ -z "$apiaddrcode" ] || [ "$apiaddrcode" = "YOUR_AZURE_FUNCTION_KEY_HERE" ]; then
+	echo "❌ ERROR: apiaddrcode not configured in $CONFIG_FILE"
+	echo "   Current value: $apiaddrcode"
+	echo "   You must set a real Azure function key"
+	exit 1
+fi
+echo ""
+
 # Test parameters
 TEST_LSSN="${1:-${lssn:-12345}}"
 TEST_HOSTNAME="${2:-test-server}"
