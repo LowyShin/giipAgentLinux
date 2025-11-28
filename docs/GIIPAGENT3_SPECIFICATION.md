@@ -15,6 +15,23 @@
 
 ---
 
+## 🚨 필수 읽기 순서 (Before Reading This Document)
+
+**이 문서를 읽기 전에 꼭 먼저 읽어야 할 문서**:
+
+| 문서 | 설명 | 필독 사유 |
+|------|------|---------|
+| **⚠️ [SHELL_COMPONENT_SPECIFICATION.md](./SHELL_COMPONENT_SPECIFICATION.md)** | lib/*.sh 개발 표준 (Error Handling, set -euo pipefail 금지) | giipAgent3 모든 모듈의 개발 규칙 정의 |
+| **[CQE_SPECIFICATION.md](./CQE_SPECIFICATION.md)** | CQE (Centralized Queue Engine) - queue_get 함수 명세 | Normal 모드에서 queue_get 함수 사용 시 이해 필수 |
+| **[MODULAR_ARCHITECTURE.md](./MODULAR_ARCHITECTURE.md)** | 모듈 구조 개요 및 분리 전략 | 라이브러리 모듈들의 역할 분담 이해 |
+
+**선택 사항 (필요시 읽기)**:
+- [AUTO_DISCOVERY_ARCHITECTURE.md](./AUTO_DISCOVERY_ARCHITECTURE.md) - Discovery 설계
+- [GATEWAY_HANG_DIAGNOSIS.md](./GATEWAY_HANG_DIAGNOSIS.md) - 모듈 통합 문제 진단
+- [GATEWAY_SETUP_GUIDE.md](./GATEWAY_SETUP_GUIDE.md) - Gateway 실제 환경 설정
+
+---
+
 ## 📋 목차
 
 1. [개요](#개요)

@@ -427,9 +427,12 @@ main() {
 		if [ $test_result -eq 0 ]; then
 			if declare -f queue_get &>/dev/null; then
 				local queue_file="/tmp/giip_queue_${lssn}_$$.sh"
-				queue_get "$lssn" "$hostname" "Linux" "$queue_file" 2>/dev/null
-				if [ $? -eq 0 ] && [ -s "$queue_file" ]; then
-					log_message "INFO" "Queue fetched for LSSN:$lssn"
+				queue_get "$lssn" "$hostname" "Linux" "$queue_file"
+				local queue_result=$?
+				if [ $queue_result -eq 0 ]; then
+					if [ -s "$queue_file" ]; then
+						log_message "INFO" "Queue fetched for LSSN:$lssn ($(wc -c < "$queue_file") bytes)"
+					fi
 					rm -f "$queue_file"
 				fi
 			fi
@@ -470,14 +473,17 @@ main() {
 		if [ $test_result -eq 0 ]; then
 			if declare -f queue_get &>/dev/null; then
 				local queue_file="/tmp/giip_queue_${lssn}_$$.sh"
-				queue_get "$lssn" "$hostname" "Linux" "$queue_file" 2>/dev/null
-				if [ $? -eq 0 ] && [ -s "$queue_file" ]; then
-					log_message "INFO" "Queue fetched for LSSN:$lssn"
+				queue_get "$lssn" "$hostname" "Linux" "$queue_file"
+				local queue_result=$?
+				if [ $queue_result -eq 0 ]; then
+					if [ -s "$queue_file" ]; then
+						log_message "INFO" "Queue fetched for LSSN:$lssn ($(wc -c < "$queue_file") bytes)"
+					fi
 					rm -f "$queue_file"
 				fi
 			fi
 		fi
-	done	
+	done
 	# ============================================================================
 	# Step 9: Finalize and summary
 	# ============================================================================

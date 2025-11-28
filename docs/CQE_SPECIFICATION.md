@@ -4,6 +4,10 @@
 **작성일**: 2025-11-28  
 **최종 수정**: 2025-11-28  
 
+> 📚 **관련 문서**: [giipAgent3.sh 사양서](./GIIPAGENT3_SPECIFICATION.md) - giipAgent3의 전체 아키텍처, 모듈 구조, 실행 흐름
+>
+> ⚠️ **주의**: giipAgentLinux/README.md는 디렉토리 개요 문서이며, giipAgent3 사양서가 아닙니다. 상세한 내용은 위 사양서를 참고하세요.
+
 ---
 
 ## 📋 목차

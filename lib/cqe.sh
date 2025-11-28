@@ -79,8 +79,18 @@ queue_get() {
 		fi
 		
 		rm -f "$temp_response"
+		
+		# ✅ No queue available is a NORMAL situation (404), not an error
+		# Only return success (0) with empty file to indicate "checked but no queue"
+		if [[ "$proc_name" == *"404"* ]] || [[ "$rst_val" == *"404"* ]] || [ "$rst_val" = "0" ]; then
+			echo "[queue_get] INFO: No queue available for LSSN=$lssn, hostname=$hostname, OS=$os (this is normal)" >&2
+			# Create empty file to indicate we checked but found no queue
+			touch "$output_file"
+			return 0
+		fi
+		
+		# Other errors are actual failures
 		echo "[queue_get] ❌ API returned error: $rst_val - $proc_name" >&2
-		echo "[queue_get] INFO: No queue available for LSSN=$lssn, hostname=$hostname, OS=$os" >&2
 		return 1
 	fi
 	
