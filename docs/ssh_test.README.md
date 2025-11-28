@@ -1,5 +1,15 @@
 # ssh_test.sh 사용 가이드
 
+> **📅 문서 메타데이터**  
+> - 최초 작성: 2025-11-27  
+> - 최종 수정: 2025-11-28  
+> - 작성자: giipAgent Gateway Team  
+> - 목적: ssh_test.sh 스크립트 사용 및 문제 해결 가이드
+> - 적용 범위: giipAgentLinux Gateway 모드
+> - 버전: 1.0
+> - **준수 규칙**: PROHIBITED_ACTION #0 (추측 금지), #4 (메타데이터), #6 (Secret 보호), #11 (로그 요청 금지), #13 (조용한 실패 금지)
+> - **참고 문서**: [PROHIBITED_ACTIONS.md](../../giipdb/docs/PROHIBITED_ACTIONS.md)
+
 ## 개요
 
 `giipAgent3.sh`의 Gateway 모드에서 Remote 서버 SSH 연결 테스트를 수행합니다.
@@ -193,61 +203,213 @@ Success Rate:    50%
 
 ## 문제 해결
 
-### "SSH key authentication failed"
+> **📌 근거 문서**:
+> - [PROHIBITED_ACTIONS.md](../../giipdb/docs/PROHIBITED_ACTIONS.md) - 절대 금지 규칙
+> - [PROHIBITED_ACTION_11_LOG_REQUEST.md](../../giipdb/docs/PROHIBITED_ACTION_11_LOG_REQUEST.md) - 로그 요청 금지
+> - [PROHIBITED_ACTION_13_SILENT_FAILURES.md](../../giipdb/docs/PROHIBITED_ACTION_13_SILENT_FAILURES.md) - 오류 처리 규칙
+> - [SHELL_SCRIPT_ERROR_HANDLING_STANDARD.md](../../giipdb/docs/SHELL_SCRIPT_ERROR_HANDLING_STANDARD.md) - 쉘 스크립트 오류 표준
+
+### 📋 필수 사전 준비
+
+ssh_test.sh 실행 전 다음을 확인하세요:
+
+#### 필수 요구사항
+1. **SSH 설정**: `~/.ssh` 디렉토리 및 인증 키 파일 존재
+2. **필수 도구**: `jq` (JSON 파싱) 설치 여부 확인
+3. **설정 파일**: `/<installation_path>/giipAgent.cnf` 존재 확인
+4. **로그 디렉토리**: `/tmp/ssh_test_logs` 디렉토리 생성됨
+
+#### 준비 확인
+```bash
+# SSH 디렉토리 확인
+ls -la ~/.ssh
+
+# jq 설치 확인
+which jq
+
+# giipAgent.cnf 파일 위치 확인
+ls -la /<installation_path>/giipAgent.cnf
 ```
-해결 방법:
-1. 키 파일 경로 확인: ssh_key_path 값 확인
-2. 키 파일 권한 확인: chmod 600 /path/to/key
-3. 서버에 공개 키 등록: ssh-copy-id -i /path/to/key user@host
+
+이 항목들이 없으면 ssh_test.sh 실행 시 오류가 발생합니다.
+
+---
+
+### 🚨 "ERROR: sk variable not configured properly!" 
+> **이것은 가장 흔한 에러입니다!**
+
+#### 에러 메시지 예시
+```bash
+🚨 ERROR: sk variable not configured properly!
+   This file (/home/shinh/scripts/infraops01/giipAgentLinux/giipAgent.cnf) is a TEMPLATE ONLY
+   Place REAL config file at: /home/shinh/scripts/infraops01/giipAgent.cnf
+   To verify: cat /home/shinh/scripts/infraops01/giipAgent.cnf | grep -E '^(sk|apiaddrv2|apiaddrcode)='
+```
+
+#### 원인
+- git repo 내의 `giipAgent.cnf`는 템플릿일 뿐 ❌
+- ssh_test.sh는 **부모 디렉토리**에서 `giipAgent.cnf`를 찾음
+- 실제 설정 파일이 필요한 위치: `giipAgentLinux` **부모 디렉토리** ✅
+
+#### 파일 위치 구조
+
+```
+설치 디렉토리 구조
+/home/shinh/scripts/infraops01/
+├── giipAgent.cnf                   ✅ 실제 설정 파일 (여기!)
+└── giipAgentLinux/                 ← git 저장소
+    ├── gateway/
+    │   └── ssh_test.sh
+    ├── giipAgent.cnf                ❌ 템플릿만 (사용 안 함)
+    └── ...
+```
+
+#### 해결 방법
+
+**1단계: 현재 위치 확인**
+```bash
+# ssh_test.sh가 있는 곳에서 시작
+pwd
+# 출력 예: /home/shinh/scripts/infraops01/giipAgentLinux/gateway
+
+# 부모 디렉토리로 이동 (설정 파일이 있어야 할 위치)
+cd ../..
+pwd
+# 출력 예: /home/shinh/scripts/infraops01
+
+# 설정 파일 확인
+ls -la giipAgent.cnf
+cat giipAgent.cnf | grep -E '^(sk|apiaddrv2|apiaddrcode)='
+```
+
+**2단계: 설정 파일이 없으면 생성**
+```bash
+# 현재 위치: /home/shinh/scripts/infraops01 (giipAgentLinux의 부모 디렉토리)
+cat > giipAgent.cnf << 'EOF'
+# Secret Key for GIIP API
+sk="YOUR_ACTUAL_SECRET_KEY_HERE"
+
+# Server ID
+lssn="0"
+
+# API v2 Address
+apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
+apiaddrcode="YOUR_AZURE_FUNCTION_KEY_HERE"
+
+# Agent Delay (seconds)
+giipagentdelay="60"
+EOF
+
+chmod 600 giipAgent.cnf
+
+# 확인
+cat giipAgent.cnf
+```
+
+**3단계: SSH 테스트 실행**
+```bash
+# 현재 위치에서 상대 경로로 실행
+cd giipAgentLinux/gateway
+bash ssh_test.sh
+
+# 또는 절대 경로로 실행
+bash /home/shinh/scripts/infraops01/giipAgentLinux/gateway/ssh_test.sh
+```
+
+#### 중요한 구분
+
+| 파일 | 위치 | 용도 | 실제 사용 |
+|------|------|------|---------|
+| **템플릿** | `giipAgentLinux/giipAgent.cnf` | 참고용 | ❌ 아님 |
+| **실제 설정** | `giipAgentLinux` **부모 디렉토리**/giipAgent.cnf | 운영 설정 | ✅ 사용됨 |
+
+### "SSH key authentication failed"
+
+**원인**: SSH 키 인증이 실패함  
+**확인 항목**:
+1. 키 파일 경로가 DB의 `ssh_key_path` 값과 일치하는가?
+2. 키 파일의 권한이 600인가? (`ls -la ~/.ssh/id_rsa` 출력에서 `-rw-------`)
+3. 대상 서버의 `~/.ssh/authorized_keys`에 공개 키가 등록되어 있는가?
+
+**수동 복구 방법**:
+```bash
+# 권한 수정
+chmod 600 ~/.ssh/id_rsa
+
+# 공개 키 설치
+ssh-copy-id -i ~/.ssh/id_rsa user@host
 ```
 
 ### "sshpass not installed"
-```
-해결 방법:
-1. sshpass 설치 (Ubuntu/Debian): sudo apt-get install sshpass
-2. sshpass 설치 (CentOS/RHEL): sudo yum install sshpass
-3. 또는 DB의 ssh_key_path에 유효한 키 파일 경로 설정
-```
+
+**원인**: 비밀번호 기반 SSH 인증이 필요하지만 sshpass가 설치되지 않은 경우  
+**영향**: 비밀번호 인증은 스킵되고, SSH 키 기반 인증만 시도됨  
+**해결** (선택사항, 비밀번호 인증이 필요한 경우만):
+- Ubuntu/Debian: `sudo apt-get install -y sshpass`
+- CentOS/RHEL: `sudo yum install -y sshpass`
+- macOS: `brew install sshpass`
 
 ### "Connection timed out"
-```
-해결 방법:
-1. 서버 IP 주소 확인: ssh_host 값 확인
-2. 네트워크 연결 확인: ping {ssh_host}
-3. 방화벽 설정 확인: 포트 22 열려 있는지 확인
-4. SSH 서버 실행 확인: telnet {ssh_host} 22
-```
+
+**원인**: SSH 서버에 접근할 수 없음  
+**확인 항목**:
+1. 서버 IP 주소가 DB의 `ssh_host` 값과 일치하는가?
+2. 네트워크 연결 확인: `ping {ssh_host}` 응답 여부
+3. 방화벽이 포트 22를 차단했는가? (`telnet {ssh_host} 22`)
+4. 대상 서버의 SSH 서버가 실행 중인가?
 
 ### "Permission denied"
-```
-해결 방법:
-1. 사용자명 확인: ssh_user 값 확인
-2. 비밀번호 확인: ssh_password 값 확인
-3. 키 파일 있는지 확인: ssh_key_path 파일 존재 여부
-4. 서버에서 사용자 확인: id {user}
-```
+
+**원인**: SSH 접근이 거부됨  
+**증거**: SSH 서버가 인증을 거부함 (로그 파일: `/tmp/ssh_test_logs/ssh_test_report_*.txt`)
+
+**확인 항목**:
+1. 사용자명이 DB의 `ssh_user` 값과 일치하는가?
+2. 비밀번호가 올바른가? (암호화된 상태로 저장)
+3. 키 파일이 지정되었을 경우, 파일 존재 여부 확인
+4. 대상 서버에서 사용자 계정이 존재하는가?
 
 ## 고급 사용법
 
-### 특정 로그 파일 확인
+### 자동 진단 및 모니터링
+
+#### 진단 스크립트 (자동 실행)
 
 ```bash
-# 가장 최근 리포트 확인
-cat /tmp/ssh_test_logs/$(ls -t /tmp/ssh_test_logs/ssh_test_report_*.txt | head -1)
-
-# 모든 테스트 결과 JSON 합치기
-cat /tmp/ssh_test_logs/ssh_test_results_*.json | jq -s '.'
-
-# 실패한 서버만 필터링
-cat /tmp/ssh_test_logs/ssh_test_results_*.json | jq '.servers[] | select(.status=="FAILED")'
+# gateway.sh에서 자동으로 생성되는 로그 파일 위치
+/tmp/ssh_test_logs/ssh_test_report_YYYYMMDD_HHMMSS.txt
+/tmp/ssh_test_logs/ssh_test_results_YYYYMMDD_HHMMSS.json
 ```
 
-### 정기적인 테스트 (cron)
+> **근거**: [PROHIBITED_ACTION_11_LOG_REQUEST.md](../../giipdb/docs/PROHIBITED_ACTION_11_LOG_REQUEST.md) - 사용자에게 로그를 요청하지 말고, AI/시스템이 자동으로 진단하도록 설계.
+
+> ⚠️ **중요**: 문제 진단 시 AI나 지원팀에 직접 로그를 요청하지 마세요.  
+> 대신 위 파일들을 자동으로 수집하는 진단 스크립트를 실행해주세요.
+
+#### 정기적인 자동 테스트 (cron)
 
 ```bash
-# 매일 오전 2시에 SSH 테스트 실행
-0 2 * * * /home/user/giipAgentLinux/gateway/ssh_test.sh >> /var/log/ssh_test.log 2>&1
+# /etc/crontab 또는 crontab -e에 추가
+# 매일 오전 2시에 SSH 테스트 자동 실행
+0 2 * * * cd /path/to/giipAgentLinux && bash gateway/ssh_test.sh > /var/log/ssh_test_cron.log 2>&1
 ```
+
+#### 문제 진단 시 표준 절차
+
+**문제 발생 시**: 반드시 다음 단계를 따르세요
+
+1. 최근 로그 자동 생성 확인:
+   ```bash
+   ls -lt /tmp/ssh_test_logs/ssh_test_report_*.txt | head -5
+   ```
+
+2. 로그 파일 확인:
+   ```bash
+   cat /tmp/ssh_test_logs/ssh_test_report_*.txt
+   cat /tmp/ssh_test_logs/ssh_test_results_*.json
+   ```
+
+> **근거**: [PROHIBITED_ACTION_13_SILENT_FAILURES.md](../../giipdb/docs/PROHIBITED_ACTION_13_SILENT_FAILURES.md) - 모든 오류는 기록되어야 하며, [SHELL_SCRIPT_ERROR_HANDLING_STANDARD.md](../../giipdb/docs/SHELL_SCRIPT_ERROR_HANDLING_STANDARD.md)에 따라 구조화된 로깅 필수.
 
 ## 제한사항
 
