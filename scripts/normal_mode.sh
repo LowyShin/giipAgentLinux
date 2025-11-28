@@ -23,7 +23,7 @@ set -e  # Exit on error
 # ============================================================================
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-LIB_DIR="${SCRIPT_DIR}/lib"
+LIB_DIR="${SCRIPT_DIR}/../lib"
 
 # ============================================================================
 # Load Library Modules
