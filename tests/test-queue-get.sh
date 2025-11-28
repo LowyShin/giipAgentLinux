@@ -105,17 +105,17 @@ validate_environment() {
 	local errors=0
 	
 	# Quick checks - minimal output
-	[ ! -f "$CONFIG_FILE" ] && print_warning "Config file not found: $CONFIG_FILE" || print_success "Config file loaded"
-	[ ! -f "${LIB_DIR}/cqe.sh" ] && { print_error "cqe.sh not found"; ((errors++)); } || print_success "cqe.sh found"
-	! command -v curl &> /dev/null && { print_error "curl not found"; ((errors++)); } || print_success "curl found"
-	! command -v jq &> /dev/null && print_warning "jq not found (grep fallback will be used)" || print_success "jq found"
+	[ ! -f "$CONFIG_FILE" ] && print_warning "[env] Config file not found: $CONFIG_FILE" || print_success "[env] Config file loaded"
+	[ ! -f "${LIB_DIR}/cqe.sh" ] && { print_error "[env] cqe.sh not found"; ((errors++)); } || print_success "[env] cqe.sh found"
+	! command -v curl &> /dev/null && { print_error "[env] curl not found"; ((errors++)); } || print_success "[env] curl found"
+	! command -v jq &> /dev/null && print_warning "[env] jq not found (grep fallback will be used)" || print_success "[env] jq found"
 	
-	[ -z "$sk" ] && { print_error "sk not set"; ((errors++)); } || print_success "sk: ${#sk} chars"
-	[ -z "$apiaddrv2" ] && { print_error "apiaddrv2 not set"; ((errors++)); } || print_success "apiaddrv2: ${apiaddrv2:0:40}..."
+	[ -z "$sk" ] && { print_error "[env] sk not set"; ((errors++)); } || print_success "[env] sk: ${#sk} chars"
+	[ -z "$apiaddrv2" ] && { print_error "[env] apiaddrv2 not set"; ((errors++)); } || print_success "[env] apiaddrv2: ${apiaddrv2:0:40}..."
 	
 	echo ""
 	[ $errors -gt 0 ] && return 1
-	print_success "✅ Environment OK"
+	print_success "[env] ✅ Environment OK"
 	return 0
 }
 
@@ -167,12 +167,38 @@ queue_get "$TEST_LSSN" "$TEST_HOSTNAME" "$TEST_OS" "$TEST_OUTPUT_FILE"
 exit $?
 WRAPPER_EOF
 	
-	# Execute wrapper with timeout, passing CONFIG_FILE
-	timeout 30 bash "$wrapper_script" "$LIB_DIR" "$CONFIG_FILE" "$TEST_LSSN" "$TEST_HOSTNAME" "$TEST_OS" "$TEST_OUTPUT_FILE" 2>&1
+	# Execute wrapper with timeout, capturing stdout and stderr separately
+	local timestamp=$(date +%s%N)
+	local stdout_file="/tmp/queue_out_$${timestamp}_$$.log"
+	local stderr_file="/tmp/queue_err_$${timestamp}_$$.log"
+	
+	timeout 30 bash "$wrapper_script" "$LIB_DIR" "$CONFIG_FILE" "$TEST_LSSN" "$TEST_HOSTNAME" "$TEST_OS" "$TEST_OUTPUT_FILE" > "$stdout_file" 2> "$stderr_file"
 	local exit_code=$?
 	
-	rm -f "$wrapper_script"
-	return $exit_code
+	# Handle timeout vs other errors
+	if [ $exit_code -eq 124 ]; then
+		echo "[error] queue_get timeout: exceeded 30 second limit" >&2
+		rm -f "$wrapper_script" "$stdout_file" "$stderr_file"
+		return 1
+	elif [ $exit_code -ne 0 ]; then
+		echo "[error] queue_get failed with exit code $exit_code" >&2
+		if [ -s "$stderr_file" ]; then
+			cat "$stderr_file" | sed 's/^/  [stderr] /' >&2
+		fi
+		if [ -s "$stdout_file" ]; then
+			cat "$stdout_file" | sed 's/^/  [stdout] /' >&2
+		fi
+		rm -f "$wrapper_script" "$stdout_file" "$stderr_file"
+		return 1
+	fi
+	
+	# Set secure permissions on output file
+	if [ -f "$TEST_OUTPUT_FILE" ]; then
+		chmod 600 "$TEST_OUTPUT_FILE" 2>/dev/null
+	fi
+	
+	rm -f "$wrapper_script" "$stdout_file" "$stderr_file"
+	return 0
 }
 
 # ============================================================================
@@ -186,12 +212,12 @@ validate_results() {
 	
 	# Check if output file was created
 	if [ ! -f "${TEST_OUTPUT_FILE}" ]; then
-		print_error "Output file not created"
+		print_error "[validation] Output file not created"
 		((errors++))
 	else
 		if [ -s "${TEST_OUTPUT_FILE}" ]; then
 			local file_size=$(wc -c < "${TEST_OUTPUT_FILE}")
-			print_success "Output file created (${file_size} bytes)"
+			print_success "[validation] Output file created (${file_size} bytes)"
 			
 			# Show first 200 chars
 			echo ""
@@ -202,7 +228,7 @@ validate_results() {
 			fi
 			echo ""
 		else
-			print_error "Output file is empty"
+			print_error "[validation] Output file is empty"
 			((errors++))
 		fi
 	fi
@@ -248,7 +274,7 @@ main() {
 	
 	# Step 1: Validate environment
 	if ! validate_environment; then
-		print_error "Environment check failed"
+		print_error "[main] Environment check failed"
 		exit 1
 	fi
 	
@@ -256,11 +282,11 @@ main() {
 	
 	# Step 2: Test queue_get function
 	if test_queue_get; then
-		print_success "✅ queue_get executed"
+		print_success "[main] ✅ queue_get executed"
 		queue_get_exit_code=0
 	else
 		queue_get_exit_code=$?
-		print_error "❌ queue_get failed (exit code: $queue_get_exit_code)"
+		print_error "[main] ❌ queue_get failed (exit code: $queue_get_exit_code)"
 		
 		# Show debug info on failure
 		echo ""
@@ -289,15 +315,18 @@ Output: ${TEST_OUTPUT_FILE}
 Status: $([ $queue_get_exit_code -eq 0 ] && echo "SUCCESS" || echo "FAILED")
 EOF
 	
+	# Clear sensitive variables after use (security cleanup)
+	unset sk apiaddrv2 apiaddrcode
+	
 	print_header "Summary"
 	if [ $queue_get_exit_code -eq 0 ] && [ $validation_exit_code -eq 0 ]; then
-		print_success "✅ TEST PASSED"
+		print_success "[main] ✅ TEST PASSED"
 		echo ""
 		echo "  Queue fetched successfully"
 		echo "  Output: $TEST_OUTPUT_FILE"
 		exit 0
 	else
-		print_error "❌ TEST FAILED"
+		print_error "[main] ❌ TEST FAILED"
 		echo ""
 		echo "  queue_get: $queue_get_exit_code"
 		echo "  validation: $validation_exit_code"
