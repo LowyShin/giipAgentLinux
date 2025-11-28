@@ -21,7 +21,8 @@
 
 # Script configuration
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-LIB_DIR="${SCRIPT_DIR}/lib"
+PARENT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
+LIB_DIR="${PARENT_DIR}/lib"
 LOG_DIR="/tmp/ssh_test_logs"
 mkdir -p "$LOG_DIR"
 

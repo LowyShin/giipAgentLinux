@@ -604,7 +604,7 @@ fetch DB config (is_gateway 조회)
   ├─ load: gateway_api.sh, lib/target_list.sh, lib/cleanup.sh
   ├─ get_gateway_servers() → /tmp/gateway_servers_$$.json
   ├─ display_target_servers() → 대상 서버 목록 표시
-  └─ test_ssh_from_gateway_json.sh → SSH 테스트 수행
+  └─ gateway/ssh_test.sh → SSH 테스트 수행
   ↓
 🟢 [Normal Mode - 항상 실행]
   ├─ load: normal.sh
@@ -661,7 +661,7 @@ exit 0
 graph TD
     A["giipAgent3.sh<br/>실행 시작"] --> B["DB 조회<br/>is_gateway = ?"]
     B --> C{"is_gateway<br/>=1?"}
-    C -->|YES| D["[Gateway Mode]<br/>SSH 테스트<br/>get_gateway_servers<br/>test_ssh_from_gateway_json.sh"]
+    C -->|YES| D["[Gateway Mode]<br/>SSH 테스트<br/>get_gateway_servers<br/>gateway/ssh_test.sh"]
     C -->|NO| E["[스킵]"]
     D --> F["[Normal Mode]<br/>항상 실행<br/>run_normal_mode<br/>자신의 큐 처리"]
     E --> F

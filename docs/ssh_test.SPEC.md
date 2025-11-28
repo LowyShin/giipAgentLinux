@@ -1,4 +1,4 @@
-# test_ssh_from_gateway_json.sh 사양서
+# ssh_test.sh 사양서 (Gateway SSH 테스트 모듈)
 
 ## 1. 개요
 

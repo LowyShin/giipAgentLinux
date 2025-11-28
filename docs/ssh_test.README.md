@@ -1,8 +1,9 @@
-# test_ssh_from_gateway_json.sh 사용 가이드
+# ssh_test.sh 사용 가이드
 
 ## 개요
 
-`giipAgent3.sh` 실행 중 생성되는 `/tmp/gateway_servers_*.json` 파일을 읽어서 각 서버에 대한 SSH 접속 테스트를 수행합니다.
+`giipAgent3.sh`의 Gateway 모드에서 Remote 서버 SSH 연결 테스트를 수행합니다.
+생성되는 `/tmp/gateway_servers_*.json` 파일을 읽어서 각 서버에 대한 SSH 접속 테스트를 수행합니다.
 
 ## 빠른 시작
 
@@ -245,7 +246,7 @@ cat /tmp/ssh_test_logs/ssh_test_results_*.json | jq '.servers[] | select(.status
 
 ```bash
 # 매일 오전 2시에 SSH 테스트 실행
-0 2 * * * /home/user/giipAgentLinux/test_ssh_from_gateway_json.sh >> /var/log/ssh_test.log 2>&1
+0 2 * * * /home/user/giipAgentLinux/gateway/ssh_test.sh >> /var/log/ssh_test.log 2>&1
 ```
 
 ## 제한사항
