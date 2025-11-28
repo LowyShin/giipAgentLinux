@@ -8,20 +8,18 @@
 set -o pipefail
 
 # Get absolute paths
-# From tests/ → go up one level to giipAgentLinux/
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PARENT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
-LIB_DIR="${PARENT_DIR}/lib"
+LIB_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )/lib"
 
-# Config file: Follow giipAgent3.sh pattern
-# giipAgent3.sh is in giipAgentLinux/, uses ../giipAgent.cnf (sibling of giipAgent3.sh)
-# test-queue-get.sh is in tests/, so it also needs ../giipAgent.cnf (same location)
-CONFIG_FILE="${SCRIPT_DIR}/../giipAgent.cnf"
+# Config file location: Same as giipAgent3.sh expects
+# giipAgent3.sh: /home/.../giipAgentLinux/giipAgent3.sh → ../giipAgent.cnf
+# test-queue-get.sh: /home/.../giipAgentLinux/tests/test-queue-get.sh → ../../giipAgent.cnf
+CONFIG_FILE="${SCRIPT_DIR}/../../giipAgent.cnf"
 
 # Load config
 if [ ! -f "$CONFIG_FILE" ]; then
 	echo "❌ Config not found: $CONFIG_FILE"
-	echo "   Expected location (same as giipAgent3.sh): $PARENT_DIR/"
+	echo "   Expected location (same directory level as giipAgent3.sh): ${CONFIG_FILE%/*}/"
 	exit 1
 fi
 . "$CONFIG_FILE"
