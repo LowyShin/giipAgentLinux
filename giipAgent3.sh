@@ -273,9 +273,20 @@ if [ "${gateway_mode}" = "1" ]; then
 	
 	# Call SSH test script
 	log_message "INFO" "Calling gateway/ssh_test.sh..."
-	bash "${SCRIPT_DIR}/gateway/ssh_test.sh"
 	
-	log_message "INFO" "SSH test script completed"
+	ssh_test_script="${SCRIPT_DIR}/gateway/ssh_test.sh"
+	
+	if [ ! -f "$ssh_test_script" ]; then
+		log_message "ERROR" "SSH test script not found: $ssh_test_script"
+		exit 1
+	fi
+	
+	if bash "$ssh_test_script"; then
+		log_message "INFO" "SSH test script completed successfully"
+	else
+		local ssh_test_exit_code=$?
+		log_message "WARN" "SSH test script exited with code: $ssh_test_exit_code (continuing anyway)"
+	fi
 fi
 
 # ========================================================================
