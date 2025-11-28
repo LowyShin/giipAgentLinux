@@ -460,8 +460,27 @@ main() {
 				local os_var_name="SSH_OS_${lssn}"
 				local detected_os="${!os_var_name:-Linux}"
 				
-				local queue_file="/tmp/giip_queue_${lssn}_$$.sh"
-				queue_get "$lssn" "$hostname" "$detected_os" "$queue_file"
+			local queue_file="/tmp/giip_queue_${lssn}_$$.sh"
+			
+			# DEBUG: Save API call parameters to JSON file before calling queue_get
+			local api_params_file="/tmp/queue_get_params_${lssn}_$$.json"
+			cat > "$api_params_file" << EOF
+{
+  "function": "queue_get",
+  "lssn": $lssn,
+  "hostname": "$hostname",
+  "os": "$detected_os",
+  "output_file": "$queue_file",
+  "api_variables": {
+    "sk": "${sk:0:20}...",
+    "apiaddrv2": "$apiaddrv2",
+    "apiaddrcode": "${apiaddrcode:0:20}..."
+  },
+  "timestamp": "$(date '+%Y-%m-%d %H:%M:%S')"
+}
+EOF
+			
+			queue_get "$lssn" "$hostname" "$detected_os" "$queue_file"
 				local queue_result=$?
 				if [ $queue_result -eq 0 ]; then
 					if [ -s "$queue_file" ]; then
