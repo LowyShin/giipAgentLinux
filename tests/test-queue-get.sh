@@ -11,9 +11,9 @@ set -o pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 LIB_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )/lib"
 
-# Config file location: Same as giipAgent3.sh expects
-# giipAgent3.sh: /home/.../giipAgentLinux/giipAgent3.sh → ../giipAgent.cnf
-# test-queue-get.sh: /home/.../giipAgentLinux/tests/test-queue-get.sh → ../../giipAgent.cnf
+# Config file location per giipAgent.cnf documentation:
+# "The ACTUAL configuration file is deployed on each server at: Linux: ~/giipAgent/giipAgent.cnf"
+# This is one directory level ABOVE the giipAgentLinux repository
 CONFIG_FILE="${SCRIPT_DIR}/../../giipAgent.cnf"
 
 # Load config
