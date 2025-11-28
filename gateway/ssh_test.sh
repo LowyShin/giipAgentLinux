@@ -47,11 +47,11 @@ else
 	exit 1
 fi
 
-# Load KVS module for queue_get function
-if [ -f "${LIB_DIR}/kvs.sh" ]; then
-	. "${LIB_DIR}/kvs.sh"
+# Load CQE module for queue_get function
+if [ -f "${LIB_DIR}/cqe.sh" ]; then
+	. "${LIB_DIR}/cqe.sh"
 else
-	echo "⚠️  Warning: kvs.sh not found in ${LIB_DIR}, queue_get will not be available"
+	echo "⚠️  Warning: cqe.sh not found in ${LIB_DIR}, queue_get will not be available"
 fi
 
 ################################################################################
