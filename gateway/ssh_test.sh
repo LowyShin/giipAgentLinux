@@ -47,6 +47,13 @@ else
 	exit 1
 fi
 
+# Load KVS module for queue_get function
+if [ -f "${LIB_DIR}/kvs.sh" ]; then
+	. "${LIB_DIR}/kvs.sh"
+else
+	echo "⚠️  Warning: kvs.sh not found in ${LIB_DIR}, queue_get will not be available"
+fi
+
 ################################################################################
 # Utility Functions
 ################################################################################
@@ -412,16 +419,30 @@ main() {
 			((TOTAL_SERVERS++))
 			((actual_server_count++))
 			
-			# Extract parameters using jq
-			local hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null) || true
-			local lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null) || true
-			local ssh_host=$(echo "$server_json" | jq -r '.ssh_host // empty' 2>/dev/null) || true
-			local ssh_user=$(echo "$server_json" | jq -r '.ssh_user // empty' 2>/dev/null) || true
-			local ssh_port=$(echo "$server_json" | jq -r '.ssh_port // 22' 2>/dev/null) || true
-			local ssh_key_path=$(echo "$server_json" | jq -r '.ssh_key_path // empty' 2>/dev/null) || true
-			local ssh_password=$(echo "$server_json" | jq -r '.ssh_password // empty' 2>/dev/null) || true
-			
-			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn" || true
+		# Extract parameters using jq
+		local hostname=$(echo "$server_json" | jq -r '.hostname // empty' 2>/dev/null) || true
+		local lssn=$(echo "$server_json" | jq -r '.lssn // empty' 2>/dev/null) || true
+		local ssh_host=$(echo "$server_json" | jq -r '.ssh_host // empty' 2>/dev/null) || true
+		local ssh_user=$(echo "$server_json" | jq -r '.ssh_user // empty' 2>/dev/null) || true
+		local ssh_port=$(echo "$server_json" | jq -r '.ssh_port // 22' 2>/dev/null) || true
+		local ssh_key_path=$(echo "$server_json" | jq -r '.ssh_key_path // empty' 2>/dev/null) || true
+		local ssh_password=$(echo "$server_json" | jq -r '.ssh_password // empty' 2>/dev/null) || true
+		
+		# Test SSH connection
+		test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn"
+		local test_result=$?
+		
+		# Call queue_get on successful SSH connection (only if SSH test passed)
+		if [ $test_result -eq 0 ]; then
+			if declare -f queue_get &>/dev/null; then
+				local queue_file="/tmp/giip_queue_${lssn}_$$.sh"
+				queue_get "$lssn" "$hostname" "Linux" "$queue_file" 2>/dev/null
+				if [ $? -eq 0 ] && [ -s "$queue_file" ]; then
+					log_message "INFO" "Queue fetched for LSSN:$lssn"
+					rm -f "$queue_file"
+				fi
+			fi
+		fi
 		done
 	else
 		# Fallback: use grep for JSON parsing
@@ -451,10 +472,21 @@ main() {
 			local ssh_key_path=$(echo "$server_json" | grep -o '"ssh_key_path"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/') || true
 			local ssh_password=$(echo "$server_json" | grep -o '"ssh_password"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/') || true
 			
-			test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn" || true
-		done
-	
-	
+		test_ssh_connection "$hostname" "$ssh_host" "$ssh_user" "$ssh_port" "$ssh_key_path" "$ssh_password" "$lssn"
+		local test_result=$?
+		
+		# Call queue_get on successful SSH connection (only if SSH test passed)
+		if [ $test_result -eq 0 ]; then
+			if declare -f queue_get &>/dev/null; then
+				local queue_file="/tmp/giip_queue_${lssn}_$$.sh"
+				queue_get "$lssn" "$hostname" "Linux" "$queue_file" 2>/dev/null
+				if [ $? -eq 0 ] && [ -s "$queue_file" ]; then
+					log_message "INFO" "Queue fetched for LSSN:$lssn"
+					rm -f "$queue_file"
+				fi
+			fi
+		fi
+	done	
 	# ============================================================================
 	# Step 9: Finalize and summary
 	# ============================================================================
