@@ -105,6 +105,89 @@
 
 ---
 
+## 4.1 "ERROR: sk variable not configured properly!" 에러
+
+### 에러 메시지
+```bash
+🚨 ERROR: sk variable not configured properly!
+   This file (/home/shinh/scripts/infraops01/giipAgentLinux/giipAgent.cnf) is a TEMPLATE ONLY
+   Use REAL config file on production server: ~/giipAgent/giipAgent.cnf
+   Command: cat ~/giipAgent/giipAgent.cnf | grep -E '^(sk|apiaddrv2|apiaddrcode)='
+```
+
+### 원인 분석
+
+**왜 발생하는가?**
+
+1. **git 저장소의 `giipAgent.cnf`는 템플릿** ❌
+   - 이 파일은 참고용도만 제공
+   - 실제 운영에 사용되지 않음
+   - `sk` 값이 기본값(`<your secret key>`)이거나 비어있음
+
+2. **실제 설정 파일의 위치** ✅
+   - **Standard Agent**: `~/giipAgent/giipAgent.cnf` (홈 디렉토리)
+   - **Gateway Agent**: `~/giipAgentGateway/giipAgent.cnf` (Gateway 폴더)
+   - **Admin Scripts**: 저장소 상위 폴더 (상대 경로: `../../giipAgent.cnf`)
+
+3. **파일 구조 혼동**
+```
+❌ 템플릿 (git 저장소 내)
+/home/shinh/scripts/infraops01/giipAgentLinux/giipAgent.cnf
+└── sk="<your secret key>"  ← 기본값 (비설정)
+
+✅ 실제 파일 (홈 디렉토리)
+/home/shinh/giipAgent/giipAgent.cnf
+└── sk="abc123def456..."    ← 실제 값
+```
+
+### 해결 방법
+
+**빠른 해결**:
+```bash
+# 실제 설정 파일이 있는지 확인
+cat ~/giipAgent/giipAgent.cnf | grep -E '^(sk|apiaddrv2|apiaddrcode)='
+
+# Secret Key 확인
+grep "^sk=" ~/giipAgent/giipAgent.cnf
+```
+
+**설정 파일이 없으면**:
+```bash
+# 디렉토리 생성
+mkdir -p ~/giipAgent
+
+# 설정 파일 생성
+cat > ~/giipAgent/giipAgent.cnf << 'EOF'
+sk="YOUR_ACTUAL_SECRET_KEY_HERE"
+lssn="0"
+apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
+apiaddrcode="YOUR_AZURE_FUNCTION_KEY"
+giipagentdelay="60"
+EOF
+
+# 권한 설정
+chmod 644 ~/giipAgent/giipAgent.cnf
+```
+
+**재실행**:
+```bash
+# ssh_test.sh 다시 실행
+bash gateway/ssh_test.sh
+```
+
+### 핵심 이해
+
+| 구분 | 내용 |
+|------|------|
+| **Template 파일** | `giipAgentLinux/giipAgent.cnf` ← git 저장소 |
+| **실제 파일** | `~/giipAgent/giipAgent.cnf` ← 홈 디렉토리 |
+| **Template 용도** | 참고/설명용만 (실행에 사용 안 함) |
+| **실제 파일 용도** | 실제 운영 에이전트가 읽음 |
+| **Template sk 값** | `<your secret key>` (설정 필요함) |
+| **실제 sk 값** | GIIP 포털에서 확인한 실제 키 |
+
+---
+
 ## 5. 예외 처리
 
 ### 5.1 파일 관련 예외

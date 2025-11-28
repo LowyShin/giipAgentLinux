@@ -372,6 +372,101 @@ cd ~/giipAgentGateway && ./giipAgentGateway.sh
 
 ## 🔧 문제 해결
 
+### 문제 0: "ERROR: sk variable not configured properly!"
+> **Gateway 모드에서 가장 흔한 에러입니다!**
+
+**에러 메시지**:
+```bash
+🚨 ERROR: sk variable not configured properly!
+   This file (/path/to/giipAgentLinux/giipAgent.cnf) is a TEMPLATE ONLY
+   Use REAL config file on production server: ~/giipAgent/giipAgent.cnf
+   Command: cat ~/giipAgent/giipAgent.cnf | grep -E '^(sk|apiaddrv2|apiaddrcode)='
+```
+
+**원인**:
+- `git` 저장소의 `giipAgent.cnf`는 **템플릿일 뿐**입니다 ❌
+- 실제 설정 파일은 **홈 디렉토리 (`~/giipAgent/`)** 에 위치해야 합니다 ✅
+- 템플릿 파일의 `sk` 값이 기본값(`<your secret key>`)이거나 비어있습니다
+
+**파일 위치 구조**:
+```
+❌ git 저장소 내 (TEMPLATE - 참고용만)
+/home/user/giipAgentLinux/
+└── giipAgent.cnf  ← 템플릿 (실제 사용 안 함)
+
+✅ 실제 운영 서버 (PRODUCTION)
+/home/user/giipAgent/
+└── giipAgent.cnf  ← 실제 설정 파일 (여기!)
+
+또는 Gateway 모드:
+/home/user/giipAgentGateway/
+└── giipAgent.cnf  ← Gateway 전용 설정 파일 (여기!)
+```
+
+**해결 방법**:
+
+**Step 1: 실제 설정 파일 위치 확인**
+```bash
+# 홈 디렉토리 설정 파일 확인
+ls -la ~/giipAgent/giipAgent.cnf
+
+# 또는 Gateway 설정 파일 확인
+ls -la ~/giipAgentGateway/giipAgent.cnf
+
+# 내용 확인
+cat ~/giipAgent/giipAgent.cnf
+```
+
+**Step 2: sk 값 확인**
+```bash
+# Secret Key가 설정되어 있는지 확인
+grep "^sk=" ~/giipAgent/giipAgent.cnf
+
+# 올바른 형식:
+# sk="your_actual_secret_key_here"  ✅
+# sk="<your secret key>"             ❌ (템플릿)
+# 공백이거나 없음                    ❌
+```
+
+**Step 3: 설정 파일이 없으면 생성**
+```bash
+# 디렉토리 생성
+mkdir -p ~/giipAgent
+
+# 설정 파일 생성
+cat > ~/giipAgent/giipAgent.cnf << 'EOF'
+# GIIP Agent Configuration
+sk="YOUR_ACTUAL_SECRET_KEY_HERE"  # ← GIIP 포털에서 확인한 실제 값
+lssn="0"  # 자동 할당 (첫 실행 시 0으로 설정)
+giipagentdelay="60"
+
+# API v2 주소
+apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
+apiaddrcode="YOUR_AZURE_FUNCTION_KEY"
+
+# 또는 API v1 주소 (레거시)
+apiaddr="https://giipasp.azurewebsites.net"
+EOF
+
+# 권한 설정
+chmod 644 ~/giipAgent/giipAgent.cnf
+```
+
+**Step 4: ssh_test.sh 다시 실행**
+```bash
+bash gateway/ssh_test.sh
+```
+
+**중요한 구분**:
+
+| 파일 | 위치 | 용도 | 실제 사용 |
+|------|------|------|---------|
+| **템플릿** | `giipAgentLinux/giipAgent.cnf` | 참고용 | ❌ 사용 안 함 |
+| **실제 설정 (표준)** | `~/giipAgent/giipAgent.cnf` | 표준 에이전트 | ✅ 사용됨 |
+| **실제 설정 (Gateway)** | `~/giipAgentGateway/giipAgent.cnf` | Gateway 모드 | ✅ 사용됨 |
+
+---
+
 ### 문제 1: SSH 연결 실패
 
 **증상**:
