@@ -7,15 +7,19 @@
 
 set -o pipefail
 
-# Paths
+# Get absolute paths
+# From tests/ → go up one level to giipAgentLinux/
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PARENT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
 LIB_DIR="${PARENT_DIR}/lib"
+
+# Config file is at same level as giipAgent3.sh (in giipAgentLinux root)
 CONFIG_FILE="${PARENT_DIR}/giipAgent.cnf"
 
 # Load config
 if [ ! -f "$CONFIG_FILE" ]; then
 	echo "❌ Config not found: $CONFIG_FILE"
+	echo "   Expected location (same as giipAgent3.sh): $PARENT_DIR/"
 	exit 1
 fi
 . "$CONFIG_FILE"

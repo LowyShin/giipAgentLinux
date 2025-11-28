@@ -63,6 +63,27 @@ queue_get() {
 		return 1
 	fi
 	
+	# Check API response status (RstVal field)
+	local rst_val=$(jq -r '.data[0].RstVal // .RstVal // "unknown"' "$temp_response" 2>/dev/null)
+	
+	# If jq fails or RstVal not found, try grep
+	if [ -z "$rst_val" ] || [ "$rst_val" = "unknown" ]; then
+		rst_val=$(grep -o '"RstVal"\s*:\s*"[^"]*"' "$temp_response" 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
+	fi
+	
+	# Handle API error responses
+	if [ "$rst_val" != "200" ] && [ -n "$rst_val" ]; then
+		local proc_name=$(jq -r '.data[0].ProcName // .ProcName // "unknown"' "$temp_response" 2>/dev/null)
+		if [ -z "$proc_name" ]; then
+			proc_name=$(grep -o '"ProcName"\s*:\s*"[^"]*"' "$temp_response" 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
+		fi
+		
+		rm -f "$temp_response"
+		echo "[queue_get] ❌ API returned error: $rst_val - $proc_name" >&2
+		echo "[queue_get] INFO: No queue available for LSSN=$lssn, hostname=$hostname, OS=$os" >&2
+		return 1
+	fi
+	
 	# Extract script from JSON response
 	# Try multiple methods to ensure robust parsing
 	
