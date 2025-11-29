@@ -248,52 +248,18 @@ fi
 # Run gateway mode if enabled
 if [ "${gateway_mode}" = "1" ]; then
 	# ========================================================================
-	# GATEWAY MODE - Call SSH test script
+	# GATEWAY MODE - Execute external script
 	# ========================================================================
 	
 	log_message "INFO" "Running in GATEWAY MODE"
 	
-	# Load gateway API functions to get server list
-	if [ -f "${LIB_DIR}/gateway_api.sh" ]; then
-		. "${LIB_DIR}/gateway_api.sh"
+	GATEWAY_MODE_SCRIPT="${SCRIPT_DIR}/scripts/gateway_mode.sh"
+	if [ -f "$GATEWAY_MODE_SCRIPT" ]; then
+		bash "$GATEWAY_MODE_SCRIPT" "${SCRIPT_DIR}/../giipAgent.cnf"
+		GATEWAY_MODE_EXIT_CODE=$?
+		log_message "INFO" "Gateway mode script completed with exit code: $GATEWAY_MODE_EXIT_CODE"
 	else
-		log_message "ERROR" "gateway_api.sh not found"
-		exit 1
-	fi
-	
-	# Get remote servers from API and save to JSON file
-	log_message "INFO" "Fetching remote server list from API..."
-	gateway_servers_file=$(get_gateway_servers)
-	if [ $? -eq 0 ] && [ -f "$gateway_servers_file" ]; then
-		log_message "INFO" "Remote server list saved to: $gateway_servers_file"
-	else
-		log_message "ERROR" "Failed to fetch remote server list from API"
-		exit 1
-	fi
-	
-	# ========================================================================
-	# Call SSH test script (bash independent execution - NO chmod!)
-	# ========================================================================
-	# ⭐ RULE: All external scripts called with bash for independent execution
-	#    - NO chmod +x (avoid file permission issues)
-	#    - YES bash "$script_file" (portable, reliable)
-	# See: GIIPAGENT3_SPECIFICATION.md > 절대 규칙: bash 독립 호출
-	# ========================================================================
-	
-	log_message "INFO" "Calling gateway/ssh_test.sh..."
-	
-	ssh_test_script="${SCRIPT_DIR}/gateway/ssh_test.sh"
-	
-	if [ ! -f "$ssh_test_script" ]; then
-		log_message "ERROR" "SSH test script not found: $ssh_test_script"
-		exit 1
-	fi
-	
-	if bash "$ssh_test_script"; then
-		log_message "INFO" "SSH test script completed successfully"
-	else
-		local ssh_test_exit_code=$?
-		log_message "WARN" "SSH test script exited with code: $ssh_test_exit_code (continuing anyway)"
+		log_message "WARN" "gateway_mode.sh not found at $GATEWAY_MODE_SCRIPT, skipping gateway mode"
 	fi
 fi
 
