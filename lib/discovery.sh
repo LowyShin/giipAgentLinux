@@ -119,8 +119,9 @@ _collect_local_data() {
     
     local discovery_json
     # ⭐ RULE: Call with bash for independent execution (NO chmod +x)
-    if ! discovery_json=$(bash "$DISCOVERY_SCRIPT_LOCAL" 2>&1); then
-        local error_msg="Failed to execute auto-discover-linux.sh: $discovery_json"
+    # Separate stderr (debug logs) from stdout (JSON output)
+    if ! discovery_json=$(bash "$DISCOVERY_SCRIPT_LOCAL" 2>/dev/null); then
+        local error_msg="Failed to execute auto-discover-linux.sh"
         echo "[Discovery] ❌ Error: $error_msg" >&2
         _log_to_kvs "LOCAL_EXECUTION" "$lssn" "ERROR" "$error_msg"
         return 1
