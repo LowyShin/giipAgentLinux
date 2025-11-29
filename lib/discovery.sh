@@ -24,7 +24,7 @@ if ! declare -f kvs_put >/dev/null 2>&1; then
 fi
 
 # 설정
-DISCOVERY_SCRIPT_LOCAL="${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh"
+DISCOVERY_SCRIPT_LOCAL="${SCRIPT_DIR}/scripts/auto-discover-linux.sh"
 DISCOVERY_INTERVAL=21600  # 6시간 (초 단위)
 DISCOVERY_STATE_FILE="${DISCOVERY_STATE_FILE:-/tmp/giip_discovery_state}"
 LOG_FILE="${LOG_FILE:-/var/log/giipagent.log}"
@@ -180,7 +180,7 @@ _collect_remote_data() {
     # 방법 1: 원격 서버에 auto-discover-linux.sh가 이미 있는 경우
     local try1_error=""
     if discovery_json=$(_ssh_exec "$ssh_user" "$ssh_host" "$ssh_port" "$ssh_key" \
-        "bash /opt/giip/agent/linux/giipscripts/auto-discover-linux.sh 2>&1" 2>&1); then
+        "bash /opt/giip/agent/linux/scripts/auto-discover-linux.sh 2>&1" 2>&1); then
         
         _log_to_kvs "REMOTE_EXECUTE_METHOD1" "$lssn" "SUCCESS" "Script executed via method 1 (existing path)"
         

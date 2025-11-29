@@ -64,10 +64,10 @@ test_library_exists() {
         files_ok=false
     fi
     
-    if [[ -f "./giipscripts/auto-discover-linux.sh" ]]; then
-        print_pass "giipscripts/auto-discover-linux.sh found"
+    if [[ -f "./scripts/auto-discover-linux.sh" ]]; then
+        print_pass "scripts/auto-discover-linux.sh found"
     else
-        print_fail "giipscripts/auto-discover-linux.sh NOT found"
+        print_fail "scripts/auto-discover-linux.sh NOT found"
         files_ok=false
     fi
     
@@ -104,7 +104,7 @@ test_auto_discover_local() {
     print_test "Local Auto-Discover Execution"
     
     # 스크립트 실행
-    if ! output=$(bash ./giipscripts/auto-discover-linux.sh 2>&1); then
+    if ! output=$(bash ./scripts/auto-discover-linux.sh 2>&1); then
         print_fail "auto-discover-linux.sh execution failed"
         echo "$output"
         return 1

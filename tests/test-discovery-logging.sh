@@ -72,7 +72,7 @@ rm -f "$LOG_FILE"
 echo "Attempting local discovery (LSSN=$LSSN_TEST)..."
 
 # 로컬 데이터 수집 시도 (auto-discover-linux.sh가 없을 수 있음)
-if [[ -f "$SCRIPT_DIR/giipscripts/auto-discover-linux.sh" ]]; then
+if [[ -f "$SCRIPT_DIR/scripts/auto-discover-linux.sh" ]]; then
     echo "✅ auto-discover-linux.sh found, running local collection..."
     collect_infrastructure_data "$LSSN_TEST" || echo "⚠️  Collection completed with status check"
 else
@@ -81,7 +81,7 @@ else
     
     # KVS 로깅만 테스트
     _log_to_kvs "LOCAL_START" "$LSSN_TEST" "RUNNING" "Testing local collection logging"
-    _log_to_kvs "LOCAL_SCRIPT_CHECK" "$LSSN_TEST" "ERROR" "Script not found: $SCRIPT_DIR/giipscripts/auto-discover-linux.sh"
+    _log_to_kvs "LOCAL_SCRIPT_CHECK" "$LSSN_TEST" "ERROR" "Script not found: $SCRIPT_DIR/scripts/auto-discover-linux.sh"
 fi
 
 echo ""
