@@ -53,6 +53,14 @@ else
 	exit 1
 fi
 
+# Load CQE queue functions
+if [ -f "${LIB_DIR}/cqe.sh" ]; then
+	. "${LIB_DIR}/cqe.sh"
+else
+	echo "❌ Error: cqe.sh not found in ${LIB_DIR}"
+	exit 1
+fi
+
 # Load cleanup module
 if [ -f "${LIB_DIR}/cleanup.sh" ]; then
 	. "${LIB_DIR}/cleanup.sh"
