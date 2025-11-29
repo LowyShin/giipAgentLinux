@@ -303,14 +303,14 @@ fi
 
 log_message "INFO" "Running in NORMAL MODE"
 
-# Load normal mode library
-if [ -f "${LIB_DIR}/normal.sh" ]; then
-	. "${LIB_DIR}/normal.sh"
-	
-	# Run normal mode (single execution)
-	run_normal_mode "$lssn" "$hn" "$os"
+# Execute normal mode as external script
+NORMAL_MODE_SCRIPT="${SCRIPT_DIR}/scripts/normal_mode.sh"
+if [ -f "$NORMAL_MODE_SCRIPT" ]; then
+	bash "$NORMAL_MODE_SCRIPT" "${SCRIPT_DIR}/../giipAgent.cnf"
+	NORMAL_MODE_EXIT_CODE=$?
+	log_message "INFO" "Normal mode script completed with exit code: $NORMAL_MODE_EXIT_CODE"
 else
-	log_message "WARN" "normal.sh not found, skipping normal mode"
+	log_message "WARN" "normal_mode.sh not found at $NORMAL_MODE_SCRIPT, skipping normal mode"
 fi
 
 # ============================================================================
