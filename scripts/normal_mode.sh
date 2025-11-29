@@ -22,10 +22,16 @@ set -e  # Exit on error
 # Initialize Script Paths
 # ============================================================================
 
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-PARENT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
-CONFIG_FILE="$( cd "${PARENT_DIR}/.." && pwd )/giipAgent.cnf"
-LIB_DIR="${PARENT_DIR}/lib"
+# Get parent directory (giipAgentLinux folder) - scripts/normal_mode.sh → .. → giipAgentLinux
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+LIB_DIR="${SCRIPT_DIR}/lib"
+CONFIG_FILE="${SCRIPT_DIR}/../giipAgent.cnf"
+
+# DEBUG: Print paths before loading modules
+echo "[DEBUG] SCRIPT_DIR: $SCRIPT_DIR"
+echo "[DEBUG] LIB_DIR: $LIB_DIR"
+echo "[DEBUG] CONFIG_FILE: $CONFIG_FILE"
+echo "[DEBUG] common.sh path: ${LIB_DIR}/common.sh"
 
 # ============================================================================
 # Load Library Modules
