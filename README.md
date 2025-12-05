@@ -42,29 +42,43 @@ giipAgentLinux/
 ### 1. 설치
 
 ```bash
-# 어디든 설치 가능 (예시: /home/shinh/giipAgentLinux)
+# 어디든 설치 가능 (예시: /home/shinh/scripts/infraops01/giipAgentLinux)
 git clone https://github.com/LowyShin/giipAgentLinux.git /path/to/giipAgentLinux
 cd /path/to/giipAgentLinux
 
-# 설정 파일 준비 (홈 디렉토리의 giipAgent 폴더에 위치해야 함!)
-mkdir -p ~/giipAgent
-cp giipAgent.cnf ~/giipAgent/
-vi ~/giipAgent/giipAgent.cnf  # sk, lssn 입력
+# 설정 파일 준비 (레포지토리 부모 디렉토리에 위치해야 함!)
+cd ..
+cp giipAgentLinux/giipAgent.cnf ./
+vi giipAgent.cnf  # sk, lssn 입력
+cd giipAgentLinux
 
 # 설치 (현재 디렉토리 기반으로 자동 감지)
 sudo ./admin/giipcronreg.sh
 ```
 
-**⚠️ 중요:** `giipAgent.cnf`는 **홈 디렉토리의 `giipAgent` 폴더**에 위치해야 합니다!
+**⚠️ 중요:** `giipAgent.cnf`는 **giipAgentLinux 레포지토리의 부모 디렉토리**에 위치해야 합니다!
+
+**설정 파일 위치 구조:**
+```
+/path/to/installation/              ← 설치 위치 (어디든 가능)
+├── giipAgent.cnf                   ✅ 설정 파일 (여기!)
+└── giipAgentLinux/                 ← 레포지토리 루트
+    ├── giipAgent3.sh
+    ├── cqe/
+    │   └── giipCQE.sh              (../giipAgent.cnf를 찾음)
+    └── scripts/
+```
+
 - 설치 경로: `/path/to/giipAgentLinux/` (어디든 가능)
-- 설정 파일: `$HOME/giipAgent/giipAgent.cnf` ✅
-- 로그: `$HOME/giip_logs/` 또는 `/var/log/giip/` (권한에 따라 자동 선택)
+- 설정 파일: `/path/to/giipAgent.cnf` (부모 디렉토리) ✅
+- 로그: 스크립트별로 `/tmp/` 또는 `/var/log/` 사용
 
 ### 2. 설정 확인
 
 ```bash
-# 설정 파일 확인
-cat ~/giipAgent/giipAgent.cnf | grep -E "sk=|lssn=|apiaddrv2="
+# 설정 파일 확인 (레포지토리 부모 디렉토리에서)
+cd /path/to/installation
+cat giipAgent.cnf | grep -E "sk=|lssn=|apiaddrv2="
 
 # Cron 등록 확인
 crontab -l | grep giip
@@ -87,8 +101,9 @@ bash cqe/giipCQE.sh --test
 ## 📚 문서 링크
 
 ### 🆕 핵심 문서
-- **[설치 상세 가이드](docs/INSTALLATION_DETAILED.md)** - 단계별 설치 절차
-- **[설정 가이드](docs/CONFIGURATION_GUIDE.md)** - 설정 파일 상세 설명
+- **[설정 파일 위치 가이드](../giipdb/docs/GIIP_CONFIG_FILE_LOCATION.md)** - ⭐ giipAgent.cnf 위치 명확화
+- **[CQE 명세서](docs/CQE_SPECIFICATION.md)** - 원격 명령 실행 시스템
+- **[giipAgent3.sh 명세서](docs/GIIPAGENT3_SPECIFICATION.md)** - 실행 조건, 동작 흐름
 
 ### 📋 개념 & 아키텍처
 - [모듈식 아키텍처](docs/MODULAR_ARCHITECTURE.md) - v3.0 설계
@@ -120,19 +135,44 @@ bash cqe/giipCQE.sh --test
 
 ## ⚠️ 주의사항
 
-### 설정 파일 위치
-- **템플릿**: `giipAgentLinux/giipAgent.cnf` (저장소 내)
-- **실제 사용**: `~/giipAgent/giipAgent.cnf` (홈 디렉토리)
-  - 예: `/home/username/giipAgent/giipAgent.cnf`
+### 설정 파일 위치 (절대 중요!)
+- **템플릿**: `giipAgentLinux/giipAgent.cnf` (저장소 내 - 참고용)
+- **실제 사용**: 레포지토리 **부모 디렉토리**의 `giipAgent.cnf`
+  - 예: `/home/username/scripts/infraops01/giipAgent.cnf`
+  - 상대 경로: `${SCRIPT_DIR}/../giipAgent.cnf`
 
 ### 프로덕션 문제 해결
 ```bash
-# ❌ 저장소의 템플릿은 참고용만
-cat giipAgentLinux/giipAgent.cnf
+# ❌ 잘못된 위치들 (파일이 없음)
+cat ~/giipAgent/giipAgent.cnf                    # 이곳에는 없음!
+cat /home/username/giipAgent/giipAgent.cnf      # 이곳에도 없음!
 
-# ✅ 서버의 실제 설정 파일 확인
-ssh user@server "cat ~/giipAgent/giipAgent.cnf"
+# ✅ 올바른 위치
+cd /path/to/installation
+cat giipAgent.cnf
+
+# 원격 서버에서 확인
+ssh user@server "cd /path/to/installation; cat giipAgent.cnf"
 ```
+
+### 설정 파일이 없으면
+```bash
+# 스크립트 실행 시 에러
+# ❌ ERROR: Config file not found: ...
+
+# 해결: 부모 디렉토리에 생성
+cd /path/to/installation
+cat > giipAgent.cnf << 'EOF'
+sk="your-secret-key-here"
+lssn="0"
+giipagentdelay="60"
+apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
+apiaddrcode="YOUR_FUNCTION_CODE"
+EOF
+chmod 644 giipAgent.cnf
+```
+
+자세한 설정 정보는 **[GIIP_CONFIG_FILE_LOCATION.md](../giipdb/docs/GIIP_CONFIG_FILE_LOCATION.md)** 참조
 
 ## 📞 지원
 
