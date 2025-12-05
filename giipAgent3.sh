@@ -209,10 +209,13 @@ if [ "${lssn}" = "0" ]; then
 	
 	local tmpFileName="giipTmpScript.sh"
 	local lwAPIURL=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
-	local lwDownloadText="CQEQueueGet 0 ${hn} ${os} op"
+	
+	# Build JSON data (matching new API rules: text=parameter names, jsondata=actual values)
+	local jsondata
+	jsondata=$(echo "{\"lssn\":0,\"hostname\":\"${hn}\",\"os\":\"${os}\",\"op\":\"op\"}" | tr -d '\n ')
 	
 	curl -s -X POST "${lwAPIURL}" \
-		-d "text=${lwDownloadText}&token=${sk}" \
+		-d "text=CQEQueueGet&token=${sk}&jsondata=${jsondata}" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
 		--insecure -o $tmpFileName 2>&1
 	
