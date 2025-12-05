@@ -179,7 +179,9 @@ fetch_queue() {
     local url="$APIADDR"
     local response
     
-    # JSON 데이터 구성 (상세 OS 정보 포함)
+    # JSON 데이터 구성 - 간단한 방식 (URL 인코딩 호환성)
+    # os: URL 인코딩된 상세 버전 (예: Ubuntu%2020.04.6%20LTS)
+    # os_detail: 원본 상세 버전 (예: Ubuntu 20.04.6 LTS)
     local json_data
     json_data=$(jq -n \
         --arg lssn "$LSSN" \
@@ -189,15 +191,11 @@ fetch_queue() {
         --arg kernel "$KERNEL_VERSION" \
         --arg arch "$ARCH" \
         --arg sv "$SCRIPT_VERSION" \
-        '{
-            lssn: $lssn,
-            hostname: $hostname,
-            os: $os,
-            os_detail: $os_detail,
-            kernel: $kernel,
-            arch: $arch,
-            sv: $sv
-        }')
+        '{lssn:$lssn,hostname:$hostname,os:$os,os_detail:$os_detail,kernel:$kernel,arch:$arch,sv:$sv}' \
+        | tr -d '\n ')
+    
+    log "DEBUG: OS=$OS, OS_DETAIL=$OS_DETAIL, KERNEL=$KERNEL_VERSION, ARCH=$ARCH"
+    log "DEBUG: json_data=$json_data"
     
     if [ "$API_VERSION" = "v2" ]; then
         # v2 API: POST with code parameter
@@ -473,7 +471,7 @@ main() {
         
         # 디버그 (테스트 모드)
         if [ "$TEST_MODE" = true ]; then
-            log "Response: $response"
+            log "📋 Raw Response: $response"
         fi
         
         # JSON 파싱
