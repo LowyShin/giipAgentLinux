@@ -30,8 +30,8 @@
 #   # 예시 2: /opt/giip/agent 에 설치된 경우
 #   */5 * * * * cd /opt/giip/agent && bash cqe/giipCQE.sh >> /tmp/giip_cqe_logs/cqe_cron.log 2>&1
 #
-# 설정 파일 위치: $HOME/giipAgent/giipAgent.cnf (홈 디렉토리 기준)
-# 로그 위치: /tmp/giip_cqe_logs/cqe_YYYYMMDD.log (일시적, 3일 이상 된 파일 자동 삭제)
+# 설정 파일 위치: giipAgentLinux 부모 디렉토리의 giipAgent.cnf (레포지토리 루트 기준)
+# 로그 위치: /tmp/giip_cqe_logs/cqe_YYYYMMDD.log (일시적, giipAgent3.sh에서 관리)
 
 set -euo pipefail
 
@@ -39,9 +39,10 @@ set -euo pipefail
 # 설정
 # ========================================
 SCRIPT_VERSION="2.0"
-MYPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# 설정 파일: ~/giipAgent/giipAgent.cnf (홈 디렉토리의 별도 폴더)
-CNFFILE="${HOME}/giipAgent/giipAgent.cnf"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 설정 파일: 레포지토리 루트의 부모 디렉토리에 위치 (다른 에이전트와 동일)
+# ${SCRIPT_DIR}은 cqe 디렉토리이므로 ../로 한 단계 위에서 찾음
+CNFFILE="${SCRIPT_DIR}/../giipAgent.cnf"
 
 # 로그 디렉토리: /tmp/ (일시적 로그, giipAgent3.sh에서 관리)
 LOGDIR="/tmp/giip_cqe_logs"
