@@ -128,16 +128,46 @@ load_config() {
 get_system_info() {
     HOSTNAME=$(hostname)
     
-    # OS 정보
+    # OS 정보 (상세 버전 포함)
+    OS_SIMPLE=""
+    OS_VERSION=""
+    OS_DETAIL=""
+    
     if [ -f /etc/os-release ]; then
-        OS=$(grep PRETTY_NAME /etc/os-release | cut -d'"' -f2)
+        # PRETTY_NAME: "Ubuntu 20.04.6 LTS"
+        OS_SIMPLE=$(grep '^NAME=' /etc/os-release | cut -d'"' -f2)
+        OS_VERSION=$(grep '^VERSION_ID=' /etc/os-release | cut -d'"' -f2)
+        OS_PRETTY=$(grep '^PRETTY_NAME=' /etc/os-release | cut -d'"' -f2)
+        
+        # Ubuntu/Debian 추가 정보
+        if [ -f /etc/lsb-release ]; then
+            OS_CODENAME=$(grep CODENAME /etc/lsb-release | cut -d'=' -f2)
+        fi
     elif [ -f /etc/redhat-release ]; then
-        OS=$(cat /etc/redhat-release)
+        # CentOS/RHEL: "CentOS Linux release 7.9.2009 (Core)"
+        OS_PRETTY=$(cat /etc/redhat-release)
+        OS_SIMPLE=$(echo "$OS_PRETTY" | cut -d' ' -f1-2)
+        OS_VERSION=$(echo "$OS_PRETTY" | grep -oP '\d+\.\d+')
     else
-        OS=$(uname -s)
+        OS_SIMPLE=$(uname -s)
+        OS_VERSION=$(uname -r)
     fi
     
-    OS=$(echo "$OS" | sed 's/ /%20/g')
+    # 커널 정보
+    KERNEL_VERSION=$(uname -r)
+    ARCH=$(uname -m)
+    
+    # 상세 OS 정보 구성
+    if [ -n "$OS_PRETTY" ]; then
+        OS_DETAIL="$OS_PRETTY"
+    elif [ -n "$OS_SIMPLE" ] && [ -n "$OS_VERSION" ]; then
+        OS_DETAIL="$OS_SIMPLE $OS_VERSION"
+    else
+        OS_DETAIL="$OS_SIMPLE"
+    fi
+    
+    # URL 인코딩 (공백 처리)
+    OS=$(echo "$OS_DETAIL" | sed 's/ /%20/g')
 }
 
 # ========================================
@@ -149,13 +179,33 @@ fetch_queue() {
     local url="$APIADDR"
     local response
     
+    # JSON 데이터 구성 (상세 OS 정보 포함)
+    local json_data
+    json_data=$(jq -n \
+        --arg lssn "$LSSN" \
+        --arg hostname "$HOSTNAME" \
+        --arg os "$OS" \
+        --arg os_detail "$OS_DETAIL" \
+        --arg kernel "$KERNEL_VERSION" \
+        --arg arch "$ARCH" \
+        --arg sv "$SCRIPT_VERSION" \
+        '{
+            lssn: $lssn,
+            hostname: $hostname,
+            os: $os,
+            os_detail: $os_detail,
+            kernel: $kernel,
+            arch: $arch,
+            sv: $sv
+        }')
+    
     if [ "$API_VERSION" = "v2" ]; then
         # v2 API: POST with code parameter
         response=$(curl -sS -X POST "$url?code=$APICODE" \
             -H 'Content-Type: application/x-www-form-urlencoded' \
             --data-urlencode 'text=CQEQueueGet' \
             --data-urlencode "sk=$SK" \
-            --data-urlencode "jsondata={\"lssn\":$LSSN,\"hostname\":\"$HOSTNAME\",\"os\":\"$OS\",\"sv\":\"$SCRIPT_VERSION\"}" \
+            --data-urlencode "jsondata=$json_data" \
             2>&1)
     else
         # v1 API: Legacy format
@@ -163,7 +213,7 @@ fetch_queue() {
             -H 'Content-Type: application/x-www-form-urlencoded' \
             --data-urlencode 'text=CQEQueueGet' \
             --data-urlencode "sk=$SK" \
-            --data-urlencode "jsondata={\"lssn\":$LSSN,\"hostname\":\"$HOSTNAME\",\"os\":\"$OS\",\"sv\":\"$SCRIPT_VERSION\"}" \
+            --data-urlencode "jsondata=$json_data" \
             2>&1)
     fi
     
