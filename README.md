@@ -42,22 +42,23 @@ giipAgentLinux/
 ### 1. 설치
 
 ```bash
-cd ~
-git clone https://github.com/LowyShin/giipAgentLinux.git
-cd giipAgentLinux
+# 어디든 설치 가능 (예시: /home/shinh/giipAgentLinux)
+git clone https://github.com/LowyShin/giipAgentLinux.git /path/to/giipAgentLinux
+cd /path/to/giipAgentLinux
 
 # 설정 파일 준비 (홈 디렉토리의 giipAgent 폴더에 위치해야 함!)
 mkdir -p ~/giipAgent
 cp giipAgent.cnf ~/giipAgent/
 vi ~/giipAgent/giipAgent.cnf  # sk, lssn 입력
 
-# 설치
+# 설치 (현재 디렉토리 기반으로 자동 감지)
 sudo ./admin/giipcronreg.sh
 ```
 
 **⚠️ 중요:** `giipAgent.cnf`는 **홈 디렉토리의 `giipAgent` 폴더**에 위치해야 합니다!
-- 에이전트 경로: `~/giipAgentLinux/`
-- 설정 파일: `~/giipAgent/giipAgent.cnf` ✅
+- 설치 경로: `/path/to/giipAgentLinux/` (어디든 가능)
+- 설정 파일: `$HOME/giipAgent/giipAgent.cnf` ✅
+- 로그: `$HOME/giip_logs/` 또는 `/var/log/giip/` (권한에 따라 자동 선택)
 
 ### 2. 설정 확인
 
@@ -73,7 +74,11 @@ crontab -l | grep giip
 
 **표준 모드** (각 서버에 직접 설치)
 ```bash
-# 그대로 사용 - 5분마다 자동 실행
+# 설치 디렉토리에서 실행 (위치 무관)
+bash giipAgent3.sh
+
+# CQE 테스트 (어디든 설치 가능)
+bash cqe/giipCQE.sh --test
 ```
 
 **Gateway 모드** (다중 서버 관리)

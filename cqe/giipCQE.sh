@@ -9,13 +9,29 @@
 # - 보안 검증
 # - 상세 로깅
 #
-# 사용법:
-#   bash giipCQE.sh              # 정상 실행
+# 사용법 (설치 위치에 관계없이 동작):
+#   bash giipCQE.sh              # 정상 실행 (Cron에서 주로 사용)
 #   bash giipCQE.sh --test       # 테스트 모드
 #   bash giipCQE.sh --once       # 한 번만 실행
 #
-# Cron 설정:
-#   */5 * * * * cd /home/giip/giipAgentLinux && bash giipCQE.sh >> /var/log/giip/cqe_cron.log 2>&1
+# 실행 예시:
+#   # 스크립트 위치에서 실행
+#   cd /path/to/giipAgentLinux/cqe
+#   bash giipCQE.sh --test
+#
+#   # 또는 레포지토리 루트에서 실행
+#   cd /path/to/giipAgentLinux
+#   bash cqe/giipCQE.sh --test
+#
+# Cron 설정 (설치 위치별로 커스터마이징 필요):
+#   # 예시 1: /home/shinh/giipAgentLinux 에 설치된 경우
+#   */5 * * * * cd /home/shinh/giipAgentLinux && bash cqe/giipCQE.sh >> /tmp/giip_cqe_logs/cqe_cron.log 2>&1
+#
+#   # 예시 2: /opt/giip/agent 에 설치된 경우
+#   */5 * * * * cd /opt/giip/agent && bash cqe/giipCQE.sh >> /tmp/giip_cqe_logs/cqe_cron.log 2>&1
+#
+# 설정 파일 위치: $HOME/giipAgent/giipAgent.cnf (홈 디렉토리 기준)
+# 로그 위치: /tmp/giip_cqe_logs/cqe_YYYYMMDD.log (일시적, 3일 이상 된 파일 자동 삭제)
 
 set -euo pipefail
 
@@ -24,8 +40,13 @@ set -euo pipefail
 # ========================================
 SCRIPT_VERSION="2.0"
 MYPATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CNFFILE="$MYPATH/../giipAgent.cnf"
-LOGDIR="/var/log/giip"
+# 설정 파일: ~/giipAgent/giipAgent.cnf (홈 디렉토리의 별도 폴더)
+CNFFILE="${HOME}/giipAgent/giipAgent.cnf"
+
+# 로그 디렉토리: /tmp/ (일시적 로그, giipAgent3.sh에서 관리)
+LOGDIR="/tmp/giip_cqe_logs"
+mkdir -p "$LOGDIR" 2>/dev/null || LOGDIR="/tmp"
+
 LOGFILE="$LOGDIR/cqe_$(date +%Y%m%d).log"
 TMPDIR="/tmp/giip_cqe_$$"
 TMP_SCRIPT="$TMPDIR/exec_script.sh"
@@ -179,22 +200,19 @@ fetch_queue() {
     local url="$APIADDR"
     local response
     
-    # JSON 데이터 구성 - 간단한 방식 (URL 인코딩 호환성)
+    # JSON 데이터 구성 (pApiCQEQueueGetbySk SP 파라미터와 일치)
+    # SP 파라미터: @sk, @lsSn, @hostname, @os, @op
     # os: URL 인코딩된 상세 버전 (예: Ubuntu%2020.04.6%20LTS)
-    # os_detail: 원본 상세 버전 (예: Ubuntu 20.04.6 LTS)
     local json_data
     json_data=$(jq -n \
         --arg lssn "$LSSN" \
         --arg hostname "$HOSTNAME" \
-        --arg os "$OS" \
-        --arg os_detail "$OS_DETAIL" \
-        --arg kernel "$KERNEL_VERSION" \
-        --arg arch "$ARCH" \
-        --arg sv "$SCRIPT_VERSION" \
-        '{lssn:$lssn,hostname:$hostname,os:$os,os_detail:$os_detail,kernel:$kernel,arch:$arch,sv:$sv}' \
+        --arg os "$OS_DETAIL" \
+        --arg op "op" \
+        '{lssn:$lssn,hostname:$hostname,os:$os,op:$op}' \
         | tr -d '\n ')
     
-    log "DEBUG: OS=$OS, OS_DETAIL=$OS_DETAIL, KERNEL=$KERNEL_VERSION, ARCH=$ARCH"
+    log "DEBUG: OS=$OS, KERNEL=$KERNEL_VERSION, ARCH=$ARCH"
     log "DEBUG: json_data=$json_data"
     
     if [ "$API_VERSION" = "v2" ]; then
