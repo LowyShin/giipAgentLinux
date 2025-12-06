@@ -466,6 +466,25 @@ main() {
 		
 		# Call queue_get on successful SSH connection (only if SSH test passed)
 		if [ $test_result -eq 0 ]; then
+			
+			# ====================================================================
+			# [New] Remote Profiling Execution (2025-12-06)
+			# ====================================================================
+			local profile_script="${PARENT_DIR}/scripts/collect-remote-profile.sh"
+			if [ -f "$profile_script" ]; then
+				# Call the independent profiling component
+				# Usage: ./collect-remote-profile.sh <HOST> <USER> <LSSN> [KEY] [PASS]
+				bash "$profile_script" "$ssh_host" "$ssh_user" "$lssn" "$ssh_key_path" "$ssh_password" >> "$REPORT_FILE" 2>&1
+				
+				# Log the result status (optional, detailed logs are in the component)
+				if [ $? -eq 0 ]; then
+					log_message "INFO" "Remote profile collected for ${hostname} (LSSN: ${lssn})"
+				else
+					log_message "WARN" "Failed to collect remote profile for ${hostname} (LSSN: ${lssn})"
+				fi
+			fi
+			# ====================================================================
+
 			if declare -f queue_get &>/dev/null; then
 				# Get OS information from environment variable set by test_ssh_connection
 				local os_var_name="SSH_OS_${lssn}"
