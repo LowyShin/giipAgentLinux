@@ -21,7 +21,8 @@
 - `run-gateway-agent.sh` - Gateway Agent 실행
 
 ### 버전 관리
-- `git-auto-sync.sh` - Git 자동 동기화
+- `git-auto-sync.sh` - Git 자동 동기화 (Linux - Stash 방식)
+- `gitautosync.bat` - Git 자동 동기화 (Windows - Force Download)
 
 ## 🚀 사용법
 
