@@ -109,7 +109,7 @@ call :log "Step 1: Checking current branch..."
 call :log "=========================================="
 
 set CURRENT_BRANCH=
-for /f "tokens=*" %%i in ('git rev-parse --abbrev-ref HEAD 2^>^&1') do set CURRENT_BRANCH=%%i
+for /f "tokens=*" %%i in ('git rev-parse --abbrev-ref HEAD 2^>nul') do set CURRENT_BRANCH=%%i
 if "%CURRENT_BRANCH%"=="" (
     call :log_error "Failed to get current branch"
     exit /b 1
@@ -124,7 +124,8 @@ call :log "Step 2: Checking local changes..."
 call :log "=========================================="
 
 set CHANGE_COUNT=0
-for /f %%i in ('git status --porcelain 2^>^&1 ^| find /c /v ""') do set CHANGE_COUNT=%%i
+REM Count changed files (using find to count non-empty lines from git status)
+for /f %%i in ('git status --porcelain 2^>nul ^| find /c /v ""') do set CHANGE_COUNT=%%i
 if %CHANGE_COUNT% gtr 0 (
     call :log "WARNING: Local changes detected - will be DISCARDED!"
     git status --porcelain >> "%LOG_FILE%" 2>&1
@@ -187,8 +188,11 @@ if "%LOCAL_HASH%" neq "%REMOTE_HASH%" (
     
     call :log "Force reset completed successfully"
     
-    for /f "tokens=*" %%i in ('git rev-parse HEAD') do set NEW_HASH=%%i
-    call :log "Updated to commit: %NEW_HASH%"
+    set NEW_HASH=
+    for /f "tokens=*" %%i in ('git rev-parse HEAD 2^>nul') do set NEW_HASH=%%i
+    if not "%NEW_HASH%"=="" (
+        call :log "Updated to commit: %NEW_HASH%"
+    )
     
     REM Show what changed
     call :log "Changes pulled:"
