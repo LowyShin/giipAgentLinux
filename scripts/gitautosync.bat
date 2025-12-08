@@ -30,7 +30,10 @@ REM Configuration
 REM ============================================================
 set SCRIPT_DIR=%~dp0
 set LOG_DIR=%SCRIPT_DIR%..\logs
-set LOG_FILE=%LOG_DIR%\git_auto_sync_%date:~0,4%%date:~5,2%%date:~8,2%.log
+
+REM Get current date in YYYYMMDD format (locale-independent using PowerShell)
+for /f "tokens=*" %%i in ('powershell -Command "Get-Date -Format 'yyyyMMdd'"') do set TODAY=%%i
+set LOG_FILE=%LOG_DIR%\git_auto_sync_%TODAY%.log
 set REPO_DIR=%SCRIPT_DIR%..
 
 REM ============================================================
@@ -105,8 +108,9 @@ call :log "=========================================="
 call :log "Step 1: Checking current branch..."
 call :log "=========================================="
 
+set CURRENT_BRANCH=
 for /f "tokens=*" %%i in ('git rev-parse --abbrev-ref HEAD 2^>^&1') do set CURRENT_BRANCH=%%i
-if errorlevel 1 (
+if "%CURRENT_BRANCH%"=="" (
     call :log_error "Failed to get current branch"
     exit /b 1
 )
@@ -119,6 +123,7 @@ call :log "=========================================="
 call :log "Step 2: Checking local changes..."
 call :log "=========================================="
 
+set CHANGE_COUNT=0
 for /f %%i in ('git status --porcelain 2^>^&1 ^| find /c /v ""') do set CHANGE_COUNT=%%i
 if %CHANGE_COUNT% gtr 0 (
     call :log "WARNING: Local changes detected - will be DISCARDED!"
@@ -153,8 +158,19 @@ call :log "Step 4: Force resetting to remote..."
 call :log "=========================================="
 
 REM Get current and remote commit hashes
-for /f "tokens=*" %%i in ('git rev-parse HEAD') do set LOCAL_HASH=%%i
-for /f "tokens=*" %%i in ('git rev-parse origin/%CURRENT_BRANCH%') do set REMOTE_HASH=%%i
+set LOCAL_HASH=
+set REMOTE_HASH=
+for /f "tokens=*" %%i in ('git rev-parse HEAD 2^>nul') do set LOCAL_HASH=%%i
+for /f "tokens=*" %%i in ('git rev-parse origin/%CURRENT_BRANCH% 2^>nul') do set REMOTE_HASH=%%i
+
+if "%LOCAL_HASH%"=="" (
+    call :log_error "Failed to get local commit hash"
+    exit /b 1
+)
+if "%REMOTE_HASH%"=="" (
+    call :log_error "Failed to get remote commit hash for branch %CURRENT_BRANCH%"
+    exit /b 1
+)
 
 call :log "Local commit:  %LOCAL_HASH%"
 call :log "Remote commit: %REMOTE_HASH%"
@@ -206,10 +222,10 @@ call :log ""
 
 REM Display final status
 call :log "Final Status:"
-for /f "tokens=*" %%i in ('git rev-parse --short HEAD') do call :log "  Commit: %%i"
-for /f "tokens=*" %%i in ('git log -1 --format^=%%an ^<%%ae^>') do call :log "  Author: %%i"
-for /f "tokens=*" %%i in ('git log -1 --format^=%%cd --date^=short') do call :log "  Date:   %%i"
-for /f "tokens=*" %%i in ('git log -1 --format^=%%s') do call :log "  Message: %%i"
+for /f "tokens=*" %%i in ('git rev-parse --short HEAD 2^>nul') do call :log "  Commit: %%i"
+for /f "tokens=*" %%i in ('git log -1 --format^=%%an ^<%%ae^> 2^>nul') do call :log "  Author: %%i"
+for /f "tokens=*" %%i in ('git log -1 --format^=%%cd --date^=short 2^>nul') do call :log "  Date:   %%i"
+for /f "tokens=*" %%i in ('git log -1 --format^=%%s 2^>nul') do call :log "  Message: %%i"
 
 call :log ""
 call :log "Sync completed successfully (Force Download Mode)"
