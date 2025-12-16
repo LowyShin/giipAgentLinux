@@ -48,3 +48,37 @@ Linux Agent에 Windows Agent(`DbMonitor.ps1` 및 `dpa-put-mssql.ps1`)와 동일�
 *   **로그**: `log/giipAgent2_YYYYMMDD.log` 파일에서 `[MSSQL]` 태그가 붙은 항목을 확인하십시오.
 *   **디버그 모드**: 개발 중 에이전트를 수동으로 실행할 때 즉각적인 확인을 위해 `mssql.sh`가 `stderr`로 주요 단계를 출력합니다.
 *   **도구 누락**: `sqlcmd` 자동 설치가 실패할 경우, Linux 호스트에 `mssql-tools`를 수동으로 설치하십시오.
+
+---
+
+## 🛑 개발 히스토리 및 주요 이슈 해결 (Lessons Learned)
+
+본 기능을 개발하는 과정에서 발생한 주요 이슈와 해결 방법을 기록합니다. 추후 유지보수 시 동일한 실수를 반복하지 않기 위함입니다.
+
+### 1. 연결 정보 정적 설정 → 동적 API 전환
+*   **초기 시도**: `giipAgent.cnf`에 `SqlConnectionString`을 수동 설정하여 `sqlcmd`를 실행하려 함.
+*   **문제**: Windows Agent는 API(`ManagedDatabaseListForAgent`)를 통해 대상을 동적으로 받아옴. Linux Agent만 정적 설정을 쓰면 일관성이 깨지고 관리 포인트가 늘어남.
+*   **해결**: `lib/mssql.sh` 내에서 `ManagedDatabaseListForAgent` API를 호출하고, Python으로 JSON 응답을 파싱하여 접속 정보(`HOST`, `PORT`, `USER`, `PASS`)를 추출해 사용하는 방식으로 전면 수정.
+
+### 2. 무한 루프(Infinite Loop) 사건 (DDoS 유사 동작)
+*   **발생 상황**: 개발 중 디버깅 편의를 위해 `should_run_mssql` (실행 주기 체크) 함수를 주석 처리하고 배포함.
+*   **증상**: `normal_mode.sh` 루프 내에서 차단막 없이 `mssql.sh`가 밀리초 단위로 반복 실행됨. 순식간에 수천 건의 API 요청과 KVS 업로드가 발생하여 서버 부하 유발.
+*   **해결**: 
+    1.  `should_run_mssql` 체크 로직을 최상단에 **강제 복구**.
+    2.  `PROHIBITED_ACTIONS_AGENT.md` 문서 생성하여 "주기 체크 비활성화 금지"를 명문화.
+
+### 3. 프로세스 폭주 (Shell Loop 이슈)
+*   **발생 상황**: `while read line; do ... done <<< "$variable"` 구문 사용 시, 변수 내용이 비정상이거나 특수문자가 섞여 쉘이 루프 종료 조건을 제대로 인식하지 못하고 무한 회전.
+*   **증상**: API 호출은 멈췄으나 로컬 프로세스가 종료되지 않고 계속 `sleep` 없이 루프를 돎.
+*   **해결**: 
+    1.  불안정한 "Here String"(`<<<`) 방식 대신, 데이터를 `/tmp/giip_mssql_targets.txt` **임시 파일**에 저장한 후 `while read ... < file` 방식으로 변경하여 안정성 확보.
+    2.  `giipAgent3.sh` 시작 시 `pgrep`을 사용하여 이전에 실행된 **자신의 좀비 프로세스를 찾아 강제 종료(Self-Cleanup)** 하는 로직 추가.
+
+### 4. 프로세스 멈춤 (Hang) 현상
+*   **발생 상황**: 무한 루프는 해결했으나, 간혹 로그가 멈춘 채 에이전트가 동작하지 않음.
+*   **원인**: 네트워크 방화벽 등의 이슈로 `curl`이 API 서버에 접속을 시도하다가 응답을 받지 못하고 무한 대기(Hang) 상태에 빠짐.
+*   **해결**: `curl` 명령어에 `--connect-timeout 10` (연결 10초) 및 `--max-time 30` (전체 30초) 옵션을 추가하여, 응답이 없으면 즉시 에러를 뱉고 다음 주기로 넘어가도록 수정.
+
+### 5. "먹통" 오해 방지 로그
+*   **상황**: 실행 주기가 도래하지 않아 스크립트가 `return 0`으로 조용히 종료될 때, 사용자 입장에서는 에이전트가 멈춘 것처럼 보임.
+*   **해결**: `should_run_mssql` 체크 실패 시(아직 실행 시간이 아닐 때) `[MSSQL] ⏳ Skipping due to interval` 로그를 남겨(주석 처리됨) 동작 중임을 인지할 수 있게 함(필요 시 주석 해제).
