@@ -48,14 +48,13 @@ collect_mssql_data() {
     
     # 2. Check Prerequisites (mssql-tools)
     if ! command -v sqlcmd >/dev/null 2>&1; then
-        log_message "WARN" "[MSSQL] sqlcmd not found. Skipping SQL monitoring."
         return 0
     fi
     
     # 3. Fetch Registered Databases from API
-    # API: ManagedDatabaseListForAgent
     local api_url=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
     local mdb_list_file="/tmp/giip_mssql_list_${lssn}.json"
+    local mdb_targets_file="/tmp/giip_mssql_targets_${lssn}.txt"
     
     # Prepare API payload
     local jsondata="{\"lssn\":${lssn}}"
@@ -68,92 +67,67 @@ collect_mssql_data() {
         --insecure -o "$mdb_list_file" 2>&1
         
     if [ ! -s "$mdb_list_file" ]; then
-        log_message "WARN" "[MSSQL] Failed to fetch DB list from API (empty response)"
         rm -f "$mdb_list_file"
         return 1
     fi
     
     # 4. Process DB List using Python
-    # We use python to iterate and generate a shell script or perform actions, 
-    # but here we'll use python to parse and output a structured list we can loop over in bash,
-    # OR better, use python to drive the whole interaction? 
-    # Let's keep bash driving sqlcmd for simplicity with environment variables.
-    
-    # Python script to extract MSSQL connection info
-    # Output format: "MDB_ID|HOST|PORT|USER|PASS" (line by line)
-    
     local python_cmd="python3"
     if ! command -v python3 >/dev/null 2>&1; then
         python_cmd="python"
     fi
     
-    local db_targets=$($python_cmd -c "
+    $python_cmd -c "
 import sys, json
 
 try:
     with open('$mdb_list_file', 'r') as f:
         content = f.read()
         
-    # Handle API wrapper
     data = json.loads(content)
-    # If API returns { 'data': [...] }
     if isinstance(data, dict) and 'data' in data:
         data = data['data']
     elif isinstance(data, dict) and 'RstVal' in data: 
-        # API might return just status if empty, or data field
         data = []
         
     if not isinstance(data, list):
         data = [data] if data else []
 
-    for db in data:
-        # Check if valid object
-        if not isinstance(db, dict): continue
-        
-        # Filter for MSSQL
-        db_type = db.get('db_type', '').upper()
-        if db_type == 'MSSQL':
-            mdb_id = db.get('mdb_id', '')
-            host = db.get('db_host', '')
-            port = db.get('db_port', '1433')
-            user = db.get('db_user', '')
-            password = db.get('db_password', '')
+    with open('$mdb_targets_file', 'w') as out:
+        for db in data:
+            if not isinstance(db, dict): continue
             
-            # Escape pipes if necessary (unlikely in these fields but safety first: replace | with _)
-            print(f'{mdb_id}|{host}|{port}|{user}|{password}')
+            db_type = db.get('db_type', '').upper()
+            if db_type == 'MSSQL':
+                mdb_id = db.get('mdb_id', '')
+                host = db.get('db_host', '')
+                port = db.get('db_port', '1433')
+                user = db.get('db_user', '')
+                password = db.get('db_password', '')
+                out.write(f'{mdb_id}|{host}|{port}|{user}|{password}\n')
 
 except Exception as e:
     sys.exit(1)
-")
+"
     
     rm -f "$mdb_list_file"
     
-    if [ -z "$db_targets" ]; then
-        echo "[MSSQL] ℹ️  No registered MSSQL databases found." >&2
+    if [ ! -s "$mdb_targets_file" ]; then
+        rm -f "$mdb_targets_file"
         return 0
     fi
     
-    echo "[MSSQL] Found MSSQL targets, starting collection..." >&2
-    
     # 5. Loop through targets and collect
-    # We collect all into one JSON array for the final payload
-    local all_hosts_json=""
-    local first_host=1
-    
-    # Set Internal Field Separator to newline usually, but here we read line by line
-    while IFS= read -r line; do
+    while IFS= read -r line || [ -n "$line" ]; do
         if [ -z "$line" ]; then continue; fi
         
-        # Parse line (delimiter |)
         local mdb_id=$(echo "$line" | cut -d'|' -f1)
         local db_host=$(echo "$line" | cut -d'|' -f2)
         local db_port=$(echo "$line" | cut -d'|' -f3)
         local db_user=$(echo "$line" | cut -d'|' -f4)
         local db_pass=$(echo "$line" | cut -d'|' -f5)
         
-        echo "[MSSQL] Connecting to ${db_host}:${db_port}..." >&2
-        
-        # Construct Query (Same as before)
+        # Construct Query
         local query="
         SET NOCOUNT ON;
         SELECT
@@ -183,40 +157,24 @@ except Exception as e:
         "
         
         # Execute sqlcmd
-        # Use comma for port: -S host,port
         local json_output
         if ! json_output=$(sqlcmd -S "${db_host},${db_port}" -U "$db_user" -P "$db_pass" -y 0 -Q "$query" -b -t 5 2>/dev/null); then
-            log_message "ERROR" "[MSSQL] Failed to connect/query ${db_host}"
+            log_message "WARN" "[MSSQL] Failed to connect/query ${db_host}"
             continue
         fi
         
-        # Clean output
         json_output=$(echo "$json_output" | tr -d '\r\n')
         if [ -z "$json_output" ]; then json_output="[]"; fi
         
-        # Since the Windows Agent structure expects "hosts": [...] which aggregates everything,
-        # but here we might have multiple SQL servers.
-        # The original Windows script collects from ONE server (SqlConnectionString).
-        # But DbMonitor.ps1 collects stats separately.
-        # The user requested "sqlnetinv" structure which is 'hosts' array.
-        # IF we have multiple SQL Servers, we should probably aggregate them ALL into one large 'hosts' array?
-        # Or upload separate payloads? 
-        # dpa-put-mssql.ps1 structure has "sql_server": "endpoint" (singular).
-        # So we should probably upload PER SQL SERVER.
-        
-        # Construct Payload per SQL Server
         local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
         local hostname=$(hostname)
         local payload="{\"collected_at\":\"$timestamp\",\"collector_host\":\"$hostname\",\"sql_server\":\"${db_host}\",\"hosts\":$json_output}"
         
-        # Upload
-        if kvs_put "lssn" "${lssn}" "sqlnetinv" "$payload"; then
-            echo "[MSSQL] ✅ Data uploaded for ${db_host}" >&2
-        else
-            echo "[MSSQL] ❌ Upload failed for ${db_host}" >&2
-        fi
+        kvs_put "lssn" "${lssn}" "sqlnetinv" "$payload" >/dev/null 2>&1
         
-    done <<< "$db_targets"
+    done < "$mdb_targets_file"
+    
+    rm -f "$mdb_targets_file"
     
     # Update state file
     echo "$(date +%s)" > "${MSSQL_STATE_FILE}_${lssn}"
