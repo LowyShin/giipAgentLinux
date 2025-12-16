@@ -19,6 +19,18 @@
 set -e  # Exit on error
 
 # ============================================================================
+# Self-Cleanup / Singleton Logic (Emergency Add)
+# ============================================================================
+SCRIPT_ABS_PATH=$(readlink -f "${BASH_SOURCE[0]}")
+CURRENT_PID=$$
+
+# Check if another instance is running
+if pgrep -f "bash $SCRIPT_ABS_PATH" | grep -v "$CURRENT_PID" > /dev/null; then
+    echo "⚠️  [$(date)] Another instance of $SCRIPT_ABS_PATH is already running. Exiting."
+    exit 0
+fi
+
+# ============================================================================
 # Initialize Script Paths
 # ============================================================================
 
