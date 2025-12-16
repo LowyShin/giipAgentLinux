@@ -193,6 +193,23 @@ SSH_TEST_EXIT_CODE=$?
 log_message "INFO" "SSH tests completed with exit code: $SSH_TEST_EXIT_CODE"
 
 # ============================================================================
+# Step 3: Check Managed Databases
+# ============================================================================
+
+CHECK_DB_SCRIPT="${SCRIPT_DIR}/scripts/gateway-check-db.sh"
+if [ -f "$CHECK_DB_SCRIPT" ]; then
+	log_message "INFO" "[gateway_mode.sh] Calling gateway-check-db.sh..."
+	echo "[gateway_mode.sh] Calling: bash '${CHECK_DB_SCRIPT}' '${CONFIG_FILE}'"
+	
+	bash "$CHECK_DB_SCRIPT" "$CONFIG_FILE"
+	DB_CHECK_EXIT_CODE=$?
+	
+	log_message "INFO" "Database checks completed with exit code: $DB_CHECK_EXIT_CODE"
+else
+	log_message "WARN" "Database check script not found: $CHECK_DB_SCRIPT"
+fi
+
+# ============================================================================
 # Shutdown
 # ============================================================================
 
