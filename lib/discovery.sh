@@ -88,10 +88,10 @@ collect_infrastructure_data() {
     _log_to_kvs "DISCOVERY_START" "$lssn" "RUNNING" "Starting infrastructure discovery collection, remote_info=$remote_info" || true
     
     if [[ -n "$remote_info" ]]; then
-        echo "[Discovery] 🔍 Collecting infrastructure data from remote server (LSSN=$lssn, Host=$remote_info)" >&2
+        # echo "[Discovery] 🔍 Collecting infrastructure data from remote server (LSSN=$lssn, Host=$remote_info)" >&2
         _collect_remote_data "$lssn" "$remote_info" || return 1
     else
-        echo "[Discovery] 🔍 Collecting infrastructure data locally (LSSN=$lssn)" >&2
+        # echo "[Discovery] 🔍 Collecting infrastructure data locally (LSSN=$lssn)" >&2
         _collect_local_data "$lssn" || return 1
     fi
     
@@ -110,7 +110,7 @@ _collect_local_data() {
     # Step 1: auto-discover-linux.sh 실행
     if [[ ! -f "$DISCOVERY_SCRIPT_LOCAL" ]]; then
         local error_msg="Script not found: $DISCOVERY_SCRIPT_LOCAL"
-        echo "[Discovery] ❌ Error: $error_msg" >&2
+        # echo "[Discovery] ❌ Error: $error_msg" >&2
         _log_to_kvs "LOCAL_SCRIPT_CHECK" "$lssn" "ERROR" "$error_msg"
         return 1
     fi
@@ -122,7 +122,7 @@ _collect_local_data() {
     # Separate stderr (debug logs) from stdout (JSON output)
     if ! discovery_json=$(bash "$DISCOVERY_SCRIPT_LOCAL" 2>/dev/null); then
         local error_msg="Failed to execute auto-discover-linux.sh"
-        echo "[Discovery] ❌ Error: $error_msg" >&2
+        # echo "[Discovery] ❌ Error: $error_msg" >&2
         _log_to_kvs "LOCAL_EXECUTION" "$lssn" "ERROR" "$error_msg"
         return 1
     fi
@@ -147,7 +147,7 @@ _collect_local_data() {
     fi
     
     _log_to_kvs "LOCAL_DB_SAVE" "$lssn" "SUCCESS" "Discovery data saved to DB"
-    echo "[Discovery] ✅ Local infrastructure discovery completed for LSSN=$lssn" >&2
+    # echo "[Discovery] ✅ Local infrastructure discovery completed for LSSN=$lssn" >&2
     echo "$(date +%s)" > "$DISCOVERY_STATE_FILE.lssn_$lssn"
     
     return 0
@@ -174,7 +174,7 @@ _collect_remote_data() {
     # Step 1: 원격 서버에서 auto-discover-linux.sh 실행 (방법 1: 기존 경로)
     local discovery_json
     
-    echo "[Discovery] 📡 Connecting to $ssh_user@$ssh_host:$ssh_port (LSSN=$lssn)..." >&2
+    # echo "[Discovery] 📡 Connecting to $ssh_user@$ssh_host:$ssh_port (LSSN=$lssn)..." >&2
     
     _log_to_kvs "REMOTE_CONNECT" "$lssn" "RUNNING" "Attempting SSH connection to $ssh_host:$ssh_port"
     
@@ -384,7 +384,7 @@ _save_discovery_to_db() {
     local lssn="$1"
     local discovery_json="$2"
     
-    echo "[Discovery] 💾 Saving to database for LSSN=$lssn..." >&2
+    # echo "[Discovery] 💾 Saving to database for LSSN=$lssn..." >&2
     _log_to_kvs "DB_SAVE_START" "$lssn" "RUNNING" "Starting database save operations"
     
     # Step 1: Server Info (tLSvr)
@@ -427,7 +427,7 @@ _save_discovery_to_db() {
     _log_to_kvs "DB_GENERATE_ADVICE" "$lssn" "SUCCESS" "Advice generation completed"
     
     _log_to_kvs "DB_SAVE_COMPLETE" "$lssn" "SUCCESS" "All database operations completed successfully"
-    echo "[Discovery] ✅ Database save completed for LSSN=$lssn" >&2
+    # echo "[Discovery] ✅ Database save completed for LSSN=$lssn" >&2
     return 0
 }
 
@@ -601,7 +601,7 @@ _generate_advice() {
     # _api_call "GenerateAdvicebyAK" "{\"lssn\":$lssn}"
     
     _log_to_kvs "ADVICE_GENERATION" "$lssn" "SUCCESS" "Advice generation completed (TODO: actual implementation)"
-    echo "[Discovery] ℹ️  Advice generation skipped (optional)" >&2
+    # echo "[Discovery] ℹ️  Advice generation skipped (optional)" >&2
     return 0
 }
 
