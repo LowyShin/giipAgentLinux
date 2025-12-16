@@ -148,20 +148,30 @@ check_mssql_tools() {
 		return 0
 	fi
 	
-	log_message "INFO" "sqlcmd not found, attempting to install mssql-tools..."
-	
 	# Detect OS
 	local uname=`uname -a | awk '{print $1}'`
 	
 	if [ "${uname}" = "Linux" ]; then
 		if [ -f /etc/redhat-release ]; then
 			# RHEL/CentOS
+			# Check if already installed via rpm to avoid yum spam
+			if rpm -q mssql-tools >/dev/null 2>&1; then
+				# Installed but not in path?
+				if [ -d "/opt/mssql-tools/bin" ]; then
+					export PATH="$PATH:/opt/mssql-tools/bin"
+					if command -v sqlcmd >/dev/null 2>&1; then
+						return 0
+					fi
+				fi
+			fi
+
+			log_message "INFO" "sqlcmd not found, attempting to install mssql-tools..."
+			
 			curl https://packages.microsoft.com/config/rhel/7/prod.repo > /etc/yum.repos.d/msprod.repo
 			yum remove -y unixODBC-utf16 unixODBC-utf16-devel
 			ACCEPT_EULA=Y yum install -y mssql-tools unixODBC-devel
 		elif [ -f /etc/lsb-release ] || [ -f /etc/debian_version ]; then
-			# Ubuntu/Debian logic could correspond here (omitted for brevity unless requested)
-			# For now just RHEL/CentOS focus based on cctrank03 context
+			# Ubuntu/Debian logic omitted
 			:
 		fi
 	fi
