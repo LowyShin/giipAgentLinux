@@ -47,12 +47,12 @@ collect_mssql_data() {
     # 2. Check Prerequisites
     if ! command -v sqlcmd >/dev/null 2>&1; then
         # Use simple return to avoid spamming logs if sqlcmd is fundamentally missing
-        # log_message "WARN" "[MSSQL] sqlcmd not found. Skipping SQL monitoring."
+        log_message "WARN" "[MSSQL] sqlcmd not found. Skipping SQL monitoring."
         return 0
     fi
     
     if [ -z "$SqlConnectionString" ]; then
-        # log_message "WARN" "[MSSQL] SqlConnectionString not defined in config. Skipping."
+        log_message "WARN" "[MSSQL] SqlConnectionString not defined in config. Skipping."
         return 0
     fi
     
