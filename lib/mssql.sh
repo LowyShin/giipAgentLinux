@@ -130,65 +130,70 @@ except Exception as e:
     echo "[MSSQL] ✅ Found $target_count MSSQL target(s). Starting collection..." >&2
     
     # 5. Loop through targets and collect
-    while IFS= read -r line || [ -n "$line" ]; do
-        if [ -z "$line" ]; then continue; fi
-        
-        local mdb_id=$(echo "$line" | cut -d'|' -f1)
-        local db_host=$(echo "$line" | cut -d'|' -f2)
-        local db_port=$(echo "$line" | cut -d'|' -f3)
-        local db_user=$(echo "$line" | cut -d'|' -f4)
-        local db_pass=$(echo "$line" | cut -d'|' -f5)
-        
-        echo "[MSSQL] ⏳ Processing ${db_host}:${db_port}..." >&2
-        
-        # Construct Query
-        local query="
-        SET NOCOUNT ON;
-        SELECT
-            s.host_name,
-            COUNT(*) as sessions,
-            (
-                SELECT
-                    s2.login_name,
-                    r.status,
-                    r.cpu_time,
-                    r.reads,
-                    r.writes,
-                    r.logical_reads,
-                    r.start_time,
-                    r.command,
-                    t.text as query_text
-                FROM sys.dm_exec_requests r
-                JOIN sys.dm_exec_sessions s2 ON r.session_id = s2.session_id
-                OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t
-                WHERE s2.host_name = s.host_name AND s2.is_user_process = 1
-                FOR JSON PATH
-            ) as queries
-        FROM sys.dm_exec_sessions s
-        WHERE s.is_user_process = 1
-        GROUP BY s.host_name
-        FOR JSON PATH;
-        "
-        
-        # Execute sqlcmd
-        local json_output
-        if ! json_output=$(sqlcmd -S "${db_host},${db_port}" -U "$db_user" -P "$db_pass" -y 0 -Q "$query" -b -t 5 2>/dev/null); then
-            echo "[MSSQL] ❌ Connection failed or query timeout for ${db_host}" >&2
-            log_message "WARN" "[MSSQL] Failed to connect/query ${db_host}"
-            continue
-        fi
-        
-        json_output=$(echo "$json_output" | tr -d '\r\n')
-        if [ -z "$json_output" ]; then json_output="[]"; fi
-        
-        local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-        local hostname=$(hostname)
-        local payload="{\"collected_at\":\"$timestamp\",\"collector_host\":\"$hostname\",\"sql_server\":\"${db_host}\",\"hosts\":$json_output}"
-        
-        kvs_put "lssn" "${lssn}" "sqlnetinv" "$payload" >/dev/null 2>&1
-        echo "[MSSQL] ✅ Data collected and uploaded for ${db_host}" >&2
-        
-    done < "$mdb_targets_file"
+    # 5. Loop through targets and collect
+    # Use cat | while to avoid stdin interference from commands inside the loop
+    if [ -s "$mdb_targets_file" ]; then
+        cat "$mdb_targets_file" | while IFS= read -r line; do
+            if [ -z "$line" ]; then continue; fi
+            
+            local mdb_id=$(echo "$line" | cut -d'|' -f1)
+            local db_host=$(echo "$line" | cut -d'|' -f2)
+            local db_port=$(echo "$line" | cut -d'|' -f3)
+            local db_user=$(echo "$line" | cut -d'|' -f4)
+            local db_pass=$(echo "$line" | cut -d'|' -f5)
+            
+            echo "[MSSQL] ⏳ Processing ${db_host}:${db_port}..." >&2
+            
+            # Construct Query
+            local query="
+            SET NOCOUNT ON;
+            SELECT
+                s.host_name,
+                COUNT(*) as sessions,
+                (
+                    SELECT
+                        s2.login_name,
+                        r.status,
+                        r.cpu_time,
+                        r.reads,
+                        r.writes,
+                        r.logical_reads,
+                        r.start_time,
+                        r.command,
+                        t.text as query_text
+                    FROM sys.dm_exec_requests r
+                    JOIN sys.dm_exec_sessions s2 ON r.session_id = s2.session_id
+                    OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t
+                    WHERE s2.host_name = s.host_name AND s2.is_user_process = 1
+                    FOR JSON PATH
+                ) as queries
+            FROM sys.dm_exec_sessions s
+            WHERE s.is_user_process = 1
+            GROUP BY s.host_name
+            FOR JSON PATH;
+            "
+            
+            # Execute sqlcmd
+            # Explicitly close stdin for sqlcmd just in case
+            local json_output
+            if ! json_output=$(sqlcmd -S "${db_host},${db_port}" -U "$db_user" -P "$db_pass" -y 0 -Q "$query" -b -t 5 < /dev/null 2>/dev/null); then
+                echo "[MSSQL] ❌ Connection failed or query timeout for ${db_host}" >&2
+                log_message "WARN" "[MSSQL] Failed to connect/query ${db_host}"
+                continue
+            fi
+            
+            json_output=$(echo "$json_output" | tr -d '\r\n')
+            if [ -z "$json_output" ]; then json_output="[]"; fi
+            
+            local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+            local hostname=$(hostname)
+            local payload="{\"collected_at\":\"$timestamp\",\"collector_host\":\"$hostname\",\"sql_server\":\"${db_host}\",\"hosts\":$json_output}"
+            
+            kvs_put "lssn" "${lssn}" "sqlnetinv" "$payload" >/dev/null 2>&1
+            echo "[MSSQL] ✅ Data collected and uploaded for ${db_host}" >&2
+            
+        done
+    fi
     
     rm -f "$mdb_targets_file"
     
