@@ -11,8 +11,28 @@ sv="3.00"
 # {{today}} : Replace today to "YYYYMMDD"
 
 # ============================================================================
-# Initialize Script Paths
+# Self-Cleanup / Singleton Logic
 # ============================================================================
+# Automatically kill previous instances of this specific script to prevent duplicates/loops.
+# We match by the absolute path of the script to avoid killing other agents.
+
+CURRENT_PID=$$
+SCRIPT_ABS_PATH=$(readlink -f "${BASH_SOURCE[0]}")
+
+# Find PIDs of processes running this exact script, excluding the current one and grep/pgrep itself
+# Using pgrep -f is risky if not specific enough, so we filter by full path.
+EXISTING_PIDS=$(pgrep -f "bash $SCRIPT_ABS_PATH" | grep -v "$CURRENT_PID")
+
+if [ -n "$EXISTING_PIDS" ]; then
+    echo "⚠️  Found previous instances of $SCRIPT_ABS_PATH. Cleaning up..."
+    for pid in $EXISTING_PIDS; do
+        if kill -0 "$pid" 2>/dev/null; then
+            echo "Killing stale PID: $pid"
+            kill -9 "$pid" 2>/dev/null
+        fi
+    done
+fi
+
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 LIB_DIR="${SCRIPT_DIR}/lib"
