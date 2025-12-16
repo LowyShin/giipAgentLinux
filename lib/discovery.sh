@@ -214,7 +214,7 @@ _collect_remote_data() {
     if ! _scp_file "$ssh_user" "$ssh_host" "$ssh_port" "$ssh_key" \
         "$DISCOVERY_SCRIPT_LOCAL" "/tmp/auto-discover-linux.sh"; then
         local error_msg="Failed to transfer discovery script to $ssh_host"
-        echo "[Discovery] ❌ Error: $error_msg" >&2
+        # echo "[Discovery] ❌ Error: $error_msg" >&2
         _log_to_kvs "REMOTE_TRANSFER" "$lssn" "ERROR" "$error_msg"
         return 1
     fi
@@ -227,7 +227,7 @@ _collect_remote_data() {
     if ! discovery_json=$(_ssh_exec "$ssh_user" "$ssh_host" "$ssh_port" "$ssh_key" \
         "bash /tmp/auto-discover-linux.sh 2>&1" 2>&1); then
         local error_msg="Failed to execute discovery script on $ssh_host"
-        echo "[Discovery] ❌ Error: $error_msg" >&2
+        # echo "[Discovery] ❌ Error: $error_msg" >&2
         _log_to_kvs "REMOTE_EXECUTE_METHOD2" "$lssn" "ERROR" "$error_msg: $discovery_json"
         return 1
     fi
@@ -237,8 +237,8 @@ _collect_remote_data() {
     # Step 2: JSON 검증
     if ! echo "$discovery_json" | python3 -m json.tool >/dev/null 2>&1; then
         local error_msg="Invalid JSON from remote discovery script (method 2)"
-        echo "[Discovery] ❌ Error: $error_msg" >&2
-        echo "[Discovery] Debug: ${discovery_json:0:500}" >&2
+        # echo "[Discovery] ❌ Error: $error_msg" >&2
+        # echo "[Discovery] Debug: ${discovery_json:0:500}" >&2
         _log_to_kvs "REMOTE_JSON_VALIDATION_METHOD2" "$lssn" "ERROR" "$error_msg, First 500 chars: ${discovery_json:0:500}"
         return 1
     fi
