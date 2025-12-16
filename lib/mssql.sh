@@ -43,6 +43,7 @@ collect_mssql_data() {
 
     # 1. Check interval
     if ! should_run_mssql "$lssn"; then
+        # echo "[MSSQL] ⏳ Skipping due to interval (not due yet)" >&2
         return 0
     fi
     
@@ -64,7 +65,10 @@ collect_mssql_data() {
     curl -s -X POST "${api_url}" \
         -d "text=${text}&token=${sk}&jsondata=${jsondata}" \
         -H "Content-Type: application/x-www-form-urlencoded" \
-        --insecure -o "$mdb_list_file" 2>&1
+        --insecure \
+        --connect-timeout 10 \
+        --max-time 30 \
+        -o "$mdb_list_file" 2>&1
         
     if [ ! -s "$mdb_list_file" ]; then
         rm -f "$mdb_list_file"
