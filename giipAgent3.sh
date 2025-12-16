@@ -19,18 +19,12 @@ sv="3.00"
 CURRENT_PID=$$
 SCRIPT_ABS_PATH=$(readlink -f "${BASH_SOURCE[0]}")
 
-# Find PIDs of processes running this exact script, excluding the current one and grep/pgrep itself
-# Using pgrep -f is risky if not specific enough, so we filter by full path.
-EXISTING_PIDS=$(pgrep -f "bash $SCRIPT_ABS_PATH" | grep -v "$CURRENT_PID")
+# Strict Singleton Pattern: If another instance is running, WE EXIT.
+# Do NOT kill the existing process, as that causes race conditions and infinite restart loops.
 
-if [ -n "$EXISTING_PIDS" ]; then
-    echo "⚠️  Found previous instances of $SCRIPT_ABS_PATH. Cleaning up..."
-    for pid in $EXISTING_PIDS; do
-        if kill -0 "$pid" 2>/dev/null; then
-            echo "Killing stale PID: $pid"
-            kill -9 "$pid" 2>/dev/null
-        fi
-    done
+if pgrep -f "bash $SCRIPT_ABS_PATH" | grep -v "$CURRENT_PID" > /dev/null; then
+    echo "⚠️  [$(date)] Another instance of $SCRIPT_ABS_PATH is already running. Exiting to prevent overlap."
+    exit 0
 fi
 
 
