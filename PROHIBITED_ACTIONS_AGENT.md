@@ -1,45 +1,49 @@
-# GIIP Agent Development - Safety Checks & Prohibited Actions
-> **WARNING**: READ THIS BEFORE MAKING ANY CHANGES TO AGENT SCRIPTS.
+[PROHIBITED_ACTIONS.md](PROHIBITED_ACTIONS.md)
+# GIIP Agent 개발 절대 금지 사항 (2025-12-16)
 
-## 1. Do Not Create Infinite Loops
-*   **Cause**: Disabling interval checks (`should_run_...`) during debugging and forgetting to restore them.
-*   **Consequence**: The agent runs continuously in a tight loop, spamming the server with requests (DDOS-like behavior), filling up disk logs, and consuming 100% CPU.
-*   **Rule**: **NEVER** disable interval checks in production code. If you must for local testing, adding a "TODO: REVERT" comment is not enough—you must verify the diff before committing.
-*   **Safety Net**: Always ensure your loop has a `sleep` or a hard break condition.
+> **경고**: Agent 스크립트를 수정하기 전에 이 문서를 반드시 읽으십시오.
 
-## 2. Do Not Use Unsafe Shell Iterations
-*   **Cause**: Iterating over a variable using `<<< "$var"` or command substitution without proper quoting or handling of empty/multiline strings.
-*   **Consequence**: If the variable is malformed, the loop might spin infinitely or execute commands with empty arguments.
-*   **Rule**: Use temporary files for complex iterations or `while read` loops with strict IFS handling.
+이 문서는 기존 `PROHIBITED_ACTIONS.md`의 연장선상에 있으며, **Agent 개발 시** 발생할 수 있는 치명적인 실수들을 방지하기 위해 작성되었습니다.
+
+## 1. 무한 루프 생성 금지
+*   **원인**: 디버깅을 위해 `should_run_...`과 같은 **실행 주기 체크(Interval Check)를 비활성화**하고, 배포 시 이를 복구하지 않음.
+*   **결과**: 에이전트가 밀리초 단위로 무한히 실행되어 서버에 수만 건의 요청을 보내고(DDoS 유사 행위), 로그 파일로 디스크를 가득 채우며, CPU를 100% 점유함.
+*   **규칙**: **프로덕션 코드에서는 절대로 주기 체크를 비활성화하지 마십시오.** 로컬 테스트를 위해 부득이하게 주석 처리했다면, 커밋 전에 반드시 `git diff`를 통해 확인하고 원복하십시오.
+*   **안전장치**: 루프 내에는 반드시 `sleep`을 넣거나 확실한 종료 조건(break)이 있어야 합니다.
+
+## 2. 불안전한 쉘 반복문 사용 금지
+*   **원인**: 변수에 담긴 내용을 `<<< "$var"`나 명령어 치환(`$(...)`)을 통해 반복문으로 직접 밀어 넣음.
+*   **결과**: 변수 내용이 비어있거나, 개행 문자가 꼬였을 때 루프가 멈추지 않거나, 엉뚱한 명령어를 빈 인자로 실행하게 됨.
+*   **규칙**: 복잡한 데이터나 여러 줄의 데이터를 처리할 때는 **임시 파일**을 사용하십시오.
     ```bash
-    # BAD
+    # [나쁜 예]
     while read line; do ... done <<< "$(some_cmd)"
 
-    # GOOD
+    # [좋은 예]
     some_cmd > /tmp/tempfile
     while IFS= read -r line; do ... done < /tmp/tempfile
     rm /tmp/tempfile
     ```
 
-## 3. Do Not Leave Debug Logs Dumped to Stderr
-*   **Cause**: Using `echo "..." >&2` for debugging connectivity or variables.
-*   **Consequence**: Fills up the cron/system logs or console buffer immediately. If inside a tight loop (see #1), this crashes the logging daemon.
-*   **Rule**: Use the standard `log_message` function which handles log rotation and levels. Remove or comment out direct `echo` debugging before pushing.
+## 3. 디버그 로그를 Stderr로 남기지 말 것
+*   **원인**: 연결 상태나 변수 확인을 위해 `echo "..." >&2`를 코드 곳곳에 방치함.
+*   **결과**: 크론탭이나 시스템 로그에 불필요한 텍스트가 쌓이고, 무한 루프 발생 시 로그 데몬을 폭주시킴.
+*   **규칙**: 표준 `log_message` 함수를 사용하십시오. 커밋 전에는 반드시 임시 `echo` 문을 삭제하거나 주석 처리하십시오.
 
-## 4. Do Not Assume APIs Always Respond
-*   **Cause**: Using `curl` or `wget` without timeouts.
-*   **Consequence**: If the server hangs or drops packets (firewall), the agent process hangs indefinitely. These "zombie" processes accumulate over time (e.g., if triggered by cron), exhausting system resources (PID/FD limits).
-*   **Rule**: Always use timeouts.
+## 4. API가 항상 응답한다고 가정하지 말 것
+*   **원인**: `curl`이나 `wget` 사용 시 타임아웃 옵션을 주지 않음.
+*   **결과**: 서버 장애나 방화벽 문제로 응답이 없을 때, 에이전트 프로세스가 영원히 대기(Hang) 상태로 남음. 이런 "좀비" 프로세스가 쌓이면 시스템 리소스가 고갈됨.
+*   **규칙**: 반드시 타임아웃을 설정하십시오.
     ```bash
     curl --connect-timeout 10 --max-time 30 ...
     ```
 
-## 5. Implement Self-Cleanup (Singleton Pattern)
-*   **Cause**: Re-running the agent while a previous instance is stuck.
-*   **Consequence**: Multiple agents fighting for resources, race conditions on log/state files, and double reporting.
-*   **Rule**: The script MUST check for its own existing PIDs and terminate them on startup.
+## 5. 자가 정리(Self-Cleanup) 로직 필수 구현
+*   **원인**: 이전 프로세스가 멈춰있는데 새로운 프로세스가 또 실행됨.
+*   **결과**: 여러 에이전트가 동시에 돌면서 로그 파일에 락을 걸거나, 데이터를 중복 전송함.
+*   **규칙**: 스크립트 시작 부분에서 **자신의 오래된 PID를 찾아 종료**하는 로직을 반드시 넣으십시오.
     ```bash
-    # Example logic in giipAgent3.sh
+    # giipAgent3.sh 예시
     EXISTING_PIDS=$(pgrep -f "bash $SCRIPT_ABS_PATH" | grep -v "$CURRENT_PID")
     if [ -n "$EXISTING_PIDS" ]; then kill -9 $EXISTING_PIDS; fi
     ```
