@@ -39,6 +39,8 @@ _parse_conn_string() {
 collect_mssql_data() {
     local lssn="$1"
     
+    log_message "INFO" "[MSSQL] Starting MSSQL data collection check for LSSN=$lssn"
+
     # 1. Check interval
     if ! should_run_mssql "$lssn"; then
         return 0
@@ -49,6 +51,17 @@ collect_mssql_data() {
         # Use simple return to avoid spamming logs if sqlcmd is fundamentally missing
         log_message "WARN" "[MSSQL] sqlcmd not found. Skipping SQL monitoring."
         return 0
+    fi
+    
+    # Try to manually parse SqlConnectionString if missing (Bash 'source' might fail on semicolons without quotes)
+    if [ -z "$SqlConnectionString" ]; then
+        if [ -f "$CONFIG_FILE" ]; then
+            # Extract line starting with SqlConnectionString, remove comments, get value
+            # Handle potential quoting
+            local raw_conn=$(grep "^SqlConnectionString" "$CONFIG_FILE" | head -n 1 | cut -d'=' -f2-)
+            # Remove leading/trailing quotes and whitespace
+            SqlConnectionString=$(echo "$raw_conn" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^"//' -e 's/"$//' -e "s/^'//" -e "s/'$//")
+        fi
     fi
     
     if [ -z "$SqlConnectionString" ]; then
