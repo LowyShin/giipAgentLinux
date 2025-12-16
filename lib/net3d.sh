@@ -56,16 +56,36 @@ collect_net3d_data() {
     local net_json="{}"
     local source_cmd=""
     
-    # Try ss first (faster, modern), then netstat
+    # Try ss first (faster, modern)
     if command -v ss >/dev/null 2>&1; then
         source_cmd="ss"
         net_json=$(_collect_with_ss "$lssn" "$python_cmd")
-    elif command -v netstat >/dev/null 2>&1; then
-        source_cmd="netstat"
-        net_json=$(_collect_with_netstat "$lssn" "$python_cmd")
-    else
-        log_message "WARN" "[Net3D] Neither 'ss' nor 'netstat' found. Skipping."
-        return 1
+        
+        # Check if we got any connections
+        # We count occurrences of "local_ip" to estimate connection count
+        local conn_count=$(echo "$net_json" | grep -o "\"local_ip\"" | wc -l)
+        
+        if [ "$conn_count" -eq 0 ]; then
+             log_message "WARN" "[Net3D] 'ss' command yielded 0 connections. Attempting fallback to 'netstat'."
+             net_json="" # Clear to trigger fallback
+        fi
+    fi
+    
+    # Fallback to netstat if ss was skipped, missing, or returned 0 connections
+    if [ -z "$net_json" ]; then
+        if command -v netstat >/dev/null 2>&1; then
+            source_cmd="netstat"
+            net_json=$(_collect_with_netstat "$lssn" "$python_cmd")
+        else
+            # Only log warning if we didn't try ss or ss was also missing
+            if [ "$source_cmd" != "ss" ]; then
+                log_message "WARN" "[Net3D] Neither 'ss' nor 'netstat' found. Skipping."
+                return 1
+            fi
+            # If ss was tried (and emptiness caused fallthrough) but netstat missing
+            log_message "WARN" "[Net3D] 'ss' returned 0 connections and 'netstat' is not available."
+            return 1
+        fi
     fi
     
     # 3. Validation & Count Logging
@@ -146,7 +166,7 @@ try:
             
         state = parts[0]
         # Filter for relevant states
-        if state not in ['ESTABLISHED', 'LISTEN', 'TIME_WAIT', 'CLOSE_WAIT', 'SYN_SENT', 'SYN_RECV']:
+        if state not in ['ESTABLISHED', 'ESTAB', 'LISTEN', 'TIME_WAIT', 'CLOSE_WAIT', 'SYN_SENT', 'SYN_RECV']:
             continue
             
         # ss columns can vary, but usually: State Recv-Q Send-Q Local Peer ...
