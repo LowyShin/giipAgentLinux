@@ -171,3 +171,29 @@ for line in sys.stdin:
 print(json.dumps(sessions, ensure_ascii=False))
 ' 2>/dev/null
 }
+
+# ============================================================================
+# Main Helper (Interactive / Standalone Mode)
+# allows executing this script directly:
+# ./net3d_db.sh mysql 1.2.3.4 3306 root pass db
+# ============================================================================
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    TYPE=$1
+    shift
+    
+    case "$TYPE" in
+        mysql)
+            collect_net3d_mysql "$@"
+            ;;
+        postgresql)
+            collect_net3d_postgresql "$@"
+            ;;
+        mssql)
+            collect_net3d_mssql "$@"
+            ;;
+        *)
+            echo "Usage: $0 [mysql|postgresql|mssql] [host] [port] [user] [password] [db]"
+            exit 1
+            ;;
+    esac
+fi
