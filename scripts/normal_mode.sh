@@ -155,6 +155,14 @@ if [ -f "${LIB_DIR}/discovery.sh" ]; then
 	fi
 fi
 
+# Load Net3D module (Network Topology)
+# Runs every 5 minutes to collect netstat/ss data
+if [ -f "${LIB_DIR}/net3d.sh" ]; then
+	. "${LIB_DIR}/net3d.sh"
+	
+	collect_net3d_data "${lssn}"
+fi
+
 # ============================================================================
 # Load Normal Mode Functions
 # ============================================================================

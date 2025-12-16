@@ -244,6 +244,14 @@ if [ -f "${LIB_DIR}/discovery.sh" ]; then
 	fi
 fi
 
+# Load Net3D module (Network Topology)
+if [ -f "${LIB_DIR}/net3d.sh" ]; then
+	. "${LIB_DIR}/net3d.sh"
+	
+	# Run Net3D collection (5 min interval handled inside)
+	collect_net3d_data "${lssn}"
+fi
+
 # ============================================================================
 # Mode Selection: Gateway or Normal
 # ============================================================================
