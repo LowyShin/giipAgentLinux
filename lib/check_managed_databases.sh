@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/dpa_mysql.sh"
 source "${SCRIPT_DIR}/dpa_mssql.sh"
 source "${SCRIPT_DIR}/dpa_postgresql.sh"
+source "${SCRIPT_DIR}/net3d_db.sh"
 source "${SCRIPT_DIR}/http_health_check.sh"
 
 # Function: Check managed databases and update health status
@@ -200,6 +201,14 @@ print(' '.join(sorted(db_types)))
 							logdt=$(date '+%Y%m%d%H%M%S')
 							echo "[${logdt}] [Gateway]   ✓ No slow queries detected" >> $LogFileName
 						fi
+
+						# Net3D Active Sessions Collection (For Topology)
+						logdt=$(date '+%Y%m%d%H%M%S')
+						echo "[${logdt}] [Gateway]   🕸️ Collecting MySQL Net3D sessions..." >> $LogFileName
+						local net3d_json=$(collect_net3d_mysql "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
+						if [ -n "$net3d_json" ] && [ "$net3d_json" != "[]" ]; then
+							kvs_put "database" "$mdb_id" "db_connections" "$net3d_json"
+						fi
 					elif [ $mysql_exit -eq 124 ]; then
 						check_status="error"
 						check_message="Connection timeout (5s)"
@@ -266,6 +275,14 @@ print(' '.join(sorted(db_types)))
 							logdt=$(date '+%Y%m%d%H%M%S')
 							echo "[${logdt}] [Gateway]   ✓ No slow queries detected" >> $LogFileName
 						fi
+
+						# Net3D Active Sessions Collection (For Topology)
+						logdt=$(date '+%Y%m%d%H%M%S')
+						echo "[${logdt}] [Gateway]   🕸️ Collecting PostgreSQL Net3D sessions..." >> $LogFileName
+						local net3d_json=$(collect_net3d_postgresql "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
+						if [ -n "$net3d_json" ] && [ "$net3d_json" != "[]" ]; then
+							kvs_put "database" "$mdb_id" "db_connections" "$net3d_json"
+						fi
 					elif [ $psql_exit -eq 124 ]; then
 						check_status="error"
 						check_message="Connection timeout (5s)"
@@ -328,6 +345,14 @@ print(' '.join(sorted(db_types)))
 						else
 							logdt=$(date '+%Y%m%d%H%M%S')
 							echo "[${logdt}] [Gateway]   ✓ No slow queries detected" >> $LogFileName
+						fi
+
+						# Net3D Active Sessions Collection (For Topology)
+						logdt=$(date '+%Y%m%d%H%M%S')
+						echo "[${logdt}] [Gateway]   🕸️ Collecting MSSQL Net3D sessions..." >> $LogFileName
+						local net3d_json=$(collect_net3d_mssql "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
+						if [ -n "$net3d_json" ] && [ "$net3d_json" != "[]" ]; then
+							kvs_put "database" "$mdb_id" "db_connections" "$net3d_json"
 						fi
 					elif [ $mssql_exit -eq 124 ]; then
 						check_status="error"
