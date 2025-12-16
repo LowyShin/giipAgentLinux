@@ -142,6 +142,44 @@ check_dos2unix() {
 	return $?
 }
 
+# Function: Check and install mssql-tools
+check_mssql_tools() {
+	if command -v sqlcmd >/dev/null 2>&1; then
+		return 0
+	fi
+	
+	log_message "INFO" "sqlcmd not found, attempting to install mssql-tools..."
+	
+	# Detect OS
+	local uname=`uname -a | awk '{print $1}'`
+	
+	if [ "${uname}" = "Linux" ]; then
+		if [ -f /etc/redhat-release ]; then
+			# RHEL/CentOS
+			curl https://packages.microsoft.com/config/rhel/7/prod.repo > /etc/yum.repos.d/msprod.repo
+			yum remove -y unixODBC-utf16 unixODBC-utf16-devel
+			ACCEPT_EULA=Y yum install -y mssql-tools unixODBC-devel
+		elif [ -f /etc/lsb-release ] || [ -f /etc/debian_version ]; then
+			# Ubuntu/Debian logic could correspond here (omitted for brevity unless requested)
+			# For now just RHEL/CentOS focus based on cctrank03 context
+			:
+		fi
+	fi
+	
+	# Add to PATH
+	if [ -d "/opt/mssql-tools/bin" ]; then
+		export PATH="$PATH:/opt/mssql-tools/bin"
+	fi
+	
+	if command -v sqlcmd >/dev/null 2>&1; then
+		log_message "INFO" "mssql-tools installed successfully"
+		return 0
+	else
+		log_message "WARN" "Failed to install mssql-tools automatically"
+		return 1
+	fi
+}
+
 # Function: Detect OS information
 detect_os() {
 	local uname=`uname -a | awk '{print $1}'`
@@ -320,6 +358,7 @@ log_auto_discover_validation() {
 export -f load_config
 export -f log_message
 export -f check_dos2unix
+export -f check_mssql_tools
 export -f detect_os
 export -f error_handler
 export -f init_log_dir

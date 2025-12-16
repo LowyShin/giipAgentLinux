@@ -198,7 +198,10 @@ log_message "INFO" "Git Commit: ${GIT_COMMIT}, File Modified: ${FILE_MODIFIED}"
 # Check Dependencies
 # ============================================================================
 
+
 check_dos2unix
+check_mssql_tools
+
 
 # ============================================================================
 # Handle Server Registration (LSSN=0)
