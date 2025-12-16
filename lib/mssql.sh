@@ -43,12 +43,13 @@ collect_mssql_data() {
 
     # 1. Check interval
     if ! should_run_mssql "$lssn"; then
-        # echo "[MSSQL] ⏳ Skipping due to interval (not due yet)" >&2
+        echo "[MSSQL] ⏳ Skipping due to interval (not due yet)" >&2
         return 0
     fi
     
     # 2. Check Prerequisites (mssql-tools)
     if ! command -v sqlcmd >/dev/null 2>&1; then
+        echo "[MSSQL] ⚠️  sqlcmd not found. Skipping." >&2
         return 0
     fi
     
@@ -56,6 +57,8 @@ collect_mssql_data() {
     local api_url=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
     local mdb_list_file="/tmp/giip_mssql_list_${lssn}.json"
     local mdb_targets_file="/tmp/giip_mssql_targets_${lssn}.txt"
+    
+    echo "[MSSQL] 📡 Fetching DB list from API..." >&2
     
     # Prepare API payload
     local jsondata="{\"lssn\":${lssn}}"
@@ -71,6 +74,7 @@ collect_mssql_data() {
         -o "$mdb_list_file" 2>&1
         
     if [ ! -s "$mdb_list_file" ]; then
+        echo "[MSSQL] ⚠️  Failed to fetch DB list (empty response or timeout)" >&2
         rm -f "$mdb_list_file"
         return 1
     fi
@@ -117,9 +121,13 @@ except Exception as e:
     rm -f "$mdb_list_file"
     
     if [ ! -s "$mdb_targets_file" ]; then
+        echo "[MSSQL] ℹ️  No registered MSSQL databases found." >&2
         rm -f "$mdb_targets_file"
         return 0
     fi
+    
+    local target_count=$(wc -l < "$mdb_targets_file")
+    echo "[MSSQL] ✅ Found $target_count MSSQL target(s). Starting collection..." >&2
     
     # 5. Loop through targets and collect
     while IFS= read -r line || [ -n "$line" ]; do
@@ -130,6 +138,8 @@ except Exception as e:
         local db_port=$(echo "$line" | cut -d'|' -f3)
         local db_user=$(echo "$line" | cut -d'|' -f4)
         local db_pass=$(echo "$line" | cut -d'|' -f5)
+        
+        echo "[MSSQL] ⏳ Processing ${db_host}:${db_port}..." >&2
         
         # Construct Query
         local query="
@@ -163,6 +173,7 @@ except Exception as e:
         # Execute sqlcmd
         local json_output
         if ! json_output=$(sqlcmd -S "${db_host},${db_port}" -U "$db_user" -P "$db_pass" -y 0 -Q "$query" -b -t 5 2>/dev/null); then
+            echo "[MSSQL] ❌ Connection failed or query timeout for ${db_host}" >&2
             log_message "WARN" "[MSSQL] Failed to connect/query ${db_host}"
             continue
         fi
@@ -175,6 +186,7 @@ except Exception as e:
         local payload="{\"collected_at\":\"$timestamp\",\"collector_host\":\"$hostname\",\"sql_server\":\"${db_host}\",\"hosts\":$json_output}"
         
         kvs_put "lssn" "${lssn}" "sqlnetinv" "$payload" >/dev/null 2>&1
+        echo "[MSSQL] ✅ Data collected and uploaded for ${db_host}" >&2
         
     done < "$mdb_targets_file"
     
@@ -182,6 +194,7 @@ except Exception as e:
     
     # Update state file
     echo "$(date +%s)" > "${MSSQL_STATE_FILE}_${lssn}"
+    echo "[MSSQL] Cycle completed." >&2
     return 0
 }
 
