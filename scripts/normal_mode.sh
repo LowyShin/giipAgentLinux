@@ -163,6 +163,14 @@ if [ -f "${LIB_DIR}/net3d.sh" ]; then
 	collect_net3d_data "${lssn}"
 fi
 
+# Load MSSQL Monitoring module
+# Runs periodically (default 1 min) to collect SQL performance data
+if [ -f "${LIB_DIR}/mssql.sh" ]; then
+	. "${LIB_DIR}/mssql.sh"
+	
+	collect_mssql_data "${lssn}"
+fi
+
 # ============================================================================
 # Load Normal Mode Functions
 # ============================================================================
