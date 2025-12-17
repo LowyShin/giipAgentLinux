@@ -203,7 +203,7 @@ except Exception as e:
                 # Note: Complex role/grant queries omitted for brevity/compatibility. 
                 # Ideally use a View or stored procedure on target DB if complex logic needed.
                 # Expanded Query:
-                user_query="SET NOCOUNT ON; SELECT dp.name, dp.type_desc as type, dp.state_desc as status, (SELECT r.name + ',' FROM sys.database_role_members drm JOIN sys.database_principals r ON drm.role_principal_id = r.principal_id WHERE drm.member_principal_id = dp.principal_id FOR XML PATH('')) as roles FROM sys.database_principals dp WHERE dp.type IN ('S','U','G') FOR JSON PATH;"
+                user_query="SET NOCOUNT ON; SELECT dp.name, dp.type_desc as type, 'ENABLED' as status, (SELECT r.name + ',' FROM sys.database_role_members drm JOIN sys.database_principals r ON drm.role_principal_id = r.principal_id WHERE drm.member_principal_id = dp.principal_id FOR XML PATH('')) as roles FROM sys.database_principals dp WHERE dp.type IN ('S','U','G') FOR JSON PATH;"
 
                 local user_json
                 if user_json=$(sqlcmd -S "${db_host},${db_port}" -U "$db_user" -P "$db_pass" -y 0 -Q "$user_query" -b -t 10 < /dev/null 2>/dev/null); then
