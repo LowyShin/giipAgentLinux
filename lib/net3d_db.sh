@@ -135,13 +135,50 @@ collect_net3d_mssql() {
         return 1
     fi
 
-    # Using generic sys.dm_exec_sessions
-    local query="SET NOCOUNT ON; SELECT s.client_net_address, s.program_name, s.login_name, s.status, r.cpu_time, t.text FROM sys.dm_exec_sessions s LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t WHERE s.is_user_process = 1 AND s.status = 'running'"
+    # Enhanced query to capture Running Queries OR Open Transactions
+    # Columns: client_net_address, program_name, login_name, status, cpu_time, sql_text, is_open_tran, duration, tran_state
+    local query="SET NOCOUNT ON; 
+    SELECT 
+        ISNULL(s.client_net_address, '') AS client_net_address,
+        ISNULL(s.program_name, '') AS program_name,
+        ISNULL(s.login_name, '') AS login_name,
+        s.status,
+        ISNULL(r.cpu_time, 0) AS cpu_time,
+        ISNULL(REPLACE(REPLACE(t.text, CHAR(13), ' '), CHAR(10), ' '), '') AS sql_text,
+        CASE WHEN trans.session_id IS NOT NULL THEN 1 ELSE 0 END as is_open_tran,
+        ISNULL(DATEDIFF(MINUTE, trans.transaction_begin_time, GETDATE()), 0) as tran_duration,
+        ISNULL(trans.transaction_state_desc, '') as tran_state
+    FROM sys.dm_exec_sessions s
+    LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id
+    OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t
+    LEFT JOIN (
+        SELECT
+            st.session_id,
+            t.transaction_begin_time,
+            CASE t.transaction_state
+                WHEN 0 THEN 'Not initialized'
+                WHEN 1 THEN 'Initialized'
+                WHEN 2 THEN 'Active'
+                WHEN 3 THEN 'Ended (Read-Only)'
+                WHEN 4 THEN 'Commit initiated'
+                WHEN 5 THEN 'Prepared'
+                WHEN 6 THEN 'Committed'
+                WHEN 7 THEN 'Rolling back'
+                WHEN 8 THEN 'Rolled back'
+            END AS transaction_state_desc
+        FROM sys.dm_tran_active_transactions t
+        INNER JOIN sys.dm_tran_session_transactions st ON t.transaction_id = st.transaction_id
+    ) trans ON s.session_id = trans.session_id
+    WHERE 
+        s.is_user_process = 1 
+        AND (s.status = 'running' OR trans.session_id IS NOT NULL)"
     
-    # sqlcmd output parsing is tricky due to fixed width. -W helps remove trailing spaces. -s works for separator.
-    # col_separator matches Tab
+    # Execute with sqlcmd
+    # -W: remove trailing spaces
+    # -s: separator (TAB)
+    # -h-1: no headers
     local result
-    result=$(timeout 5 sqlcmd -S "$host,$port" -U "$user" -P "$password" -d "$database" -W -s $'\t' -Q "$query" 2>/dev/null | sed '1,2d')
+    result=$(timeout 5 sqlcmd -S "$host,$port" -U "$user" -P "$password" -d "$database" -W -s $'\t' -h -1 -Q "$query" 2>/dev/null)
 
     if [ -z "$result" ]; then
         echo "[]"
@@ -157,15 +194,22 @@ for line in sys.stdin:
     if not line or "rows affected" in line: continue
     
     parts = line.split("\t")
-    # expected 6 fields
-    if len(parts) >= 4: # Allow missing sql/cpu
+    # Expected 9 columns
+    if len(parts) >= 1: 
+        # Safe extraction with defaults
+        def get(idx, default=""):
+            return parts[idx] if len(parts) > idx else default
+
         sessions.append({
-            "client_net_address": parts[0],
-            "program_name": parts[1] if len(parts)>1 else "",
-            "login_name": parts[2] if len(parts)>2 else "",
-            "status": parts[3] if len(parts)>3 else "unknown",
-            "cpu_load": int(parts[4]) if len(parts)>4 and parts[4].isdigit() else 0,
-            "last_sql": parts[5] if len(parts)>5 else ""
+            "client_net_address": get(0),
+            "program_name": get(1),
+            "login_name": get(2),
+            "status": get(3, "unknown"),
+            "cpu_load": int(get(4)) if get(4).isdigit() else 0,
+            "last_sql": get(5),
+            "is_open_tran": (get(6) == "1"),
+            "tran_duration": int(get(7)) if get(7).isdigit() else 0,
+            "tran_state": get(8)
         })
 
 print(json.dumps(sessions, ensure_ascii=False))
