@@ -112,7 +112,9 @@ try:
                 port = db.get('db_port', '1433')
                 user = db.get('db_user', '')
                 password = db.get('db_password', '')
-                out.write(f'{mdb_id}|{host}|{port}|{user}|{password}\n')
+                req = db.get('user_list_req', 0)
+                if req is None: req = 0
+                out.write(f'{mdb_id}|{host}|{port}|{user}|{password}|{req}\n')
 
 except Exception as e:
     sys.exit(1)
@@ -141,6 +143,7 @@ except Exception as e:
             local db_port=$(echo "$line" | cut -d'|' -f3)
             local db_user=$(echo "$line" | cut -d'|' -f4)
             local db_pass=$(echo "$line" | cut -d'|' -f5)
+            local user_list_req=$(echo "$line" | cut -d'|' -f6)
             
             echo "[MSSQL] ⏳ Processing ${db_host}:${db_port}..." >&2
             
@@ -191,6 +194,36 @@ except Exception as e:
             
             kvs_put "lssn" "${lssn}" "sqlnetinv" "$payload" >/dev/null 2>&1
             echo "[MSSQL] ✅ Data collected and uploaded for ${db_host}" >&2
+            
+            # --- User List Collection Trigger ---
+            if [ "$user_list_req" == "1" ]; then
+                echo "[MSSQL] 👤 Collecting User List for ${db_host}..." >&2
+                local user_query="SET NOCOUNT ON; SELECT name, type_desc as type, state_desc as status FROM sys.database_principals WHERE type IN ('S','U','G') FOR JSON PATH;"
+                
+                # Note: Complex role/grant queries omitted for brevity/compatibility. 
+                # Ideally use a View or stored procedure on target DB if complex logic needed.
+                # Expanded Query:
+                user_query="SET NOCOUNT ON; SELECT dp.name, dp.type_desc as type, dp.state_desc as status, (SELECT r.name + ',' FROM sys.database_role_members drm JOIN sys.database_principals r ON drm.role_principal_id = r.principal_id WHERE drm.member_principal_id = dp.principal_id FOR XML PATH('')) as roles FROM sys.database_principals dp WHERE dp.type IN ('S','U','G') FOR JSON PATH;"
+
+                local user_json
+                if user_json=$(sqlcmd -S "${db_host},${db_port}" -U "$db_user" -P "$db_pass" -y 0 -Q "$user_query" -b -t 10 < /dev/null 2>/dev/null); then
+                    user_json=$(echo "$user_json" | tr -d '\r\n')
+                    if [ -n "$user_json" ]; then
+                         # Upload
+                         local ul_text="Net3dUserListPut"
+                         local ul_payload="{\"mdb_id\":${mdb_id},\"lssn\":${lssn},\"user_list\":${user_json}}"
+                         curl -s -X POST "${api_url}" \
+                            -d "text=${ul_text}&token=${sk}&jsondata=${ul_payload}" \
+                            -H "Content-Type: application/x-www-form-urlencoded" \
+                            --insecure >/dev/null 2>&1
+                         echo "[MSSQL] 📤 User List uploaded for ${db_host}" >&2
+                    else
+                         echo "[MSSQL] ⚠️ Empty User List result" >&2
+                    fi
+                else
+                    echo "[MSSQL] ❌ Failed to collect User List" >&2
+                fi
+            fi
             
         done
     fi
