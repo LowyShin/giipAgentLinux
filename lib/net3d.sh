@@ -192,7 +192,14 @@ try:
 
         process_info = ''
         if len(parts) > 5:
-            process_info = ' '.join(parts[5:])
+            raw_info = ' '.join(parts[5:])
+            # Try to extract clean process name from ss output
+            # Format: users:(("python",pid=123,fd=4))
+            m = re.search(r'"([^"]+)"', raw_info)
+            if m:
+                process_info = m.group(1)
+            else:
+                process_info = raw_info
             
         connections.append({
             'proto': 'tcp',
@@ -254,7 +261,15 @@ try:
             
         process_info = ''
         if len(parts) > 6:
-            process_info = ' '.join(parts[6:])
+            raw_info = ' '.join(parts[6:])
+            # Netstat format: 1234/program or -
+            if '/' in raw_info:
+                try:
+                    process_info = raw_info.split('/', 1)[1].strip()
+                except:
+                    process_info = raw_info
+            else:
+                process_info = raw_info
             
         connections.append({
             'proto': proto,
