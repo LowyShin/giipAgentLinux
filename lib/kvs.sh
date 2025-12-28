@@ -86,10 +86,8 @@ save_execution_log() {
 	# details_json이 JSON이면 JSON으로, 텍스트면 텍스트로 그대로 저장됨
 	local kvalue="{\"event_type\":\"${event_type}\",\"timestamp\":\"${timestamp}\",\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"mode\":\"${mode}\",\"version\":\"${sv}\",\"details\":${details_json}}"
 	
-	# Debug: Print the JSON before sending
-	echo "[KVS-Debug] event_type='${event_type}'" >&2
-	echo "[KVS-Debug] details_json='${details_json}'" >&2
-	echo "[KVS-Debug] kvalue='${kvalue}'" >&2
+	# Minimal log for debugging if needed
+	# echo "[KVS-Debug] event_type='${event_type}'" >&2
 	
 	# Build API URL
 	local kvs_url="${apiaddrv2}"
@@ -101,7 +99,7 @@ save_execution_log() {
 	# ✅ jsondata contains actual values
 	local jsondata="{\"kType\":\"lssn\",\"kKey\":\"${lssn}\",\"kFactor\":\"giipagent\",\"kValue\":${kvalue}}"
 	
-	echo "[KVS-Debug] jsondata='${jsondata}'" >&2
+	# echo "[KVS-Debug] jsondata='${jsondata}'" >&2
 	
 	# Build POST data with proper URL encoding for each parameter
 	# wget --post-data does NOT automatically encode values, so we must encode jsondata
@@ -115,8 +113,8 @@ save_execution_log() {
 	local timestamp_ms=$(date +%s%N | cut -b1-13)
 	local post_data_file="/tmp/kvs_exec_post_${timestamp_ms}.txt"
 	echo "$post_data" > "$post_data_file"
-	echo "[KVS-Debug] POST data length: ${#post_data}" >&2
-	echo "[KVS-Debug] POST data saved to $post_data_file" >&2
+	# echo "[KVS-Debug] POST data length: ${#post_data}" >&2
+	# echo "[KVS-Debug] POST data saved to $post_data_file" >&2
 	
 	# Call API (using giipApiSk2 with token parameter)
 	# Note: jsondata is URL-encoded to prevent special characters from breaking POST data
@@ -242,8 +240,8 @@ kvs_put() {
 	
 	# Print result to both stdout and stderr
 	if [ $exit_code -eq 0 ]; then
-		echo "[KVS-Put] ✅ SUCCESS: kType=$ktype, kKey=$kkey, kFactor=$kfactor, kValue_length=${#kvalue_json}, HTTP: $http_status"
-		echo "[KVS-Put] ✅ SUCCESS: kType=$ktype, kKey=$kkey, kFactor=$kfactor, kValue_length=${#kvalue_json}, HTTP: $http_status" >&2
+		# Simplified success log
+		# echo "[KVS-Put] ✅ kFactor=$kfactor" >&2
 	else
 		echo "[KVS-Put] ❌ FAILED: kType=$ktype, kKey=$kkey, kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status, response: $api_response"
 		echo "[KVS-Put] ❌ FAILED: kType=$ktype, kKey=$kkey, kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status, response: $api_response" >&2

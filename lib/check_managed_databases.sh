@@ -21,6 +21,13 @@ check_managed_databases() {
 	local text="GatewayManagedDatabaseList lssn"
 	local jsondata="{\"lssn\":${lssn}}"
 	
+	# DEBUG: API 호출 파라미터 표시
+	echo "[Gateway-DB-API] 📤 Calling API..." >&2
+	echo "[Gateway-DB-API]   text: $text" >&2
+	echo "[Gateway-DB-API]   token: ${sk:0:20}..." >&2
+	echo "[Gateway-DB-API]   jsondata: $jsondata" >&2
+	echo "[Gateway-DB-API]   endpoint: ${apiaddrv2}?code=${apiaddrcode:0:20}..." >&2
+	
 	# Fetch managed database list from API
 	wget -O "$temp_file" --quiet \
 		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
@@ -28,7 +35,15 @@ check_managed_databases() {
 		"${apiaddrv2}?code=${apiaddrcode}" \
 		--no-check-certificate 2>&1
 	
-	if [ ! -s "$temp_file" ]; then
+	# DEBUG: API 응답 확인
+	if [ -s "$temp_file" ]; then
+		local file_size=$(wc -c < "$temp_file")
+		echo "[Gateway-DB-API] 📥 Response received: ${file_size} bytes" >&2
+		echo "[Gateway-DB-API] 📄 Response preview (first 500 chars):" >&2
+		head -c 500 "$temp_file" >&2
+		echo "" >&2
+		echo "[Gateway-DB-API] 💾 Full response saved to: $temp_file" >&2
+	else
 		echo "[Gateway] ⚠️  Failed to fetch managed databases from DB" >&2
 		rm -f "$temp_file"
 		return 1
