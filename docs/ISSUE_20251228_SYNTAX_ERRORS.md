@@ -398,7 +398,9 @@ done
 
 ## 🚀 작업 진행 상황
 
-### Phase 1: 긴급 수정 ✅ **완료**
+### Phase 1: 긴급 수정 ✅ **완료** (부분 성공 → 추가 수정 필요)
+
+#### 1차 수정 (12:14 완료)
 1. ✅ `giipAgent3.sh` - UTF-8 환경 설정 추가 (라인 10-19)
 2. ✅ `gateway_mode.sh` - UTF-8 + local 제거 (라인 30-39, 라인 163)
 3. ✅ `normal_mode.sh` - UTF-8 환경 설정 추가 (라인 19-26)
@@ -406,6 +408,48 @@ done
 **수정 내용**:
 ```bash
 # 모든 스크립트 시작 부분에 추가됨
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+```
+
+#### 1차 테스트 결과 (12:22) ⚠️ **부분 성공**
+
+✅ **개선된 점**:
+- `gateway_mode.sh` 라인 163 `local` 에러 **해결됨** ✅
+- 에러 메시지가 **일본어 → 영어**로 변경 (UTF-8 설정 부분 작동)
+  - 이전: `行 198: 予期しないトークン`
+  - 현재: `line 229: syntax error near unexpected token`
+
+❌ **여전히 남은 문제**:
+```bash
+/home/shinh/scripts/infraops01/giipAgentLinux/lib/net3d.sh: line 229: syntax error near unexpected token `('
+/home/shinh/scripts/infraops01/giipAgentLinux/lib/net3d.sh: line 229: `            m = re.search(r'"([^"]+)"', raw_info)'
+/home/shinh/scripts/infraops01/giipAgentLinux/lib/net3d.sh: line 71: _collect_with_ss: command not found
+/home/shinh/scripts/infraops01/giipAgentLinux/lib/net3d.sh: line 87: _collect_with_netstat: command not found
+```
+
+#### 🔍 **근본 원인 분석 (12:23)**
+
+**문제**: 메인 스크립트에만 UTF-8 설정을 추가했으나, **source되는 라이브러리 파일**에는 추가하지 않음
+
+**분석**:
+1. `giipAgent3.sh`에서 UTF-8 설정 → ✅ 작동
+2. `giipAgent3.sh`에서 `source lib/net3d.sh` 실행
+3. **`net3d.sh`는 별도로 파싱됨** → ❌ UTF-8 설정 없음!
+4. Python 인라인 코드 파싱 시 여전히 멀티바이트 문자 깨짐
+
+**교훈**: 
+- Bash에서 `source`로 로드되는 파일은 **독립적으로 파싱**됨
+- 메인 스크립트의 환경 변수가 source 시점의 파싱에는 영향을 주지 못함
+- **각 라이브러리 파일에도 UTF-8 설정이 필요**
+
+#### 2차 수정 (12:23 완료)
+4. ✅ `lib/net3d.sh` - UTF-8 환경 설정 추가 (라인 9-18)
+
+**추가 수정 내용**:
+```bash
+# lib/net3d.sh 시작 부분에 추가
+# ⭐ UTF-8 환경 강제 설정 (source되는 라이브러리도 필요!)
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 ```
@@ -420,26 +464,35 @@ export LC_ALL=en_US.UTF-8
 
 ---
 
-## 📋 사용자 실행 가이드
+## 📋 사용자 재테스트 가이드 (2차 수정 후)
+
+### ⚠️ 중요: 2차 수정 사항 반영 필요
+
+**수정된 파일 (총 4개)**:
+1. `giipAgent3.sh` (UTF-8 추가)
+2. `gateway_mode.sh` (UTF-8 + local 제거)
+3. `normal_mode.sh` (UTF-8 추가)
+4. `lib/net3d.sh` (UTF-8 추가) ⭐ **NEW!**
 
 ### 테스트 방법 (CentOS 7.4 환경에서)
 
+**옵션 1: Git Pull**
 ```bash
-# 1. giipAgentLinux 디렉토리로 이동
 cd /home/shinh/scripts/infraops01/giipAgentLinux
-
-# 2. 수정 사항 Git pull (또는 파일 업로드)
-git pull origin main  # 또는 FTP/SCP로 파일 업로드
-
-# 3. giipAgent3.sh 실행
+git pull origin main
 bash giipAgent3.sh
-
-# 4. 결과 확인
-# - "行 198: 予期しないトークン" 에러가 사라져야 함 ✅
-# - "行 163: local: 関数の中でのみ" 에러가 사라져야 함 ✅
-# - "行 641: 構文エラー: EOF" 에러가 사라져야 함 ✅
-# - Gateway Mode, Normal Mode 모두 정상 실행되어야 함 ✅
 ```
+
+**옵션 2: 파일 직접 업로드**
+- 수정된 4개 파일을 서버에 업로드
+- 실행: `bash giipAgent3.sh`
+
+### 예상 결과 ✅
+
+**모든 에러가 사라져야 함**:
+- ❌ `line 229: syntax error near unexpected token` → ✅ **해결 예상**
+- ❌ `line 71: _collect_with_ss: command not found` → ✅ **해결 예상**
+- ❌ `line 87: _collect_with_netstat: command not found` → ✅ **해결 예상**
 
 ### 예상 정상 로그
 
