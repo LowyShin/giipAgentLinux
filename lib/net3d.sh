@@ -1,7 +1,7 @@
 #!/bin/bash
 # lib/net3d.sh - Net3D Network Topology Data Collection Module
-# Version: 1.0
-# Date: 2025-12-16
+# Version: 1.1
+# Date: 2025-12-28
 # Purpose: Collects netstat/ss data for Net3D visualization (every 5 minutes)
 # Usage: source lib/net3d.sh && collect_net3d_data <lssn>
 
@@ -44,9 +44,6 @@ fi
 NET3D_INTERVAL=300  # 5 minutes
 NET3D_STATE_FILE="${NET3D_STATE_FILE:-/tmp/giip_net3d_state}"
 
-# ============================================================================
-# Main Function: Collect and Upload Net3D Data
-# ============================================================================
 # ============================================================================
 # Main Function: Collect and Upload Net3D Data
 # ============================================================================
@@ -179,156 +176,47 @@ should_run_net3d() {
 }
 
 # ============================================================================
-# Helper: Collect using 'ss' command
+# Helper: Collect using 'ss' command (External Python Script)
 # ============================================================================
 _collect_with_ss() {
     local lssn="$1"
     local python_cmd="$2"
     
-    # -n: numeric
-    # -t: tcp
-    # -p: processes (requires sudo for full details, but we do best effort)
-    # -a: all states (including listening)
-    # 2>/dev/null to silence stderr errors
+    # Get script directory
+    local SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local PARSE_SCRIPT="$SCRIPT_DIR/parse_ss.py"
     
-    ss -ntap 2>/dev/null | $python_cmd -c "
-import sys, json, re
-
-connections = []
-try:
-    lines = sys.stdin.readlines()
-    for line in lines:
-        parts = line.split()
-        if len(parts) < 4: continue
-        
-        # Robust Header Skip: If first column is 'State', it's a header
-        if parts[0].strip().lower() == 'state':
-            continue
-            
-        state = parts[0]
-        # Filter for relevant states
-        if state not in ['ESTABLISHED', 'ESTAB', 'LISTEN', 'TIME_WAIT', 'CLOSE_WAIT', 'SYN_SENT', 'SYN_RECV']:
-            continue
-            
-        # ss columns can vary, but usually: State Recv-Q Send-Q Local Peer ...
-        # We look for IP:Port patterns
-        local_part = parts[3]
-        remote_part = parts[4]
-        
-        # Safe extraction of IP/Port
-        def parse_addr(addr):
-            if ']:' in addr: # IPv6 [::1]:22
-                ip, port = addr.rsplit(':', 1)
-                ip = ip.strip('[]')
-                return ip, port
-            elif ':' in addr: # IPv4 1.2.3.4:22
-                ip, port = addr.rsplit(':', 1)
-                return ip, port
-            return None, None
-
-        lip, lport = parse_addr(local_part)
-        rip, rport = parse_addr(remote_part)
-        
-        if not lip or not rip: continue
-
-        process_info = ''
-        if len(parts) > 5:
-            raw_info = ' '.join(parts[5:])
-            # Try to extract clean process name from ss output
-            # Format: users:(("python",pid=123,fd=4))
-            m = re.search(r'"([^"]+)"', raw_info)
-            if m:
-                process_info = m.group(1)
-            else:
-                process_info = raw_info
-            
-        connections.append({
-            'proto': 'tcp',
-            'state': state,
-            'local_ip': lip,
-            'local_port': lport,
-            'remote_ip': rip,
-            'remote_port': rport,
-            'process': process_info
-        })
-        
-    print(json.dumps({
-        'connections': connections, 
-        'source': 'ss', 
-        'lssn': int('$lssn'),
-        'timestamp': '$(date +%s)'
-    }))
-except Exception as e:
-    print(json.dumps({'connections': [], 'error': str(e)}))
-"
+    if [ ! -f "$PARSE_SCRIPT" ]; then
+        echo '{"connections": [], "error": "parse_ss.py not found"}'
+        return 1
+    fi
+    
+    # Parse ss output using external Python script
+    local result=$(ss -ntap 2>/dev/null | $python_cmd "$PARSE_SCRIPT" "$lssn")
+    
+    # Add timestamp (Python script leaves it empty)
+    echo "$result" | $python_cmd -c "import sys, json; data = json.load(sys.stdin); data['timestamp'] = '$(date +%s)'; print(json.dumps(data))"
 }
 
 # ============================================================================
-# Helper: Collect using 'netstat' command
+# Helper: Collect using 'netstat' command (External Python Script)
 # ============================================================================
 _collect_with_netstat() {
     local lssn="$1"
     local python_cmd="$2"
     
-    netstat -antp 2>/dev/null | $python_cmd -c "
-import sys, json, re
-
-connections = []
-try:
-    lines = sys.stdin.readlines()
-    for line in lines:
-        # Skip headers / non-tcp lines
-        if not line.strip().startswith('tcp'): continue
-        
-        parts = line.split()
-        # Typical netstat: Proto Recv-Q Send-Q Local Foreign State PID/Program
-        if len(parts) < 6: continue
-        
-        proto = parts[0]
-        local_part = parts[3]
-        remote_part = parts[4]
-        state = parts[5]
-        
-        # Netstat often uses 0.0.0.0:* for random ports in foreign address, but we parse what we see
-        def parse_addr(addr):
-            if ':' in addr:
-                return addr.rsplit(':', 1)
-            return None, None
-            
-        lip, lport = parse_addr(local_part) or (local_part, '')
-        rip, rport = parse_addr(remote_part) or (remote_part, '')
-        
-        if not lip: continue
-            
-        process_info = ''
-        if len(parts) > 6:
-            raw_info = ' '.join(parts[6:])
-            # Netstat format: 1234/program or -
-            if '/' in raw_info:
-                try:
-                    process_info = raw_info.split('/', 1)[1].strip()
-                except:
-                    process_info = raw_info
-            else:
-                process_info = raw_info
-            
-        connections.append({
-            'proto': proto,
-            'state': state,
-            'local_ip': lip,
-            'local_port': lport,
-            'remote_ip': rip,
-            'remote_port': rport,
-            'process': process_info
-        })
-
-    print(json.dumps({
-        'connections': connections, 
-        'source': 'netstat', 
-        'lssn': int('$lssn'),
-        'timestamp': '$(date +%s)'
-    }))
-except Exception as e:
-    print(json.dumps({'connections': [], 'error': str(e)}))
-"
+    # Get script directory
+    local SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local PARSE_SCRIPT="$SCRIPT_DIR/parse_netstat.py"
+    
+    if [ ! -f "$PARSE_SCRIPT" ]; then
+        echo '{"connections": [], "error": "parse_netstat.py not found"}'
+        return 1
+    fi
+    
+    # Parse netstat output using external Python script
+    local result=$(netstat -antp 2>/dev/null | $python_cmd "$PARSE_SCRIPT" "$lssn")
+    
+    # Add timestamp (Python script leaves it empty)
+    echo "$result" | $python_cmd -c "import sys, json; data = json.load(sys.stdin); data['timestamp'] = '$(date +%s)'; print(json.dumps(data))"
 }

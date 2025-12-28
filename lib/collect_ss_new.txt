@@ -1,0 +1,19 @@
+_collect_with_ss() {
+    local lssn="$1"
+    local python_cmd="$2"
+    
+    # Get script directory
+    local SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local PARSE_SCRIPT="$SCRIPT_DIR/parse_ss.py"
+    
+    if [ ! -f "$PARSE_SCRIPT" ]; then
+        echo '{"connections": [], "error": "parse_ss.py not found"}'
+        return 1
+    fi
+    
+    # Parse ss output using external Python script
+    local result=$(ss -ntap 2>/dev/null | $python_cmd "$PARSE_SCRIPT" "$lssn")
+    
+    # Add timestamp (Python script leaves it empty)
+    echo "$result" | $python_cmd -c "import sys, json; data = json.load(sys.stdin); data['timestamp'] = '$(date +%s)'; print(json.dumps(data))"
+}

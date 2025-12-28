@@ -454,6 +454,117 @@ export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 ```
 
+#### 2차 테스트 결과 (12:27) ❌ **여전히 실패**
+
+```bash
+/home/shinh/scripts/infraops01/giipAgentLinux/lib/net3d.sh: line 239: syntax error near unexpected token `('
+/home/shinh/scripts/infraops01/giipAgentLinux/lib/net3d.sh: line 239: `            m = re.search(r'"([^"]+)"', raw_info)'
+/home/shinh/scripts/infraops01/giipAgentLinux/lib/net3d.sh: line 81: _collect_with_ss: command not found
+/home/shinh/scripts/infraops01/giipAgentLinux/lib/net3d.sh: line 97: _collect_with_netstat: command not found
+```
+
+**관찰**: 
+- 라인 번호 변화: 198 → 229 → 239 (UTF-8 코드 추가로 계속 밀림)
+- 에러는 동일하게 지속됨
+
+---
+
+## 🔬 **근본 원인 재분석 (12:29)** ⭐ **CRITICAL**
+
+### ❌ **잘못된 진단의 이유**
+
+#### 1️⃣ **오판의 시작**
+```
+에러 메시지가 일본어로 출력됨
+→ "로케일 문제다!"
+→ UTF-8 설정하면 해결될 것이다! (❌ 잘못된 가정)
+```
+
+**실제**: 에러 메시지의 **언어**와 에러의 **원인**은 별개!
+
+#### 2️⃣ **UTF-8 설정의 한계**
+
+**오해**: `export LANG=en_US.UTF-8`가 모든 문제를 해결할 것
+**현실**: 
+- `export LANG`은 **실행 시점**의 로케일만 변경
+- **파일 파싱 시점**의 문법 에러는 해결 못 함
+- Bash는 스크립트를 읽을 때 **문법 규칙**에 따라 파싱하며, 환경 변수와 무관
+
+**증거**:
+```bash
+# 라인 239
+m = re.search(r'"([^"]+)"', raw_info)
+            ↑         ↑   ↑
+            |         |   |
+        Bash가 여기서 문자열이 끝났다고 판단!
+        (큰따옴표로 시작한 문자열이 여기서 닫힘)
+```
+
+#### 3️⃣ **실제 문제: Bash 따옴표 충돌**
+
+**문제 코드**:
+```bash
+ss -ntap | python3 -c "
+...
+m = re.search(r'"([^"]+)"', raw_info)  # ← 여기!
+...
+"
+```
+
+**Bash 파싱 순서**:
+1. `python3 -c "`로 큰따옴표 시작
+2. Python 코드 읽는 중...
+3. `r'` 만남 → OK
+4. `"` 만남 → **"아! 문자열 끝이구나!"** ← ❌ 잘못된 판단
+5. `([^` 만남 → **"어? 문자열 밖에 `(` 가 있네? 구문 에러!"**
+
+**정확한 원인**: Python regex의 따옴표(`"`)가 Bash의 문자열 구분자와 충돌
+
+### 📊 **왜 기존 수정이 실패했는가**
+
+| 시도 | 수정 내용 | 결과 | 실패 이유 |
+|------|-----------|------|-----------|
+| 1차 | 메인 스크립트에 UTF-8 추가 | ❌ 실패 | source되는 파일은 독립 파싱 |
+| 2차 | `lib/net3d.sh`에도 UTF-8 추가 | ❌ 실패 | **UTF-8는 실행 환경만 변경, 파싱 에러 해결 못 함** |
+
+**핵심 교훈**:
+```
+export LANG=en_US.UTF-8
+↓
+이것은 "한글/일본어가 깨지는 문제"는 해결
+하지만 "Bash 문법 에러"는 해결 못 함!
+```
+
+### ✅ **올바른 해결책**
+
+**문제**: Python 코드 안의 `"` 때문에 Bash가 문자열 끝으로 오판
+
+**해결 방법 3가지**:
+
+1. **백슬래시 이스케이프** (가장 간단):
+   ```bash
+   m = re.search(r'\"([^\"]+)\"', raw_info)
+   # \" 로 이스케이프하면 Bash가 문자열 끝으로 인식 안 함
+   ```
+
+2. **HERE-document 사용** (가장 안전):
+   ```bash
+   $python_cmd <<'PYTHON'
+   import sys, json, re
+   # ... 코드 ...
+   m = re.search(r'"([^"]+)"', raw_info)  # 이스케이프 불필요!
+   PYTHON
+   ```
+
+3. **별도 Python 파일**:
+   ```bash
+   $python_cmd /path/to/parse_network.py
+   ```
+
+---
+
+#### 3차 수정 (12:30 진행 중)
+
 ### Phase 2: 검증 및 테스트 ⏳ **진행 중**
 4. ⏳ **다음 단계**: CentOS 7.4 환경에서 실행 테스트 필요
    - 사용자에게 실행 요청 및 결과 확인 대기
