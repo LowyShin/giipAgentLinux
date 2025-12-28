@@ -313,12 +313,19 @@ if [ -f "${LIB_DIR}/discovery.sh" ]; then
 	fi
 fi
 
-# Load Net3D module (Network Topology)
-if [ -f "${LIB_DIR}/net3d.sh" ]; then
-	. "${LIB_DIR}/net3d.sh"
-	
-	# Run Net3D collection (5 min interval handled inside)
-	collect_net3d_data "${lssn}"
+# ============================================================================
+# Net3D Mode - Network Topology Data Collection
+# ============================================================================
+
+log_message "INFO" "Running Net3D data collection"
+
+NET3D_MODE_SCRIPT="${SCRIPT_DIR}/scripts/net3d_mode.sh"
+if [ -f "$NET3D_MODE_SCRIPT" ]; then
+	bash "$NET3D_MODE_SCRIPT" "${SCRIPT_DIR}/../giipAgent.cnf"
+	NET3D_MODE_EXIT_CODE=$?
+	log_message "INFO" "Net3D mode script completed with exit code: $NET3D_MODE_EXIT_CODE"
+else
+	log_message "WARN" "net3d_mode.sh not found at $NET3D_MODE_SCRIPT, skipping Net3D collection"
 fi
 
 # ============================================================================
