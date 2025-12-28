@@ -65,6 +65,12 @@ cleanup_all_temp_files() {
 	# Clean up SSH test temporary files
 	cleanup_old_temp_files "servers_to_test_*.jsonl"
 	
+	# Clean up remote profile files
+	cleanup_old_temp_files "remote_profile_*.json"
+	
+	# Clean up queue_get params files
+	cleanup_old_temp_files "queue_get_params_*.json"
+	
 	# Clean up queue_get test temporary files and directories
 	if [ -d "/tmp/queue_get_test" ]; then
 		rm -f /tmp/queue_get_test/* 2>/dev/null

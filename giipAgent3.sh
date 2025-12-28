@@ -52,6 +52,8 @@ CRLF_FILES=(
     "${LIB_DIR}/net3d.sh"
     "${LIB_DIR}/parse_ss.py"
     "${LIB_DIR}/parse_netstat.py"
+    "${LIB_DIR}/parse_managed_db_list.py"
+    "${LIB_DIR}/extract_db_types.py"
     "${LIB_DIR}/check_managed_databases.sh"
     "${LIB_DIR}/dpa_mysql.sh"
     "${LIB_DIR}/dpa_mssql.sh"
