@@ -53,15 +53,13 @@ check_managed_databases() {
 		echo "[Gateway-DB-API] 💾 Full response saved to: $temp_file" >&2
 	else
 		echo "[Gateway] ⚠️  Failed to fetch managed databases from DB" >&2
-		rm -f "$temp_file"
 		return 1
 	fi
 	
 	# Parse JSON - Extract "data" array using external Python script
 	local db_list=$(cat "$temp_file" | python3 "${SCRIPT_DIR}/parse_managed_db_list.py")
 
-	
-	rm -f "$temp_file"
+	# Note: $temp_file will be cleaned up by cleanup.sh
 	
 	if [ -z "$db_list" ]; then
 		echo "[Gateway] ⚠️  No databases in response data array" >&2
@@ -114,6 +112,10 @@ check_managed_databases() {
 	# Process each database
 	echo "[Gateway] 🔄 Processing databases..." >&2
 	
+	# Collect all check results
+	local check_results_file="/tmp/db_check_results_$$.jsonl"
+	> "$check_results_file"  # Clear file
+	
 	while IFS= read -r db_json; do
 		[ -z "$db_json" ] && continue
 		
@@ -154,12 +156,38 @@ check_managed_databases() {
 				;;
 		esac
 		
-		# Log result
+		# Save result and log status
 		if [ -n "$check_result" ]; then
+			echo "$check_result" >> "$check_results_file"
 			local status=$(echo "$check_result" | python3 "${SCRIPT_DIR}/extract_check_status.py")
 			echo "[Gateway]   Result: $db_name - $status" >&2
 		fi
 	done <<< "$db_list"
+	
+	# Send all results to API (MdbStatsUpdate)
+	if [ -s "$check_results_file" ]; then
+		echo "[Gateway] 📤 Sending stats to API..." >&2
+		
+		# Convert to MdbStatsUpdate format
+		local stats_json=$(cat "$check_results_file" | python3 "${SCRIPT_DIR}/convert_to_mdb_stats.py")
+		
+		if [ -n "$stats_json" ] && [ "$stats_json" != "[]" ]; then
+			local text="MdbStatsUpdate jsondata"
+			local api_response=$(wget -O - --quiet \
+				--post-data="text=${text}&token=${sk}&jsondata=${stats_json}" \
+				--header="Content-Type: application/x-www-form-urlencoded" \
+				"${apiaddrv2}?code=${apiaddrcode}" \
+				--no-check-certificate 2>&1)
+			
+			if echo "$api_response" | grep -q '"RstVal":"200"'; then
+				echo "[Gateway] ✅ Stats saved successfully" >&2
+			else
+				echo "[Gateway] ⚠️  API response: $api_response" >&2
+			fi
+		fi
+		
+		# Note: check_results_file will be cleaned up by cleanup.sh
+	fi
 	
 	echo "[Gateway] ✅ Database checks completed" >&2
 	return 0

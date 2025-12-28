@@ -76,6 +76,12 @@ cleanup_all_temp_files() {
 	cleanup_old_temp_files "ssh_test_results_*.json"
 	cleanup_old_temp_files "ssh_error_*.json"
 	
+	# Clean up managed DB API response files
+	cleanup_old_temp_files "managed_db_api_response_*.json"
+	
+	# Clean up DB check results files
+	cleanup_old_temp_files "db_check_results_*.jsonl"
+	
 	# Clean up ssh_test_logs directory
 	if [ -d "/tmp/ssh_test_logs" ]; then
 		rm -rf /tmp/ssh_test_logs 2>/dev/null
