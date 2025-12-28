@@ -3,13 +3,21 @@
 # Purpose: Query tManagedDatabase, perform health checks, collect DPA data, update last_check_dt
 # Called by: gateway.sh when is_gateway=1
 
-# Load DPA modules
+# Load DPA modules (provide collect_*_dpa functions)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/dpa_mysql.sh"
 source "${SCRIPT_DIR}/dpa_mssql.sh"
 source "${SCRIPT_DIR}/dpa_postgresql.sh"
 source "${SCRIPT_DIR}/net3d_db.sh"
 source "${SCRIPT_DIR}/http_health_check.sh"
+
+# Load DB check modules (provide perform_check_* functions)
+source "${SCRIPT_DIR}/db_check_mysql.sh"
+source "${SCRIPT_DIR}/db_check_mssql.sh"
+source "${SCRIPT_DIR}/db_check_postgresql.sh"
+source "${SCRIPT_DIR}/db_check_redis.sh"
+source "${SCRIPT_DIR}/db_check_mongodb.sh"
+source "${SCRIPT_DIR}/db_check_http.sh"
 
 # Function: Check managed databases and update health status
 # Requires: lssn, sk, apiaddrv2, apiaddrcode (from config)
@@ -103,394 +111,59 @@ check_managed_databases() {
 		esac
 	done
 	
-# ============================================================================
-# Individual DB Check Functions
-# return: JSON string for health result {"status":..., "message":..., ...}
-# side-effect: logs to LogFileName, calls KVS puts
-# ============================================================================
-
-perform_check_mysql() {
-	local mdb_id="$1"
-	local db_name="$2"
-	local db_host="$3"
-	local db_port="$4"
-	local db_user="$5"
-	local db_password="$6"
-	local db_database="$7"
+	# Process each database
+	echo "[Gateway] 🔄 Processing databases..." >&2
 	
-	local check_status="unknown"
-	local check_message="Not tested"
-	local performance_json="{}"
-	local slow_queries_json="[]"
-	local start_time=$(date +%s%3N)
-	local logdt=""
-
-	if ! command -v mysql >/dev/null 2>&1; then
-		check_status="warning"
-		check_message="MySQL client not installed"
-		logdt=$(date '+%Y%m%d%H%M%S')
-		echo "[${logdt}] [Gateway]   ⚠️  MySQL client not found" >> $LogFileName
-	else
-		export MYSQL_PWD="$db_password"
+	while IFS= read -r db_json; do
+		[ -z "$db_json" ] && continue
 		
-		# Connection Test
-		local mysql_result=$(timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -p"${MYSQL_PWD}" -D "$db_database" -e "SELECT 1 AS test" 2>&1)
-		local mysql_exit=$?
+		# Extract all fields from JSON using external Python script
+		local fields=$(echo "$db_json" | python3 "${SCRIPT_DIR}/parse_db_json_fields.py")
+		[ $? -ne 0 ] && continue
 		
-		if [ $mysql_exit -eq 0 ]; then
-			check_status="success"
-			check_message="Connection successful"
-			logdt=$(date '+%Y%m%d%H%M%S')
-			echo "[${logdt}] [Gateway]   ✅ MySQL connection OK" >> $LogFileName
-			
-			# Performance Metrics
-			local perf_data=$(timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -p"${MYSQL_PWD}" -N -e "
-				SELECT JSON_OBJECT(
-					'threads_connected', VARIABLE_VALUE,
-					'threads_running', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Threads_running'),
-					'total_questions', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Questions'),
-					'total_slow_queries', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Slow_queries'),
-					'uptime', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Uptime')
-				)
-				FROM performance_schema.global_status
-				WHERE VARIABLE_NAME='Threads_connected'
-			" 2>&1 | grep '^{')
-			# Fallback for older MySQL if JSON_OBJECT not supported or query fails: simple string concat was better in original?
-			# Reverting to original concat approach for compatibility:
-			if [ -z "$perf_data" ]; then
-				perf_data=$(timeout 5 mysql -h "$db_host" -P "$db_port" -u "$db_user" -p"${MYSQL_PWD}" -N -e "
-					SELECT CONCAT('{',
-						'\"threads_connected\":', VARIABLE_VALUE, ',',
-						'\"threads_running\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Threads_running'), ',',
-						'\"total_questions\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Questions'), ',',
-						'\"total_slow_queries\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Slow_queries'), ',',
-						'\"uptime\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Uptime'),
-					'}')
-					FROM performance_schema.global_status
-					WHERE VARIABLE_NAME='Threads_connected'
-				" 2>&1 | grep '^{')
-			fi
-
-			if [ -n "$perf_data" ] && [[ "$perf_data" == "{"* ]]; then
-				performance_json="$perf_data"
-			fi
-			
-			# DPA Data
-			logdt=$(date '+%Y%m%d%H%M%S')
-			echo "[${logdt}] [Gateway]   🔍 Collecting MySQL DPA data..." >> $LogFileName
-			slow_queries_json=$(collect_mysql_dpa "$db_host" "$db_port" "$db_user" "$db_password" "$db_database" 50)
-			save_dpa_data "$db_name" "$slow_queries_json"
-			
-			# Net3D Sessions
-			logdt=$(date '+%Y%m%d%H%M%S')
-			echo "[${logdt}] [Gateway]   🕸️ Collecting MySQL Net3D sessions..." >> $LogFileName
-			local net3d_json=$(collect_net3d_mysql "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
-			if [ -n "$net3d_json" ] && [ "$net3d_json" != "[]" ]; then
-				kvs_put "database" "$mdb_id" "db_connections" "$net3d_json"
-			fi
-		elif [ $mysql_exit -eq 124 ]; then
-			check_status="error"
-			check_message="Connection timeout (5s)"
-			logdt=$(date '+%Y%m%d%H%M%S')
-			echo "[${logdt}] [Gateway]   ❌ MySQL timeout" >> $LogFileName
-		else
-			check_status="error"
-			check_message=$(echo "$mysql_result" | grep -i "error" | head -1 | sed 's/password/****/gi' || echo "Connection failed")
-			logdt=$(date '+%Y%m%d%H%M%S')
-			echo "[${logdt}] [Gateway]   ❌ MySQL error: $check_message" >> $LogFileName
-		fi
-		unset MYSQL_PWD
-	fi
-
-	local end_time=$(date +%s%3N)
-	local response_time=$((end_time - start_time))
-	
-	# Return JSON-like string (to be parsed by caller or used directly)
-	# Using custom separator or just echoing the components?
-	# Let's echo the health JSON directly.
-	echo "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":${response_time},\"performance_metrics\":${performance_json},\"db_name\":\"${db_name}\",\"db_type\":\"MySQL\"}"
-}
-
-perform_check_postgresql() {
-	local mdb_id="$1"
-	local db_name="$2"
-	local db_host="$3"
-	local db_port="$4"
-	local db_user="$5"
-	local db_password="$6"
-	local db_database="$7"
-	
-	local check_status="unknown"
-	local check_message="Not tested"
-	local performance_json="{}"
-	local slow_queries_json="[]"
-	local start_time=$(date +%s%3N)
-	
-	if ! command -v psql >/dev/null 2>&1; then
-		check_status="warning"
-		check_message="psql client not installed"
-		echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ⚠️  psql not found" >> $LogFileName
-	else
-		local psql_result=$(PGPASSWORD="$db_password" timeout 5 psql -h "$db_host" -p "$db_port" -U "$db_user" -d "$db_database" -c "SELECT 1;" 2>&1)
-		local psql_exit=$?
+		IFS=$'\t' read -r mdb_id db_type db_name db_host db_port db_user db_password db_database \
+			http_enabled http_url http_method http_timeout http_expected <<< "$fields"
 		
-		if [ $psql_exit -eq 0 ]; then
-			check_status="success"
-			check_message="Connection successful"
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ✅ PostgreSQL connection OK" >> $LogFileName
-			
-			local perf_data=$(PGPASSWORD="$db_password" timeout 5 psql -h "$db_host" -p "$db_port" -U "$db_user" -d "$db_database" -t -A -c "
-				SELECT json_build_object(
-					'connections', (SELECT count(*) FROM pg_stat_activity),
-					'active_connections', (SELECT count(*) FROM pg_stat_activity WHERE state = 'active'),
-					'idle_connections', (SELECT count(*) FROM pg_stat_activity WHERE state = 'idle'),
-					'database_size_mb', (SELECT pg_database_size(current_database()) / 1024 / 1024),
-					'uptime_seconds', (SELECT EXTRACT(EPOCH FROM (now() - pg_postmaster_start_time())))
-				)::text;
-			" 2>/dev/null)
-			if [ -n "$perf_data" ] && [[ "$perf_data" == "{"* ]]; then performance_json="$perf_data"; fi
-			
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   🔍 Collecting PostgreSQL DPA data..." >> $LogFileName
-			slow_queries_json=$(collect_postgresql_dpa "$db_host" "$db_port" "$db_user" "$db_password" "$db_database" 50)
-			save_dpa_data "$db_name" "$slow_queries_json"
-			
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   🕸️ Collecting PostgreSQL Net3D sessions..." >> $LogFileName
-			local net3d_json=$(collect_net3d_postgresql "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
-			[[ -n "$net3d_json" && "$net3d_json" != "[]" ]] && kvs_put "database" "$mdb_id" "db_connections" "$net3d_json"
-			
-		elif [ $psql_exit -eq 124 ]; then
-			check_status="error"
-			check_message="Connection timeout (5s)"
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ❌ PostgreSQL timeout" >> $LogFileName
-		else
-			check_status="error"
-			check_message=$(echo "$psql_result" | grep -i "error\|fatal" | head -1 | sed 's/password/****/gi' || echo "Connection failed")
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ❌ PostgreSQL error: $check_message" >> $LogFileName
-		fi
-	fi
-	
-	local response_time=$(( $(date +%s%3N) - start_time ))
-	echo "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":${response_time},\"performance_metrics\":${performance_json},\"db_name\":\"${db_name}\",\"db_type\":\"PostgreSQL\"}"
-}
-
-perform_check_mssql() {
-	local mdb_id="$1"
-	local db_name="$2"
-	local db_host="$3"
-	local db_port="$4"
-	local db_user="$5"
-	local db_password="$6"
-	local db_database="$7"
-	
-	local check_status="unknown"
-	local check_message="Not tested"
-	local performance_json="{}"
-	local slow_queries_json="[]"
-	local start_time=$(date +%s%3N)
-	
-	if ! command -v sqlcmd >/dev/null 2>&1; then
-		check_status="warning"
-		check_message="sqlcmd not installed"
-		echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ⚠️  sqlcmd not found" >> $LogFileName
-	else
-		local mssql_result=$(timeout 5 sqlcmd -S "$db_host,$db_port" -U "$db_user" -P "$db_password" -d "$db_database" -Q "SELECT 1;" 2>&1)
-		local mssql_exit=$?
+		echo "[Gateway]   Checking: $db_name ($db_type)" >&2
 		
-		if [ $mssql_exit -eq 0 ]; then
-			check_status="success"
-			check_message="Connection successful"
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ✅ MSSQL connection OK" >> $LogFileName
-			
-			local mssql_stats=$(timeout 5 sqlcmd -S "$db_host,$db_port" -U "$db_user" -P "$db_password" -d "$db_database" -h -1 -Q "
-				SET NOCOUNT ON;
-				SELECT CONCAT('{',
-					'\"user_connections\":', (SELECT cntr_value FROM sys.dm_os_performance_counters WHERE counter_name = 'User Connections'), ',',
-					'\"total_batch_requests\":', (SELECT cntr_value FROM sys.dm_os_performance_counters WHERE object_name LIKE '%SQL Statistics%' AND counter_name = 'Batch Requests/sec'), ',',
-					'\"page_life_expectancy\":', (SELECT cntr_value FROM sys.dm_os_performance_counters WHERE counter_name = 'Page life expectancy'), ',',
-					'\"buffer_cache_hit_ratio\":', (SELECT cntr_value FROM sys.dm_os_performance_counters WHERE counter_name = 'Buffer cache hit ratio'),
-				'}')
-			" 2>/dev/null | grep "^{" | tr -d '\r\n ')
-			if [ -n "$mssql_stats" ] && [[ "$mssql_stats" == "{"* ]]; then performance_json="$mssql_stats"; fi
-			
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   🔍 Collecting MSSQL DPA data..." >> $LogFileName
-			slow_queries_json=$(collect_mssql_dpa "$db_host" "$db_port" "$db_user" "$db_password" "$db_database" 50000)
-			save_dpa_data "$db_name" "$slow_queries_json"
-			
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   🕸️ Collecting MSSQL Net3D sessions..." >> $LogFileName
-			local net3d_json=$(collect_net3d_mssql "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
-			[[ -n "$net3d_json" && "$net3d_json" != "[]" ]] && kvs_put "database" "$mdb_id" "db_connections" "$net3d_json"
-			
-		elif [ $mssql_exit -eq 124 ]; then
-			check_status="error"
-			check_message="Connection timeout (5s)"
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ❌ MSSQL timeout" >> $LogFileName
-		else
-			check_status="error"
-			check_message=$(echo "$mssql_result" | grep -i "error\|sqlstate" | head -1 | sed 's/password/****/gi' || echo "Connection failed")
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ❌ MSSQL error: $check_message" >> $LogFileName
-		fi
-	fi
-	
-	local response_time=$(( $(date +%s%3N) - start_time ))
-	echo "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":${response_time},\"performance_metrics\":${performance_json},\"db_name\":\"${db_name}\",\"db_type\":\"MSSQL\"}"
-}
-
-perform_check_redis() {
-	local mdb_id="$1"
-	local db_name="$2"
-	local db_host="$3"
-	local db_port="$4"
-	local db_password="$5"
-	
-	local check_status="unknown"
-	local check_message="Not tested"
-	local performance_json="{}"
-	local start_time=$(date +%s%3N)
-	
-	if ! command -v redis-cli >/dev/null 2>&1; then
-		check_status="warning"
-		check_message="redis-cli not installed"
-		echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ⚠️  redis-cli not found" >> $LogFileName
-	else
-		local redis_result
-		if [ -n "$db_password" ]; then
-			redis_result=$(timeout 5 redis-cli -h "$db_host" -p "$db_port" -a "$db_password" PING 2>&1)
-		else
-			redis_result=$(timeout 5 redis-cli -h "$db_host" -p "$db_port" PING 2>&1)
-		fi
-		local redis_exit=$?
+		# Call appropriate check function based on db_type
+		local check_result=""
+		case "$db_type" in
+			MySQL|MariaDB)
+				check_result=$(perform_check_mysql "$mdb_id" "$db_name" "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
+				;;
+			PostgreSQL)
+				check_result=$(perform_check_postgresql "$mdb_id" "$db_name" "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
+				;;
+			MSSQL)
+				check_result=$(perform_check_mssql "$mdb_id" "$db_name" "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
+				;;
+			Redis)
+				check_result=$(perform_check_redis "$mdb_id" "$db_name" "$db_host" "$db_port" "$db_password")
+				;;
+			MongoDB)
+				check_result=$(perform_check_mongodb "$mdb_id" "$db_name" "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
+				;;
+			HTTP)
+				# Fields already extracted above
+				check_result=$(perform_check_http "$mdb_id" "$db_name" "$http_enabled" "$http_url" "$http_method" "$http_timeout" "$http_expected")
+				;;
+			*)
+				echo "[Gateway]   ⚠️  Unknown DB type: $db_type" >&2
+				continue
+				;;
+		esac
 		
-		if [ $redis_exit -eq 0 ] && [[ "$redis_result" == "PONG" ]]; then
-			check_status="success"
-			check_message="Connection successful (PONG)"
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ✅ Redis connection OK" >> $LogFileName
-			
-			local redis_info
-			if [ -n "$db_password" ]; then
-				redis_info=$(timeout 5 redis-cli -h "$db_host" -p "$db_port" -a "$db_password" INFO stats 2>/dev/null)
-			else
-				redis_info=$(timeout 5 redis-cli -h "$db_host" -p "$db_port" INFO stats 2>/dev/null)
-			fi
-			if [ -n "$redis_info" ]; then
-				local connected=$(echo "$redis_info" | grep "^connected_clients:" | cut -d: -f2 | tr -d '\r')
-				local commands=$(echo "$redis_info" | grep "^total_commands_processed:" | cut -d: -f2 | tr -d '\r')
-				local hits=$(echo "$redis_info" | grep "^keyspace_hits:" | cut -d: -f2 | tr -d '\r')
-				local misses=$(echo "$redis_info" | grep "^keyspace_misses:" | cut -d: -f2 | tr -d '\r')
-				performance_json="{\"connected_clients\":${connected:-0},\"total_commands\":${commands:-0},\"keyspace_hits\":${hits:-0},\"keyspace_misses\":${misses:-0}}"
-			fi
-		elif [ $redis_exit -eq 124 ]; then
-			check_status="error"
-			check_message="Connection timeout (5s)"
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ❌ Redis timeout" >> $LogFileName
-		else
-			check_status="error"
-			check_message=$(echo "$redis_result" | head -1 | sed 's/password/****/gi' || echo "Connection failed")
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ❌ Redis error: $check_message" >> $LogFileName
+		# Log result
+		if [ -n "$check_result" ]; then
+			local status=$(echo "$check_result" | python3 "${SCRIPT_DIR}/extract_check_status.py")
+			echo "[Gateway]   Result: $db_name - $status" >&2
 		fi
-	fi
+	done <<< "$db_list"
 	
-	local response_time=$(( $(date +%s%3N) - start_time ))
-	echo "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":${response_time},\"performance_metrics\":${performance_json},\"db_name\":\"${db_name}\",\"db_type\":\"Redis\"}"
-}
+	echo "[Gateway] ✅ Database checks completed" >&2
+	return 0
 
-perform_check_mongodb() {
-	local mdb_id="$1"
-	local db_name="$2"
-	local db_host="$3"
-	local db_port="$4"
-	local db_user="$5"
-	local db_password="$6"
-	local db_database="$7"
-	
-	local check_status="unknown"
-	local check_message="Not tested"
-	local performance_json="{}"
-	local start_time=$(date +%s%3N)
-	
-	if ! command -v mongosh >/dev/null 2>&1 && ! command -v mongo >/dev/null 2>&1; then
-		check_status="warning"
-		check_message="mongo client not installed"
-		echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ⚠️  mongosh/mongo not found" >> $LogFileName
-	else
-		local mongo_uri="mongodb://${db_user}:${db_password}@${db_host}:${db_port}/${db_database}"
-		local mongo_cmd=$(command -v mongosh 2>/dev/null || command -v mongo 2>/dev/null)
-		
-		local mongo_result=$(timeout 5 "$mongo_cmd" "$mongo_uri" --eval "db.adminCommand('ping')" 2>&1)
-		local mongo_exit=$?
-		
-		if [ $mongo_exit -eq 0 ]; then
-			check_status="success"
-			check_message="Connection successful"
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ✅ MongoDB connection OK" >> $LogFileName
-			
-			local mongo_stats=$(timeout 5 "$mongo_cmd" "$mongo_uri" --quiet --eval "
-				var stats = db.serverStatus();
-				print(JSON.stringify({
-					connections: stats.connections.current,
-					active_connections: stats.connections.active || 0,
-					network_bytes_in: stats.network.bytesIn,
-					network_bytes_out: stats.network.bytesOut,
-					opcounters_query: stats.opcounters.query,
-					opcounters_insert: stats.opcounters.insert,
-					opcounters_update: stats.opcounters.update,
-					opcounters_delete: stats.opcounters.delete,
-					uptime: stats.uptime
-				}));
-			" 2>/dev/null)
-			if [ -n "$mongo_stats" ] && [[ "$mongo_stats" == "{"* ]]; then performance_json="$mongo_stats"; fi
-		elif [ $mongo_exit -eq 124 ]; then
-			check_status="error"
-			check_message="Connection timeout (5s)"
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ❌ MongoDB timeout" >> $LogFileName
-		else
-			check_status="error"
-			check_message=$(echo "$mongo_result" | grep -i "error\|exception" | head -1 | sed 's/password/****/gi' || echo "Connection failed")
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ❌ MongoDB error: $check_message" >> $LogFileName
-		fi
-	fi
-	
-	local response_time=$(( $(date +%s%3N) - start_time ))
-	echo "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":${response_time},\"performance_metrics\":${performance_json},\"db_name\":\"${db_name}\",\"db_type\":\"MongoDB\"}"
-}
-
-perform_check_http() {
-	local mdb_id="$1"
-	local db_name="$2"
-	local enabled="$3"
-	local url="$4"
-	local method="$5"
-	local timeout_val="$6"
-	local expected_code="$7"
-	
-	local check_status="unknown"
-	local check_message="Not tested"
-	local performance_json="{}"
-	local start_time=$(date +%s%3N)
-	
-	if [ "$enabled" = "1" ] || [ "$enabled" = "true" ]; then
-		if [ -z "$url" ]; then
-			check_status="error"
-			check_message="URL empty"
-			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ❌ HTTP check URL missing" >> $LogFileName
-		else
-			local http_result=$(check_http_health "$url" "$method" "$timeout_val" "$expected_code")
-			IFS='|' read -r check_status response_time http_code check_message <<< "$http_result"
-			
-			if [ "$check_status" = "success" ]; then
-				echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ✅ HTTP check OK: $url" >> $LogFileName
-			else
-				echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ❌ HTTP check failed: $check_message" >> $LogFileName
-			fi
-			performance_json="{\"http_code\": \"$http_code\", \"response_time_ms\": $response_time, \"url\": \"$url\", \"method\": \"$method\"}"
-		fi
-	else
-		check_status="warning"
-		check_message="HTTP check disabled"
-		echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   ⚠️  HTTP check disabled" >> $LogFileName
-	fi
-
-	# For HTTP, response_time is already calculated by check_http_health, but let's be consistent
-	echo "{\"mdb_id\":${mdb_id},\"status\":\"${check_status}\",\"message\":\"${check_message}\",\"response_time_ms\":${response_time},\"performance_metrics\":${performance_json},\"db_name\":\"${db_name}\",\"db_type\":\"HTTP\"}"
 }
 
 
