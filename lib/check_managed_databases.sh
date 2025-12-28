@@ -34,18 +34,9 @@ check_managed_databases() {
 		return 1
 	fi
 	
-	# Parse JSON - Extract "data" array using Python (grep cannot handle nested JSON)
-	local db_list=$(python3 -c "
-import json, sys
-try:
-    data = json.load(open('$temp_file'))
-    if 'data' in data and isinstance(data['data'], list):
-        for item in data['data']:
-            print(json.dumps(item))
-except Exception as e:
-    print(f'Error parsing JSON: {e}', file=sys.stderr)
-    sys.exit(1)
-")
+	# Parse JSON - Extract "data" array using external Python script
+	local db_list=$(cat "$temp_file" | python3 "${SCRIPT_DIR}/parse_managed_db_list.py")
+
 	
 	rm -f "$temp_file"
 	
@@ -57,21 +48,9 @@ except Exception as e:
 	local db_count=$(echo "$db_list" | grep -c '"mdb_id"')
 	echo "[Gateway] 📊 Found $db_count managed database(s)" >&2
 	
-	# Collect required DB types
-	local db_types=$(echo "$db_list" | python3 -c "
-import json, sys
-db_types = set()
-for line in sys.stdin:
-    if line.strip():
-        try:
-            data = json.loads(line)
-            db_type = data.get('db_type', '')
-            if db_type:
-                db_types.add(db_type)
-        except:
-            pass
-print(' '.join(sorted(db_types)))
-")
+	# Collect required DB types using external Python script
+	local db_types=$(echo "$db_list" | python3 "${SCRIPT_DIR}/extract_db_types.py")
+
 	
 	# Check and install required DB clients
 	for db_type in $db_types; do
