@@ -240,8 +240,7 @@ kvs_put() {
 	
 	# Print result to both stdout and stderr
 	if [ $exit_code -eq 0 ]; then
-		# Simplified success log
-		# echo "[KVS-Put] ✅ kFactor=$kfactor" >&2
+		: # Success - silent (토큰 절약)
 	else
 		echo "[KVS-Put] ❌ FAILED: kType=$ktype, kKey=$kkey, kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status, response: $api_response"
 		echo "[KVS-Put] ❌ FAILED: kType=$ktype, kKey=$kkey, kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status, response: $api_response" >&2
