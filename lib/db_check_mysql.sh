@@ -29,6 +29,23 @@ perform_check_mysql() {
 			logdt=$(date '+%Y%m%d%H%M%S')
 			echo "[${logdt}] [Gateway]   ✅ MySQL connection OK: ${db_name} ($db_host:$db_port)" >> $LogFileName
 			
+			# Collect performance metrics
+			local perf_data=$(timeout 5s mysql -h "$db_host" -P "$db_port" -u "$db_user" -N -e "
+				SELECT CONCAT('{',
+					'\"threads_connected\":', VARIABLE_VALUE, ',',
+					'\"threads_running\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Threads_running'), ',',
+					'\"total_questions\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Questions'), ',',
+					'\"total_slow_queries\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Slow_queries'), ',',
+					'\"uptime\":', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME='Uptime'),
+				'}')
+				FROM performance_schema.global_status
+				WHERE VARIABLE_NAME='Threads_connected'
+			" 2>&1 | grep '^{')
+			
+			if [ -n "$perf_data" ] && [[ "$perf_data" == "{"* ]]; then
+				performance_json="$perf_data"
+			fi
+			
 			# Collect slow queries if available
 			local slow_queries_json=$(timeout 5s mysql -h "$db_host" -P "$db_port" -u "$db_user" -D "$db_database" -e "SELECT query, exec_count, avg_time FROM mysql.slow_log LIMIT 10;" 2>/dev/null | tail -n +2 || echo "")
 			if [ -n "$slow_queries_json" ]; then

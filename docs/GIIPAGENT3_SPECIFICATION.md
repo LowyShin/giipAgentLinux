@@ -121,8 +121,12 @@
 
 **정리 대상**:
 - `/tmp/gateway_servers_*.json`
+- `/tmp/managed_db_api_response_*.json`
+- `/tmp/db_check_results_*.jsonl`
 - `/tmp/remote_profile_*.json`
 - `/tmp/queue_get_params_*.json`
+- `/tmp/ssh_test_report_*.txt`
+- `/tmp/ssh_test_results_*.json`
 - `/tmp/ssh_test_logs/`
 
 #### lib/target_list.sh
@@ -142,11 +146,44 @@
 **필수 로드**: ⚠️ Gateway 모드만
 
 **제공 기능**:
-- `check_managed_databases()`: 관리 DB 체크
+- `check_managed_databases()`: 관리 DB 체크 및 결과 전송
 
 **외부 Python 스크립트**:
-- `parse_managed_db_list.py`: JSON 파싱
-- `extract_db_types.py`: DB 타입 추출
+- `parse_managed_db_list.py`: API 응답에서 DB 리스트 파싱
+- `extract_db_types.py`: DB 타입 추출 (중복 제거)
+- `parse_db_json_fields.py`: DB JSON 필드 파싱 (TSV 출력)
+- `convert_to_mdb_stats.py`: 체크 결과 → MdbStatsUpdate 형식 변환
+- `extract_check_status.py`: 체크 결과 상태 추출
+
+**외부 모듈 (DB 체크)**:
+- `db_check_mysql.sh`: MySQL/MariaDB 체크
+- `db_check_mssql.sh`: MS SQL Server 체크
+- `db_check_postgresql.sh`: PostgreSQL 체크
+- `db_check_redis.sh`: Redis 체크
+- `db_check_mongodb.sh`: MongoDB 체크
+- `db_check_http.sh`: HTTP 헬스 체크
+
+**외부 모듈 (DPA)**:
+- `dpa_mysql.sh`: MySQL DPA 데이터 수집
+- `dpa_mssql.sh`: MSSQL DPA 데이터 수집
+- `dpa_postgresql.sh`: PostgreSQL DPA 데이터 수집
+- `parse_mysql_dpa.py`: MySQL DPA 파싱
+- `parse_mssql_dpa.py`: MSSQL DPA 파싱
+
+**외부 모듈 (Net3D)**:
+- `net3d_db.sh`: DB 연결 정보 수집
+- `http_health_check.sh`: HTTP 헬스 체크
+
+**API 호출**:
+1. `GatewayManagedDatabaseList` - DB 리스트 조회
+2. `MdbStatsUpdate` - 성능 지표 배치 전송
+3. `KVSPut` - DB 연결 정보 개별 저장
+
+**임시 파일**:
+- `/tmp/managed_db_api_response_$$.json` - API 응답
+- `/tmp/db_check_results_$$.jsonl` - 체크 결과
+
+**상세 흐름**: [DATABASE_CHECK_FLOW.md](./DATABASE_CHECK_FLOW.md)
 
 ---
 
@@ -295,14 +332,34 @@ giipAgentLinux/
 │   └── normal_mode.sh      # Normal 모드
 │
 └── lib/
-    ├── common.sh           # 공통 함수
-    ├── kvs.sh              # KVS 로깅
-    ├── cleanup.sh          # 임시 파일 정리
-    ├── target_list.sh      # 서버 목록 표시
-    ├── gateway_api.sh      # Gateway API
-    ├── check_managed_databases.sh  # DB 체크
-    ├── parse_managed_db_list.py    # JSON 파싱
-    └── extract_db_types.py         # DB 타입 추출
+    ├── common.sh            # 공통 함수
+    ├── kvs.sh               # KVS 로깅
+    ├── kvs_legacy.sh        # Legacy KVS 함수 (미사용)
+    ├── cleanup.sh           # 임시 파일 정리
+    ├── target_list.sh       # 서버 목록 표시
+    ├── gateway_api.sh       # Gateway API
+    │
+    ├── check_managed_databases.sh  # DB 체크 오케스트레이터
+    ├── db_check_mysql.sh           # MySQL 체크
+    ├── db_check_mssql.sh           # MSSQL 체크
+    ├── db_check_postgresql.sh      # PostgreSQL 체크
+    ├── db_check_redis.sh           # Redis 체크
+    ├── db_check_mongodb.sh         # MongoDB 체크
+    ├── db_check_http.sh            # HTTP 체크
+    │
+    ├── dpa_mysql.sh                # MySQL DPA 수집
+    ├── dpa_mssql.sh                # MSSQL DPA 수집
+    ├── dpa_postgresql.sh           # PostgreSQL DPA 수집
+    ├── net3d_db.sh                 # DB 연결 정보 수집
+    ├── http_health_check.sh        # HTTP 헬스 체크
+    │
+    ├── parse_managed_db_list.py    # DB 리스트 파싱
+    ├── extract_db_types.py         # DB 타입 추출
+    ├── parse_db_json_fields.py     # DB 필드 파싱
+    ├── convert_to_mdb_stats.py     # MdbStats 변환
+    ├── extract_check_status.py     # 상태 추출
+    ├── parse_mysql_dpa.py          # MySQL DPA 파싱
+    └── parse_mssql_dpa.py          # MSSQL DPA 파싱
 ```
 
 ---
