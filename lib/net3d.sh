@@ -21,6 +21,15 @@ if ! declare -f kvs_put >/dev/null 2>&1; then
 	exit 1
 fi
 
+# Load server_info module for IP collection
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/server_info.sh" ]]; then
+    source "${SCRIPT_DIR}/server_info.sh"
+    log_message "INFO" "[Net3D] server_info.sh module loaded successfully"
+else
+    log_message "WARN" "[Net3D] server_info.sh not found. Server IP collection will be skipped."
+fi
+
 # Configuration
 NET3D_INTERVAL=300  # 5 minutes
 NET3D_STATE_FILE="${NET3D_STATE_FILE:-/tmp/giip_net3d_state}"
@@ -108,11 +117,33 @@ collect_net3d_data() {
         
         # Update state file only on success
         echo "$(date +%s)" > "${NET3D_STATE_FILE}_${lssn}"
-        return 0
     else
         log_message "ERROR" "[Net3D] Failed to upload netstat data"
         return 1
     fi
+    
+    # 5. Upload Server IP Information (if module available)
+    if declare -f collect_server_ips >/dev/null 2>&1; then
+        local server_ips_json=$(collect_server_ips "$lssn")
+        
+        # Validate JSON
+        if echo "$server_ips_json" | grep -q '"error"'; then
+            log_message "WARN" "[Net3D] Server IP collection failed: $server_ips_json"
+        else
+            local ips_len=${#server_ips_json}
+            if [[ "$ips_len" -gt 10 ]]; then
+                if kvs_put "lssn" "${lssn}" "server_ips" "$server_ips_json"; then
+                    log_message "INFO" "[Net3D] Successfully uploaded server IP data (${ips_len} bytes)"
+                else
+                    log_message "ERROR" "[Net3D] Failed to upload server IP data"
+                fi
+            fi
+        fi
+    else
+        log_message "DEBUG" "[Net3D] Server IP collection module not loaded, skipping"
+    fi
+    
+    return 0
 }
 
 # ============================================================================

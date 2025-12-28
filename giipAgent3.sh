@@ -7,6 +7,16 @@ sv="3.00"
 # 20251104 Lowy, Add Gateway mode support with auto-dependency installation
 # 20250110 Lowy, Refactor to modular architecture (lib/*.sh)
 
+# ============================================================================
+# ⭐ UTF-8 환경 강제 설정 (최우선!)
+# ============================================================================
+# 목적: 일본어/한글 로케일 환경에서 Python 인라인 코드 파싱 에러 방지
+# 이슈: CentOS 7.4 일본어 환경에서 멀티바이트 문자 깨짐 문제 해결
+# 날짜: 2025-12-28
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
+
 # Usable giip variables =========
 # {{today}} : Replace today to "YYYYMMDD"
 

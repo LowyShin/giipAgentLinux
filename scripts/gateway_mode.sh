@@ -29,6 +29,15 @@
 ################################################################################
 
 # ============================================================================
+# ⭐ UTF-8 환경 강제 설정 (최우선!)
+# ============================================================================
+# 목적: 일본어/한글 로케일 환경에서 Python 인라인 코드 파싱 에러 방지
+# 이슈: CentOS 7.4 일본어 환경에서 멀티바이트 문자 깨짐 문제 해결
+# 날짜: 2025-12-28
+export LANG=en_US.UTF-8
+export LC_ALL=en_US.UTF-8
+
+# ============================================================================
 # Initialize Script Paths
 # ============================================================================
 
@@ -160,7 +169,7 @@ log_message "INFO" "Executing gateway mode orchestration..."
 echo "[gateway_mode.sh] 🟢 [3.1] 설정 로드 완료: lssn=${lssn}, hostname=${hn}, os=${os}"
 
 # Save startup to KVS
-local startup_details="{\"pid\":$$,\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"is_gateway\":1,\"mode\":\"gateway\",\"git_commit\":\"${GIT_COMMIT}\",\"file_modified\":\"${FILE_MODIFIED}\",\"script_path\":\"${BASH_SOURCE[0]}\"}"
+startup_details="{\"pid\":$$,\"config_file\":\"giipAgent.cnf\",\"api_endpoint\":\"${apiaddrv2}\",\"is_gateway\":1,\"mode\":\"gateway\",\"git_commit\":\"${GIT_COMMIT}\",\"file_modified\":\"${FILE_MODIFIED}\",\"script_path\":\"${BASH_SOURCE[0]}\"}"
 save_execution_log "startup" "$startup_details"
 
 # ============================================================================
