@@ -71,6 +71,17 @@ cleanup_all_temp_files() {
 	# Clean up queue_get params files
 	cleanup_old_temp_files "queue_get_params_*.json"
 	
+	# Clean up SSH test files
+	cleanup_old_temp_files "ssh_test_report_*.txt"
+	cleanup_old_temp_files "ssh_test_results_*.json"
+	cleanup_old_temp_files "ssh_error_*.json"
+	
+	# Clean up ssh_test_logs directory
+	if [ -d "/tmp/ssh_test_logs" ]; then
+		rm -rf /tmp/ssh_test_logs 2>/dev/null
+		echo "[cleanup] ✓ Cleaned up ssh_test_logs directory"
+	fi
+	
 	# Clean up queue_get test temporary files and directories
 	if [ -d "/tmp/queue_get_test" ]; then
 		rm -f /tmp/queue_get_test/* 2>/dev/null

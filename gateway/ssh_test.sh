@@ -24,11 +24,9 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PARENT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
 CONFIG_FILE="$( cd "${PARENT_DIR}/.." && pwd )/giipAgent.cnf"
 LIB_DIR="${PARENT_DIR}/lib"
-LOG_DIR="/tmp/ssh_test_logs"
-mkdir -p "$LOG_DIR"
 
-REPORT_FILE="${LOG_DIR}/ssh_test_report_$(date +%Y%m%d_%H%M%S).txt"
-RESULT_JSON="${LOG_DIR}/ssh_test_results_$(date +%Y%m%d_%H%M%S).json"
+REPORT_FILE="/tmp/ssh_test_report_$(date +%Y%m%d_%H%M%S).txt"
+RESULT_JSON="/tmp/ssh_test_results_$(date +%Y%m%d_%H%M%S).json"
 
 # Initialize counters
 TOTAL_SERVERS=0
