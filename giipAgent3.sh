@@ -52,6 +52,12 @@ CRLF_FILES=(
     "${LIB_DIR}/net3d.sh"
     "${LIB_DIR}/parse_ss.py"
     "${LIB_DIR}/parse_netstat.py"
+    "${LIB_DIR}/check_managed_databases.sh"
+    "${LIB_DIR}/dpa_mysql.sh"
+    "${LIB_DIR}/dpa_mssql.sh"
+    "${LIB_DIR}/dpa_postgresql.sh"
+    "${LIB_DIR}/net3d_db.sh"
+    "${LIB_DIR}/http_health_check.sh"
 )
 
 for file in "${CRLF_FILES[@]}"; do

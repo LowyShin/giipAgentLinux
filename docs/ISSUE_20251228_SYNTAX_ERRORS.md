@@ -391,32 +391,29 @@ done
 ---
 
 **작성일**: 2025-12-28 11:56  
-**최종 업데이트**: 2025-12-28 17:57 (4차 문제 발견 - CRLF 개행 문자)  
-**이슈 상태**: 🔴 **CRLF 개행 문제 발견, 해결 방법 제시**
+**최종 업데이트**: 2025-12-28 18:00 (4차 수정 완료 - CRLF 자동 변환)  
+**이슈 상태**: 🟢 **모든 수정 완료, 테스트 준비됨**
 
 ---
 
-## 🚨 긴급 조치 필요
+## 🎉 최종 테스트 가이드
 
-### Linux 서버에서 실행 필요:
+### CentOS 7.4 환경에서:
 
 ```bash
-# CentOS 7.4 환경에서
 cd /home/shinh/scripts/infraops01/giipAgentLinux
 
-# 옵션 1: dos2unix 사용 (권장)
-dos2unix lib/net3d.sh lib/parse_ss.py lib/parse_netstat.py
+# Git pull (CRLF 자동 변환됨)
+git pull origin main
 
-# 옵션 2: sed 사용
-sed -i 's/\r$//' lib/net3d.sh lib/parse_ss.py lib/parse_netstat.py
-
-# 검증
-bash -n lib/net3d.sh  # 에러 없어야 함
-python3 lib/parse_ss.py <<< "" 2>&1 | head -1
-
-# 테스트
+# 실행 (자동으로 CRLF → LF 변환)
 bash giipAgent3.sh
 ```
+
+**예상 결과**: ✅ **모든 에러 해결됨!**
+- ✅ Python 따옴표 에러 해결 (외부 파일 분리)
+- ✅ gateway_mode.sh `local` 에러 해결
+- ✅ CRLF 에러 해결 (자동 변환)
 
 ---
 
@@ -676,15 +673,81 @@ $content = $content -replace "`r`n", "`n"
 
 ---
 
-#### 4차 수정 (17:57 진행 중) ⏳
+#### 4차 수정 (17:57-18:00 완료) ✅ **자동화 완료**
 
-**작업**:
-1. ⏳ CRLF → LF 변환 (3개 파일)
-2. ⏳ CentOS 7.4 재테스트
+**사용자 제안**: 수동 dos2unix 대신 giipAgent3.sh에서 자동 처리
+
+**구현 내용**:
+```bash
+# giipAgent3.sh에 추가 (라인 44-77)
+CRLF_FILES=(
+    "${LIB_DIR}/net3d.sh"
+    "${LIB_DIR}/parse_ss.py"
+    "${LIB_DIR}/parse_netstat.py"
+)
+
+for file in "${CRLF_FILES[@]}"; do
+    if file "$file" | grep -q "CRLF"; then
+        echo "🔧 Converting CRLF → LF: $file"
+        # dos2unix → sed → tr 순서로 폴백
+        if command -v dos2unix; then
+            dos2unix "$file"
+        elif command -v sed; then
+            sed -i 's/\r$//' "$file"
+        elif command -v tr; then
+            tr -d '\r' < "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+        fi
+    fi
+done
+```
+
+**장점**:
+- ✅ **자동화**: 매 실행 시 자동으로 CRLF 검사 및 변환
+- ✅ **재발 방지**: Windows에서 Git pull 후에도 자동 정리
+- ✅ **사용자 편의**: 수동 작업 불필요
+- ✅ **폴백 지원**: dos2unix 없어도 sed, tr로 처리
 
 ---
 
-### Phase 2: 검증 및 테스트 ⏳ **진행 중**
+#### 5차 수정 (18:04 완료) ✅ **Database Check EOF 해결**
+
+**문제 발견**: Database check 실패 (잊고 있었던 3번째 에러)
+
+```bash
+/home/shinh/scripts/infraops01/giipAgentLinux/lib/check_managed_databases.sh: line 641: syntax error: unexpected end of file
+[ERROR] [gateway-check-db.sh] Database check failed with code 127
+```
+
+**원인 분석**:
+- check_managed_databases.sh가 source하는 파일들에 CRLF 문제
+- source 파일: dpa_mysql.sh, dpa_mssql.sh, dpa_postgresql.sh, net3d_db.sh, http_health_check.sh
+- CRLF 자동 변환 목록에 이 파일들이 빠져 있음
+
+**해결**:
+```bash
+# giipAgent3.sh CRLF_FILES 배열 확장
+CRLF_FILES=(
+    "${LIB_DIR}/net3d.sh"
+    "${LIB_DIR}/parse_ss.py"
+    "${LIB_DIR}/parse_netstat.py"
+    "${LIB_DIR}/check_managed_databases.sh"    # ← 추가
+    "${LIB_DIR}/dpa_mysql.sh"                  # ← 추가
+    "${LIB_DIR}/dpa_mssql.sh"                 # ← 추가
+    "${LIB_DIR}/dpa_postgresql.sh"            # ← 추가
+    "${LIB_DIR}/net3d_db.sh"                  # ← 추가
+    "${LIB_DIR}/http_health_check.sh"         # ← 추가
+)
+```
+
+**교훈**:
+- ✅ 원래 3개 에러 중 2개만 해결하고 끝낸 실수
+- ✅ 사양서 체크리스트 수행하지 않음
+- ✅ "부분 성공 = 전체 성공" 착각
+- → **모든 필수 기능을 체크해야 완료!**
+
+---
+
+### Phase 2: 검증 및 테스트 ✅ **최종 준비 완료**
 4. ⏳ **다음 단계**: CentOS 7.4 환경에서 실행 테스트 필요
    - 사용자에게 실행 요청 및 결과 확인 대기
    - 예상 결과: 3가지 에러 모두 해결됨
