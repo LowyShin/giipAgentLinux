@@ -88,10 +88,11 @@ ${apiaddrv2}?code=${apiaddrcode}
 ## 💾 2. 데이터 저장
 
 ### 임시 파일
-**파일명**: `mktemp` (자동 생성, 예: `/tmp/tmp.XXXXXX`)  
-**위치**: `lib/check_managed_databases.sh` L20  
+**파일명**: `/tmp/managed_db_api_response_$$.json`  
+**생성**: check_managed_databases() L20  
 **내용**: API 응답 JSON (원본)  
-**수명**: 함수 실행 중에만 (L41에서 삭제)
+**삭제**: L41에서 삭제 (파싱 후)  
+**예시**: `/tmp/managed_db_api_response_12345.json`
 
 ### 변수 저장
 **변수명**: `$db_list`  

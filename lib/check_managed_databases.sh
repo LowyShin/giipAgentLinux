@@ -17,7 +17,7 @@ source "${SCRIPT_DIR}/http_health_check.sh"
 check_managed_databases() {
 	echo "[Gateway] 🔍 Checking managed databases..." >&2
 	
-	local temp_file=$(mktemp)
+	local temp_file="/tmp/managed_db_api_response_$$.json"
 	local text="GatewayManagedDatabaseList lssn"
 	local jsondata="{\"lssn\":${lssn}}"
 	
