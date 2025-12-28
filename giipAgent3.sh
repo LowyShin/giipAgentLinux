@@ -42,6 +42,42 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 LIB_DIR="${SCRIPT_DIR}/lib"
 
 # ============================================================================
+# Auto-Fix CRLF Line Endings (Windows → Linux)
+# ============================================================================
+# Windows에서 Git pull 시 CRLF가 포함될 수 있으므로 자동 변환
+# 날짜: 2025-12-28
+# 목적: Linux 환경에서 "$'\r': command not found" 에러 방지
+
+CRLF_FILES=(
+    "${LIB_DIR}/net3d.sh"
+    "${LIB_DIR}/parse_ss.py"
+    "${LIB_DIR}/parse_netstat.py"
+)
+
+for file in "${CRLF_FILES[@]}"; do
+    if [ -f "$file" ]; then
+        # Check if file has CRLF
+        if file "$file" 2>/dev/null | grep -q "CRLF"; then
+            echo "🔧 Converting CRLF → LF: $file"
+            
+            # Try dos2unix first (most reliable)
+            if command -v dos2unix >/dev/null 2>&1; then
+                dos2unix "$file" 2>/dev/null
+            # Fallback to sed
+            elif command -v sed >/dev/null 2>&1; then
+                sed -i 's/\r$//' "$file" 2>/dev/null
+            # Fallback to tr
+            elif command -v tr >/dev/null 2>&1; then
+                tr -d '\r' < "$file" > "${file}.tmp" && mv "${file}.tmp" "$file"
+            else
+                echo "⚠️  Warning: Cannot convert CRLF for $file (no dos2unix/sed/tr found)"
+            fi
+        fi
+    fi
+done
+
+
+# ============================================================================
 # Load Library Modules
 # ============================================================================
 
