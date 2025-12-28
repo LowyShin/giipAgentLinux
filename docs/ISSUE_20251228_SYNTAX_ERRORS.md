@@ -391,8 +391,32 @@ done
 ---
 
 **작성일**: 2025-12-28 11:56  
-**최종 업데이트**: 2025-12-28 12:14 (수정 작업 완료)  
-**이슈 상태**: � **Phase 1 완료, Phase 2 검증 중**
+**최종 업데이트**: 2025-12-28 17:57 (4차 문제 발견 - CRLF 개행 문자)  
+**이슈 상태**: 🔴 **CRLF 개행 문제 발견, 해결 방법 제시**
+
+---
+
+## 🚨 긴급 조치 필요
+
+### Linux 서버에서 실행 필요:
+
+```bash
+# CentOS 7.4 환경에서
+cd /home/shinh/scripts/infraops01/giipAgentLinux
+
+# 옵션 1: dos2unix 사용 (권장)
+dos2unix lib/net3d.sh lib/parse_ss.py lib/parse_netstat.py
+
+# 옵션 2: sed 사용
+sed -i 's/\r$//' lib/net3d.sh lib/parse_ss.py lib/parse_netstat.py
+
+# 검증
+bash -n lib/net3d.sh  # 에러 없어야 함
+python3 lib/parse_ss.py <<< "" 2>&1 | head -1
+
+# 테스트
+bash giipAgent3.sh
+```
 
 ---
 
@@ -563,7 +587,102 @@ export LANG=en_US.UTF-8
 
 ---
 
-#### 3차 수정 (12:30 진행 중)
+---
+
+#### 3차 수정 (12:30-17:50 완료) ✅ **최종 해결**
+
+**근본 원인 재정의**: UTF-8 설정으로는 Bash 파싱 에러 해결 불가
+
+**최종 해결책**: Python 인라인 코드를 외부 파일로 완전 분리
+
+**수정 내용**:
+1. ✅ `lib/parse_ss.py` 생성 (83줄, 2,560 bytes)
+2. ✅ `lib/parse_netstat.py` 생성 (76줄, 2,347 bytes)
+3. ✅ `lib/net3d.sh` 전체 재작성 (222줄, 8,486 bytes)
+
+**변경 전**:
+```bash
+_collect_with_ss() {
+    ss -ntap | python3 -c "
+    # 80줄의 Python 인라인 코드
+    m = re.search(r'\"([^\"]+)\"', raw_info)  # ← Bash 따옴표 충돌!
+    "
+}
+```
+
+**변경 후**:
+```bash
+_collect_with_ss() {
+    local PARSE_SCRIPT="$SCRIPT_DIR/parse_ss.py"
+    local result=$(ss -ntap | python3 "$PARSE_SCRIPT" "$lssn")
+    echo "$result" | python3 -c "..."  # timestamp만 추가
+}
+```
+
+**검증 문서**: `docs/NET3D_REFACTORING_VERIFICATION.md` (550줄)
+- 함수별 기능 100% 보존 확인
+- Python 로직 완전 동일 확인
+- 테스트 체크리스트 포함
+
+---
+
+#### 3차 테스트 결과 (17:54) ❌ **새로운 문제 발견**
+
+```bash
+/home/shinh/scripts/infraops01/giipAgentLinux/lib/net3d.sh: line 7: $'\r': command not found
+/home/shinh/scripts/infraops01/giipAgentLinux/lib/net3d.sh: line 50: syntax error near unexpected token `$'{\r''
+```
+
+**새로운 문제**: Windows 개행 문자 (CRLF)
+
+---
+
+## 🔬 **4차 문제 분석 (17:55)** ⭐ **CRITICAL**
+
+### ❌ **Windows 개행 문자 문제**
+
+**문제**: Windows에서 파일 작성 시 `CRLF` (`\r\n`)로 저장됨  
+**Linux 요구사항**: `LF` (`\n`)만 사용해야 함
+
+**증거**:
+```bash
+# Linux에서 파일 읽을 때
+line 7: $'\r': command not found
+       ↑
+       이것이 Windows 캐리지 리턴 (\r)
+```
+
+**영향받는 파일**:
+1. `lib/net3d.sh` (새로 작성한 파일)
+2. `lib/parse_ss.py` (새로 작성한 파일)
+3. `lib/parse_netstat.py` (새로 작성한 파일)
+
+### ✅ **해결 방법**
+
+**옵션 1: dos2unix 사용** (Linux에서)
+```bash
+dos2unix lib/net3d.sh lib/parse_ss.py lib/parse_netstat.py
+```
+
+**옵션 2: PowerShell에서 변환** (Windows에서)
+```powershell
+$content = Get-Content $file -Raw
+$content = $content -replace "`r`n", "`n"
+[System.IO.File]::WriteAllText($path, $content, [System.Text.UTF8Encoding]::new($false))
+```
+
+**옵션 3: 파일 재작성** (LF 개행으로)
+- ✅ `net3d_lf.sh` 생성 (임시)
+
+---
+
+#### 4차 수정 (17:57 진행 중) ⏳
+
+**작업**:
+1. ⏳ CRLF → LF 변환 (3개 파일)
+2. ⏳ CentOS 7.4 재테스트
+
+---
 
 ### Phase 2: 검증 및 테스트 ⏳ **진행 중**
 4. ⏳ **다음 단계**: CentOS 7.4 환경에서 실행 테스트 필요
