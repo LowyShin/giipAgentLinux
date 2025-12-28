@@ -28,9 +28,17 @@ set -e  # Exit on error
 # 설정
 # ============================================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_DIR="/var/log/giip"
+LOG_DIR="$HOME/logs"  # 사용자 홈 디렉토리 로그 (권한 문제 없음)
 LOG_FILE="$LOG_DIR/git_auto_sync_$(date +%Y%m%d).log"
 HOSTNAME=$(hostname)
+
+# ============================================================
+# 로그 디렉토리 생성 (최우선 - log 함수 호출 전!)
+# ============================================================
+if [ ! -d "$LOG_DIR" ]; then
+    mkdir -p "$LOG_DIR"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Created log directory: $LOG_DIR" >&2
+fi
 
 # ============================================================
 # 로그 함수
@@ -52,11 +60,7 @@ log "Repository: $SCRIPT_DIR"
 log "Hostname: $HOSTNAME"
 log "=========================================="
 
-# 로그 디렉토리 생성
-if [ ! -d "$LOG_DIR" ]; then
-    mkdir -p "$LOG_DIR"
-    log "Created log directory: $LOG_DIR"
-fi
+# 로그 디렉토리는 이미 스크립트 시작 시 생성됨 (라인 37-44)
 
 # Git 저장소 확인
 if [ ! -d "$SCRIPT_DIR/.git" ]; then
