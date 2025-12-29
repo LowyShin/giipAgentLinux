@@ -173,8 +173,12 @@ check_managed_databases() {
 		
 		if [ -n "$stats_json" ] && [ "$stats_json" != "[]" ]; then
 			local text="MdbStatsUpdate jsondata"
+			
+			# URL encode jsondata (match Windows Agent behavior)
+			local encoded_jsondata=$(printf '%s' "$stats_json" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
+			
 			local api_response=$(wget -O - --quiet \
-				--post-data="text=${text}&token=${sk}&jsondata=${stats_json}" \
+				--post-data="text=${text}&token=${sk}&jsondata=${encoded_jsondata}" \
 				--header="Content-Type: application/x-www-form-urlencoded" \
 				"${apiaddrv2}?code=${apiaddrcode}" \
 				--no-check-certificate 2>&1)
