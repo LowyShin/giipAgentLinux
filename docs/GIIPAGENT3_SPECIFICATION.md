@@ -175,15 +175,19 @@
 - `http_health_check.sh`: HTTP 헬스 체크
 
 **API 호출**:
-1. `GatewayManagedDatabaseList` - DB 리스트 조회
-2. `MdbStatsUpdate` - 성능 지표 배치 전송
-3. `KVSPut` - DB 연결 정보 개별 저장
+- `pApiGatewayManagedDatabaseListbySk`: DB 리스트 조회
+- `pApiMdbStatsUpdatebySK`: 성능 지표 일괄 전송 (⚠️ `text="MdbStatsUpdate 0"` 사용 - NN 버그 우회)
+- `pApiKVSPutbySk`: DB 연결 정보 개별 저장
+
+**NN 버그 우회**:
+- `text="MdbStatsUpdate 0"` (L175) - run.ps1의 NN 접두사 중복 버그 우회
+- 상세: [NN_BUG_WORKAROUND.md](./NN_BUG_WORKAROUND.md)
 
 **임시 파일**:
-- `/tmp/managed_db_api_response_$$.json` - API 응답
-- `/tmp/db_check_results_$$.jsonl` - 체크 결과
+- `/tmp/managed_db_api_response_*.json`: API 응답
+- `/tmp/db_check_results_*.jsonl`: 체크 결과 수집
 
-**상세 흐름**: [DATABASE_CHECK_FLOW.md](./DATABASE_CHECK_FLOW.md)
+**상세 문서**: [DATABASE_CHECK_FLOW.md](./DATABASE_CHECK_FLOW.md)
 
 ---
 

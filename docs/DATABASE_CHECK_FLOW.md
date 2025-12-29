@@ -382,6 +382,20 @@ fi
 
 ---
 
+## 📋 7. NN 버그 우회 방법
+
+**문제**: run.ps1이 `text=MdbStatsUpdate jsondata`를 받으면 `NN'[{...}]'` 생성
+
+**해결**: Agent에서 `text=MdbStatsUpdate 0` 전송
+
+**파일**: 
+- `check_managed_databases.sh` L175
+- `DbMonitor.ps1` L224
+
+**상세**: [NN_BUG_WORKAROUND.md](./NN_BUG_WORKAROUND.md)
+
+---
+
 ## 📋 7. 임시 파일 정리
 
 **파일들**:
