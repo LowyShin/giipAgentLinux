@@ -172,7 +172,7 @@ check_managed_databases() {
 		local stats_json=$(cat "$check_results_file" | python3 "${SCRIPT_DIR}/convert_to_mdb_stats.py")
 		
 		if [ -n "$stats_json" ] && [ "$stats_json" != "[]" ]; then
-			local text="MdbStatsUpdate 0"
+			local text="MdbStatsUpdate jsondata"
 			
 			# URL encode using jq (match kvs.sh method)
 			local encoded_jsondata=$(printf '%s' "$stats_json" | jq -sRr '@uri')
