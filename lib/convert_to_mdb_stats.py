@@ -23,15 +23,15 @@ for line in sys.stdin:
             except:
                 perf = {}
         
-        # Map to SP format
+        # Map to SP format (match Windows Agent format)
         mdb_stats = {
             "mdb_id": check_result.get('mdb_id'),
-            "uptime": perf.get('uptime', 0) or perf.get('uptime_seconds', 0),
-            "threads": perf.get('threads_connected', 0) or perf.get('connections', 0) or perf.get('user_connections', 0),
-            "qps": perf.get('total_questions', 0) or 0,
-            "buffer_pool": perf.get('buffer_cache_hit_ratio', 0) or 0,
+            "uptime": int(perf.get('uptime', 0) or perf.get('uptime_seconds', 0) or 0),
+            "threads": int(perf.get('threads_connected', 0) or perf.get('connections', 0) or perf.get('user_connections', 0) or 0),
+            "qps": int(perf.get('total_questions', 0) or perf.get('questions', 0) or 0),  # Cumulative value
+            "buffer_pool": float(perf.get('buffer_cache_hit_ratio', 0) or 0),
             "cpu": 0,  # Not available from health check
-            "memory": perf.get('database_size_mb', 0) or (perf.get('memory_usage_mb', 0) // 1024 if perf.get('memory_usage_mb') else 0)
+            "memory": int((perf.get('memory_usage_mb', 0) or 0) // 1024 if perf.get('memory_usage_mb') else 0)
         }
         
         # Add db_connections if available
