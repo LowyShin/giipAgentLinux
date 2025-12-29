@@ -172,10 +172,10 @@ check_managed_databases() {
 		local stats_json=$(cat "$check_results_file" | python3 "${SCRIPT_DIR}/convert_to_mdb_stats.py")
 		
 		if [ -n "$stats_json" ] && [ "$stats_json" != "[]" ]; then
-			local text="MdbStatsUpdate jsondata"
+			local text="MdbStatsUpdate 0"
 			
-			# URL encode jsondata (match Windows Agent behavior)
-			local encoded_jsondata=$(printf '%s' "$stats_json" | python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.stdin.read(), safe=''))")
+			# URL encode using jq (match kvs.sh method)
+			local encoded_jsondata=$(printf '%s' "$stats_json" | jq -sRr '@uri')
 			
 			local api_response=$(wget -O - --quiet \
 				--post-data="text=${text}&token=${sk}&jsondata=${encoded_jsondata}" \
