@@ -359,12 +359,20 @@ grep -A 20 "CQEQueueGet" lib/cqe.sh
 - jsondata에 os 값이 포함되는지 확인
 - os 값이 올바르게 detect_os()에서 가져와지는지 확인
 
-**Step 3**: 수정 (필요시)
-- queue_get() 함수에서 os 파라미터 추가 또는
-- SP 조건 완화 (@os null일 때도 lsChkdt 업데이트)
+### 해결 결과 (2025-12-31 15:54)
+
+**최종 데이터 확인**:
+- **LSLSSN**: 71174
+- **lsChkdt**: `2025/12/31 15:50:17` ✅ (업데이트 성공)
+- **현상**: GIIP 화면에 정상으로 표시됨.
+
+**최종 결론**:
+- `normal_mode.sh`의 `set -e` 옵션이 Discovery 등 선택적 모듈의 에러를 치명적 에러로 오인하여 스크립트를 중단시키고 있었음.
+- 해당 옵션 제거 후 `run_normal_mode` 및 `queue_get`이 정상 실행되어 DB 업데이트가 성공함.
+- 앞으로의 장애 방지를 위해 `queue_get` 내부의 에러를 `ErrorLogs` 테이블에 남기도록 로직 강화 완료.
 
 ---
 
 **작성 완료**: 2025-12-31  
-**상태**: ⚠️ 추가 이슈 발견 - tLSvr.lsChkdt 미업데이트  
-**다음 작업**: lib/cqe.sh queue_get() 함수의 os 파라미터 전달 확인
+**상태**: ✅ **해결 완료 (SOLVED)**  
+**비고**: Agent 안정성 강화 및 디버깅 도구(query-splog.ps1) 개선 포함

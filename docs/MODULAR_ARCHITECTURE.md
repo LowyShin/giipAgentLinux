@@ -688,6 +688,26 @@ pwsh ../giipdb/mgmt/query-kvs-giipagent.ps1 -Lssn "71174" -Top 20
 
 ### 5. Writing New Shell Scripts (CRITICAL RULES)
 
+**⚠️ Fault-Tolerance & Non-blocking Logging Rule (NEW 2025-12-31):** ⭐⭐⭐
+
+All agent scripts **MUST** be designed to complete their execution even if internal steps fail, and logging must **NEVER** block or terminate the script.
+
+1. **🚫 Avoid Global `set -e`**:
+   - Do not use `set -e` at the top of the script. It causes the script to exit immediately on ANY command failure, often before a "Completed" or "Error" log can be sent.
+   - Use explicit error checking instead: `if [ $? -ne 0 ]; then ... fi`.
+
+2. **✅ Non-blocking Logging**:
+   - Logging calls (`kvs_put`, `sendErrorLog`, etc.) must always include an OR-true safety: `kvs_put ... || true`.
+   - Logging failure should **NEVER** stop the business logic from proceeding.
+
+3. **✅ Guaranteed Final Logging**:
+   - The script must always attempt to reach its final line to send a "completed" status to KVS/ErrorLogs.
+   - Use a `trap` or a final block to ensure even if the script exits, a log is sent.
+
+4. **✅ Safe Extraction/Parsing**:
+   - When parsing large JSON with `jq`, use a safe subshell or if-block:
+     `if DATA=$(jq -r ... "$FILE"); then ... else log "parsing failed"; fi`
+
 **⚠️ Configuration File Path Rule:**
 
 All shell scripts in `giipAgentLinux/` directory **MUST** follow the same config path as `giipAgent3.sh`.
