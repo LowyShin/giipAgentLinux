@@ -54,6 +54,13 @@ queue_get() {
 	local encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri' 2>/dev/null || echo "$sk")
 	local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri' 2>/dev/null || echo "$jsondata")
 	
+	# DEBUG: Log API call parameters to KVS for diagnostic purposes
+	# This helps identify if parameters (especially 'os') are being passed correctly
+	echo "[queue_get] 🐛 DEBUG: Calling CQEQueueGet API for LSSN=$lssn, hostname=$hostname, os=$os" >&2
+	if command -v kvs_put >/dev/null 2>&1; then
+		kvs_put "lssn" "$lssn" "cqe_api_call_debug" "{\"text\":\"$text\",\"os_value\":\"$os\",\"hostname\":\"$hostname\",\"lssn\":$lssn,\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
+	fi
+	
 	# Call CQEQueueGet API with URL-encoded parameters
 	curl -s -X POST "$api_url" \
 		-d "text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
@@ -66,6 +73,12 @@ queue_get() {
 	if [ ! -s "$temp_response" ]; then
 		rm -f "$temp_response"
 		echo "[queue_get] ❌ API call failed or no response (curl exit code: $curl_exit_code)" >&2
+		
+		# Log to ErrorLogs DB
+		if command -v log_error >/dev/null 2>&1; then
+			log_error "CQEQueueGet API call failed (curl exit: $curl_exit_code)" "NetworkError" "API: $api_url, LSSN: $lssn, hostname: $hostname, os: $os"
+		fi
+		
 		return 1
 	fi
 	
@@ -97,6 +110,12 @@ queue_get() {
 		
 		# Other errors are actual failures
 		echo "[queue_get] ❌ API returned error: $rst_val - $proc_name" >&2
+		
+		# Log to ErrorLogs DB
+		if command -v log_error >/dev/null 2>&1; then
+			log_error "CQEQueueGet API error: RstVal=$rst_val, ProcName=$proc_name" "ApiError" "LSSN: $lssn, hostname: $hostname, os: $os, text: $text"
+		fi
+		
 		return 1
 	fi
 	
@@ -134,6 +153,11 @@ queue_get() {
 	echo "$response_content" >&2
 	echo "[queue_get] DEBUG: API URL: $api_url" >&2
 	echo "[queue_get] DEBUG: jsondata: $jsondata" >&2
+	
+	# Log to ErrorLogs DB
+	if command -v log_error >/dev/null 2>&1; then
+		log_error "CQEQueueGet JSON parsing failed" "JsonParsingError" "Response: ${response_content:0:500}, LSSN: $lssn, hostname: $hostname, os: $os"
+	fi
 	
 	return 1
 }

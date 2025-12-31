@@ -302,6 +302,69 @@ pwsh .\scripts\errorlogproc\query-recent-errors.ps1
 
 ---
 
+## 🔴 추가 이슈: tLSvr.lsChkdt 미업데이트
+
+### 발견 시각
+2025-12-31 15:20 KST
+
+### 문제 상황
+**증거**: 사용자 제공 데이터
+```
+LSLSSN: 71174
+lsChkdt: 2025/12/16 16:35:21  (15일 전에 멈춤)
+```
+
+### 원인 분석
+
+**증거 1**: CQE_SPECIFICATION.md (Line 67-68)
+```markdown
+2. 서버 OS 정보 업데이트 (tLSvr 테이블)
+3. 호스트명 업데이트 (신규 추가 기능)
+```
+
+**증거 2**: pApiCQEQueueGetbySK.sql (Line 28-36)
+```sql
+if (@os is not null) and (@os <> 'none')
+begin
+    update tLSvr
+    set LSOSVer = case when LSOSVer = @os then LSOSVer else @os end 
+        , lsChkdt = GETDATE()  -- ← 여기서 업데이트
+        , LSHostname = case when @hostname is not null then @hostname else LSHostname end
+    where LSsn = @lsSn and CSn = @csn
+end
+```
+
+**증거 3**: lib/cqe.sh (Line 48-61) 확인 필요
+- CQEQueueGet 호출 시 `@os` 파라미터를 전달하는지 확인
+
+### 결론
+
+**조건**:
+- `@os is not null` AND `@os <> 'none'`
+- 위 조건이 만족되어야만 lsChkdt 업데이트
+
+**의심**:
+- lib/cqe.sh의 queue_get() 함수가 `os` 파라미터를 전달하지 않거나
+- `os` 값이 'none'으로 전달되고 있을 가능성
+
+### 해결 방안
+
+**Step 1**: lib/cqe.sh 코드 확인
+```bash
+# 확인 필요
+grep -A 20 "CQEQueueGet" lib/cqe.sh
+```
+
+**Step 2**: os 파라미터 전달 확인
+- jsondata에 os 값이 포함되는지 확인
+- os 값이 올바르게 detect_os()에서 가져와지는지 확인
+
+**Step 3**: 수정 (필요시)
+- queue_get() 함수에서 os 파라미터 추가 또는
+- SP 조건 완화 (@os null일 때도 lsChkdt 업데이트)
+
+---
+
 **작성 완료**: 2025-12-31  
-**상태**: ✅ 코드 수정 완료, 서버 배포 대기  
-**다음 작업**: Hung 프로세스 제거 → Cron 실행 대기 → 로그 확인
+**상태**: ⚠️ 추가 이슈 발견 - tLSvr.lsChkdt 미업데이트  
+**다음 작업**: lib/cqe.sh queue_get() 함수의 os 파라미터 전달 확인
