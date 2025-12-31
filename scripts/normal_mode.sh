@@ -25,7 +25,9 @@
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
-set -e  # Exit on error
+
+# set -e  # Removed to prevent early exit on optional module failures (e.g. Discovery, Net3D)
+
 
 # ============================================================================
 # Self-Cleanup / Singleton Logic (Emergency Add)
