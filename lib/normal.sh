@@ -6,7 +6,7 @@
 # Rule: Follow giipapi_rules.md - text contains parameter names only, jsondata contains actual values
 
 # ============================================================================
-# Note: queue_get() is provided by lib/kvs.sh for CQEQueueGet API calls
+# Note: queue_get() is provided by lib/cqe.sh for CQEQueueGet API calls
 # ============================================================================
 
 # ============================================================================
@@ -30,7 +30,7 @@ execute_script() {
 		
 		# Save error to KVS
 		local error_details="{\"error_type\":\"script_error\",\"error_message\":\"HTTP Error in script\",\"error_code\":1,\"context\":\"script_execution\"}"
-		save_execution_log "error" "$error_details" 2>/dev/null
+		save_execution_log "error" "$error_details"
 		
 		return 1
 	fi
@@ -64,7 +64,7 @@ execute_script() {
 	[ ${n} -ge 1 ] && script_type="expect"
 	
 	local exec_details="{\"script_type\":\"${script_type}\",\"exit_code\":${script_exit_code},\"execution_time_seconds\":${script_duration}}"
-	save_execution_log "script_execution" "$exec_details" 2>/dev/null
+	save_execution_log "script_execution" "$exec_details"
 	
 	return $script_exit_code
 }
@@ -107,14 +107,14 @@ run_normal_mode() {
 		
 		# Save queue check to KVS
 		local queue_check_details="{\"api_response\":\"404\",\"has_queue\":false,\"mssn\":0,\"script_source\":\"none\"}"
-		save_execution_log "queue_check" "$queue_check_details" 2>/dev/null
+		save_execution_log "queue_check" "$queue_check_details"
 	else
 		# Error
 		log_message "ERROR" "Failed to fetch queue"
 		
 		# Save error to KVS
 		local error_details="{\"error_type\":\"api_error\",\"error_message\":\"Failed to fetch queue\",\"error_code\":${fetch_result},\"context\":\"queue_fetch\"}"
-		save_execution_log "error" "$error_details" 2>/dev/null
+		save_execution_log "error" "$error_details"
 	fi
 	
 	# Save shutdown to KVS

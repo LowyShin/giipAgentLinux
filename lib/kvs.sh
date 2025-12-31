@@ -130,37 +130,95 @@ save_execution_log() {
 		-v 2>"$stderr_file"
 	
 	local exit_code=$?
-	if [ $exit_code -eq 0 ]; then
-		echo "[KVS-Log] ✅ Saved: ${event_type}"
-		if [ -n "$LogFileName" ]; then
-			echo "[KVS-Log] ✅ Saved: ${event_type}" >> "$LogFileName"
-		fi
-		rm -f "$response_file" "$stderr_file" "$post_data_file"
-	else
-		# Log error with API response and HTTP details
+	
+	# Check wget exit code first
+	if [ $exit_code -ne 0 ]; then
+		# wget failed (network error, timeout, etc.)
 		local api_response=$(cat "$response_file" 2>/dev/null)
 		local http_status=$(grep "HTTP/" "$stderr_file" 2>/dev/null | tail -1)
 		local full_stderr=$(cat "$stderr_file" 2>/dev/null)
-		echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >&2
+		echo "[KVS-Log] ❌ wget failed: ${event_type} (exit_code=${exit_code})" >&2
 		echo "[KVS-Log] ⚠️  HTTP Status: ${http_status}" >&2
-		echo "[KVS-Log] ⚠️  API Response (full): ${api_response}" >&2
 		echo "[KVS-Log] ⚠️  Request URL: ${kvs_url}" >&2
-		echo "[KVS-Log] ⚠️  Sent encoded_jsondata (first 200 chars): ${encoded_jsondata:0:200}..." >&2
 		echo "[KVS-Log] ⚠️  Full wget stderr output:" >&2
 		echo "${full_stderr}" >&2
+		
 		if [ -n "$LogFileName" ]; then
-			echo "[KVS-Log] ⚠️  Failed to save: ${event_type} (exit_code=${exit_code})" >> "$LogFileName"
+			echo "[KVS-Log] ❌ wget failed: ${event_type} (exit_code=${exit_code})" >> "$LogFileName"
 			echo "[KVS-Log] ⚠️  HTTP Status: ${http_status}" >> "$LogFileName"
-			echo "[KVS-Log] ⚠️  API Response: ${api_response}" >> "$LogFileName"
-			echo "[KVS-Log] ⚠️  Request jsondata: ${jsondata:0:150}..." >> "$LogFileName"
 		fi
+		
 		rm -f "$response_file" "$stderr_file" "$post_data_file"
 		
 		# Log error to database
-		log_error "KVS logging failed: ${event_type}" "KVSError" "save_execution_log at lib/kvs.sh, exit_code=${exit_code}, http_status=${http_status}, response=${api_response}"
+		log_error "KVS wget failed: ${event_type}" "NetworkError" "save_execution_log at lib/kvs.sh, exit_code=${exit_code}, http_status=${http_status}"
+		
+		return $exit_code
 	fi
 	
-	return $exit_code
+	# wget succeeded - now check API response (RstVal)
+	local api_response=$(cat "$response_file" 2>/dev/null)
+	
+	# Parse RstVal from response
+	local rst_val=$(echo "$api_response" | jq -r '.data[0].RstVal // .RstVal // "unknown"' 2>/dev/null)
+	
+	# If jq fails or RstVal not found, try grep
+	if [ -z "$rst_val" ] || [ "$rst_val" = "unknown" ] || [ "$rst_val" = "null" ]; then
+		rst_val=$(echo "$api_response" | grep -o '"RstVal"\s*:\s*"[^"]*"' 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
+	fi
+	
+	# Check if API call was successful (RstVal = 200)
+	if [ "$rst_val" = "200" ]; then
+		# Success
+		echo "[KVS-Log] ✅ Saved: ${event_type} (RstVal=200)"
+		if [ -n "$LogFileName" ]; then
+			echo "[KVS-Log] ✅ Saved: ${event_type} (RstVal=200)" >> "$LogFileName"
+		fi
+		rm -f "$response_file" "$stderr_file" "$post_data_file"
+		return 0
+	else
+		# API returned error - extract details
+		local rst_msg=$(echo "$api_response" | jq -r '.data[0].RstMsg // .RstMsg // .Proc_MSG // "unknown"' 2>/dev/null)
+		local proc_name=$(echo "$api_response" | jq -r '.data[0].ProcName // .ProcName // "unknown"' 2>/dev/null)
+		
+		# Fallback grep if jq fails
+		if [ -z "$rst_msg" ] || [ "$rst_msg" = "unknown" ] || [ "$rst_msg" = "null" ]; then
+			rst_msg=$(echo "$api_response" | grep -o '"RstMsg"\s*:\s*"[^"]*"' 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
+		fi
+		if [ -z "$proc_name" ] || [ "$proc_name" = "unknown" ] || [ "$proc_name" = "null" ]; then
+			proc_name=$(echo "$api_response" | grep -o '"ProcName"\s*:\s*"[^"]*"' 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
+		fi
+		
+		# Log detailed error
+		echo "[KVS-Log] ❌ API Error: ${event_type}" >&2
+		echo "[KVS-Log] 📊 RstVal: ${rst_val}" >&2
+		echo "[KVS-Log] 💬 RstMsg: ${rst_msg}" >&2
+		echo "[KVS-Log] 🔧 ProcName: ${proc_name}" >&2
+		echo "[KVS-Log] 📄 Full API Response: ${api_response}" >&2
+		echo "[KVS-Log] 📤 Request URL: ${kvs_url}" >&2
+		echo "[KVS-Log] 📤 Request jsondata (first 300 chars): ${jsondata:0:300}..." >&2
+		
+		if [ -n "$LogFileName" ]; then
+			echo "[KVS-Log] ❌ API Error: ${event_type}" >> "$LogFileName"
+			echo "[KVS-Log] 📊 RstVal: ${rst_val}" >> "$LogFileName"
+			echo "[KVS-Log] 💬 RstMsg: ${rst_msg}" >> "$LogFileName"
+			echo "[KVS-Log] 🔧 ProcName: ${proc_name}" >> "$LogFileName"
+			echo "[KVS-Log] 📄 Full Response: ${api_response}" >> "$LogFileName"
+			echo "[KVS-Log] 📤 Request jsondata (first 300 chars): ${jsondata:0:300}..." >> "$LogFileName"
+		fi
+		
+		# Keep debug files for inspection
+		echo "[KVS-Log] 🔍 Debug files saved:" >&2
+		echo "  Response: $response_file" >&2
+		echo "  Stderr: $stderr_file" >&2
+		echo "  Post data: $post_data_file" >&2
+		
+		# Log error to database with detailed context
+		local error_context="save_execution_log at lib/kvs.sh, event_type=${event_type}, RstVal=${rst_val}, RstMsg=${rst_msg}, ProcName=${proc_name}, API_URL=${kvs_url}, jsondata_preview=${jsondata:0:200}"
+		log_error "KVS API failed: ${event_type} (RstVal=${rst_val})" "ApiError" "$error_context"
+		
+		return 1
+	fi
 }
 
 # Function: Save simple KVS key-value pair
@@ -234,21 +292,62 @@ kvs_put() {
 		--server-response \
 		-v 2>"$stderr_file"
 	
-	local exit_code=$?
-	local api_response=$(cat "$response_file" 2>/dev/null | head -c 500)
-	local http_status=$(grep "HTTP/" "$stderr_file" 2>/dev/null | tail -1)
 	
-	# Print result to both stdout and stderr
-	if [ $exit_code -eq 0 ]; then
-		: # Success - silent (토큰 절약)
-	else
-		echo "[KVS-Put] ❌ FAILED: kType=$ktype, kKey=$kkey, kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status, response: $api_response"
-		echo "[KVS-Put] ❌ FAILED: kType=$ktype, kKey=$kkey, kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status, response: $api_response" >&2
+	local exit_code=$?
+	
+	# Check wget exit code first
+	if [ $exit_code -ne 0 ]; then
+		# wget failed (network error, timeout, etc.)
+		local api_response=$(cat "$response_file" 2>/dev/null | head -c 500)
+		local http_status=$(grep "HTTP/" "$stderr_file" 2>/dev/null | tail -1)
+		echo "[KVS-Put] ❌ wget failed: kType=$ktype, kKey=$kkey, kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status"
+		echo "[KVS-Put] ❌ wget failed: kType=$ktype, kKey=$kkey, kFactor=$kfactor, exit_code=$exit_code, HTTP: $http_status" >&2
+		rm -f "$response_file" "$stderr_file"
+		return $exit_code
 	fi
 	
-	rm -f "$response_file" "$stderr_file"
+	# wget succeeded - now check API response (RstVal)
+	local api_response=$(cat "$response_file" 2>/dev/null)
 	
-	return $exit_code
+	# Parse RstVal from response
+	local rst_val=$(echo "$api_response" | jq -r '.data[0].RstVal // .RstVal // "unknown"' 2>/dev/null)
+	
+	# If jq fails or RstVal not found, try grep
+	if [ -z "$rst_val" ] || [ "$rst_val" = "unknown" ] || [ "$rst_val" = "null" ]; then
+		rst_val=$(echo "$api_response" | grep -o '"RstVal"\s*:\s*"[^"]*"' 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
+	fi
+	
+	# Check if API call was successful (RstVal = 200)
+	if [ "$rst_val" = "200" ]; then
+		# Success - silent (토큰 절약)
+		rm -f "$response_file" "$stderr_file"
+		return 0
+	else
+		# API returned error - extract details
+		local rst_msg=$(echo "$api_response" | jq -r '.data[0].RstMsg // .RstMsg // .Proc_MSG // "unknown"' 2>/dev/null)
+		local proc_name=$(echo "$api_response" | jq -r '.data[0].ProcName // .ProcName // "unknown"' 2>/dev/null)
+		
+		# Fallback grep if jq fails
+		if [ -z "$rst_msg" ] || [ "$rst_msg" = "unknown" ] || [ "$rst_msg" = "null" ]; then
+			rst_msg=$(echo "$api_response" | grep -o '"RstMsg"\s*:\s*"[^"]*"' 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
+		fi
+		if [ -z "$proc_name" ] || [ "$proc_name" = "unknown" ] || [ "$proc_name" = "null" ]; then
+			proc_name=$(echo "$api_response" | grep -o '"ProcName"\s*:\s*"[^"]*"' 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
+		fi
+		
+		# Log detailed error
+		echo "[KVS-Put] ❌ API Error: kType=$ktype, kKey=$kkey, kFactor=$kfactor"
+		echo "[KVS-Put] 📊 RstVal: $rst_val" >&2
+		echo "[KVS-Put] 💬 RstMsg: $rst_msg" >&2
+		echo "[KVS-Put] 🔧 ProcName: $proc_name" >&2
+		echo "[KVS-Put] 📄 Full Response: $api_response" >&2
+		echo "[KVS-Put] ❌ API Error: kType=$ktype, kKey=$kkey, kFactor=$kfactor" >&2
+		
+		# Keep debug files for inspection
+		echo "[KVS-Put] 🔍 Debug files saved: response=$response_file, stderr=$stderr_file" >&2
+		
+		return 1
+	fi
 }
 
 # Note: save_gateway_status() moved to lib/kvs_legacy.sh (not used)

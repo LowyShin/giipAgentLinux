@@ -48,9 +48,15 @@ queue_get() {
 	# Clean up old temp files
 	rm -f /tmp/queue_response_* 2>/dev/null
 	
-	# Call CQEQueueGet API
+	# URL encode parameters (same pattern as kvs.sh for consistency)
+	# This is required because curl -d does NOT automatically encode values
+	local encoded_text=$(printf '%s' "$text" | jq -sRr '@uri' 2>/dev/null || echo "$text")
+	local encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri' 2>/dev/null || echo "$sk")
+	local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri' 2>/dev/null || echo "$jsondata")
+	
+	# Call CQEQueueGet API with URL-encoded parameters
 	curl -s -X POST "$api_url" \
-		-d "text=${text}&token=${sk}&jsondata=${jsondata}" \
+		-d "text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
 		--insecure -o "$temp_response" 2>&1
 	
