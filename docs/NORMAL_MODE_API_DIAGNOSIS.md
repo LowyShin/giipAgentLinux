@@ -258,3 +258,167 @@ bash giipAgent3.sh
 ---
 
 **결론**: 코드 자체는 올바르게 작성되어 있으나, 실행 환경에서의 실제 로그를 확인해야 정확한 문제를 파악할 수 있습니다. 위의 체크리스트를 따라 로그를 검토해주세요.
+
+---
+
+## 📝 작업 이력
+
+### 2025-12-31 13:40 - API 응답 검증 강화 완료
+
+#### ✅ 완료된 수정 사항
+
+**1. `lib/normal.sh` - 에러 메시지 표시 활성화**
+- Line 33, 67, 110, 117에서 `2>/dev/null` 제거
+- 목적: API 호출 실패 시 에러 메시지가 로그에 표시되도록 함
+- 파일: [lib/normal.sh](../lib/normal.sh)
+
+**2. `lib/cqe.sh` - URL 인코딩 추가**
+- Line 48-61에 jq @uri 기반 URL 인코딩 추가
+- 목적: 특수문자 포함 데이터 안전 전송
+- 파일: [lib/cqe.sh](../lib/cqe.sh)
+
+**3. `lib/kvs.sh` - API 응답(RstVal) 검증 추가** ⭐ 핵심
+- **save_execution_log()** (Line 132-222): 
+  - wget 성공만 체크하던 것을 RstVal까지 검증
+  - RstVal ≠ 200이면 상세 에러 출력:
+    ```bash
+    [KVS-Log] ❌ API Error: ${event_type}
+    [KVS-Log] 📊 RstVal: ${rst_val}
+    [KVS-Log] 💬 RstMsg: ${rst_msg}
+    [KVS-Log] 🔧 ProcName: ${proc_name}
+    [KVS-Log] 📄 Full API Response: ${api_response}
+    [KVS-Log] 📤 Request jsondata (first 300 chars): ...
+    ```
+  - 디버깅 파일 보존: `/tmp/kvs_exec_response_*`, `/tmp/kvs_exec_stderr_*`, `/tmp/kvs_exec_post_*`
+  - 에러로그 DB에 자동 기록: `log_error()` 호출
+  
+- **kvs_put()** (Line 295-353):
+  - 동일한 RstVal 검증 로직 추가
+  - 실패 시 RstMsg, ProcName 출력
+  - 디버깅 파일 보존
+
+- 파일: [lib/kvs.sh](../lib/kvs.sh)
+
+#### 📊 수집될 데이터 (다음 실행 시)
+
+이제 다음 실행 시 **추측 없이** 다음 데이터가 수집됩니다:
+
+**1. 로그 파일에 기록될 데이터**:
+```bash
+# 성공 케이스
+[KVS-Log] ✅ Saved: startup (RstVal=200)
+[KVS-Log] ✅ Saved: shutdown (RstVal=200)
+
+# 실패 케이스 (실제 원인 파악 가능)
+[KVS-Log] ❌ API Error: startup
+[KVS-Log] 📊 RstVal: 401  # ← 실제 에러 코드
+[KVS-Log] 💬 RstMsg: Unauthorized  # ← 실제 에러 메시지
+[KVS-Log] 🔧 ProcName: pApiKVSPutbySk  # ← 실패한 SP 이름
+[KVS-Log] 📄 Full API Response: {"RstVal":"401",...}  # ← 전체 응답
+[KVS-Log] 📤 Request jsondata: {"kType":"lssn","kKey":"71174",...}  # ← 실제 전송 데이터
+```
+
+**2. 디버깅 파일에 저장될 데이터**:
+```bash
+/tmp/kvs_exec_response_[timestamp]  # API 응답 전체 (JSON)
+/tmp/kvs_exec_stderr_[timestamp]    # HTTP 상태 코드, 헤더
+/tmp/kvs_exec_post_[timestamp].txt  # POST 데이터 (URL 인코딩 후)
+```
+
+**3. 에러로그 DB에 기록될 데이터** (실패 시):
+```sql
+INSERT INTO ErrorLogs (
+  elSource,      -- 'agent'
+  elErrorType,   -- 'ApiError' 또는 'NetworkError'
+  elErrorMessage, -- 'KVS API failed: startup (RstVal=401)'
+  elStackTrace,  -- 'event_type=startup, RstVal=401, RstMsg=Unauthorized, ProcName=pApiKVSPutbySk, API_URL=..., jsondata_preview=...'
+  elSeverity,    -- 'error'
+  elRequestData  -- 전체 요청 데이터
+)
+```
+
+#### 🎯 다음 단계 (실제 데이터 수집)
+
+**Step 1: 서버에서 Agent 실행**
+```bash
+cd /home/giip/giipAgentLinux
+bash giipAgent3.sh
+```
+
+**Step 2: 로그 수집**
+```bash
+# 실행 직후 로그 확인
+tail -100 log/giipAgent2_$(date +%Y%m%d).log
+
+# KVS 관련 로그만 추출
+grep "\[KVS-" log/giipAgent2_$(date +%Y%m%d).log > /tmp/kvs_analysis.log
+
+# 실제 데이터 확인
+cat /tmp/kvs_analysis.log
+```
+
+**Step 3: 디버깅 파일 수집 (에러 발생 시)**
+```bash
+# 최근 API 응답
+cat $(ls -t /tmp/kvs_exec_response_* 2>/dev/null | head -1) | jq .
+
+# 최근 POST 데이터
+cat $(ls -t /tmp/kvs_exec_post_* 2>/dev/null | head -1)
+
+# HTTP 상태
+cat $(ls -t /tmp/kvs_exec_stderr_* 2>/dev/null | head -1) | grep "HTTP/"
+```
+
+**Step 4: 에러로그 DB 조회 (에러 발생 시)**
+```powershell
+cd giipdb
+pwsh .\scripts\errorlogproc\query-recent-errors.ps1
+
+# ApiError만 조회
+pwsh .\scripts\errorlogproc\query-errorlogs.ps1 -ErrorType "ApiError" -Hours 1
+```
+
+#### 📋 분석 체크리스트 (실제 데이터 기반)
+
+**Case 1: 성공 (RstVal=200)**
+- [ ] 로그에 `[KVS-Log] ✅ Saved: startup (RstVal=200)` 있음
+- [ ] 로그에 `[KVS-Log] ✅ Saved: shutdown (RstVal=200)` 있음
+- [ ] DB에서 확인: `SELECT TOP 1 * FROM tKVS WHERE kType='lssn' AND kKey='71174' AND kFactor='giipagent' ORDER BY kRegdt DESC`
+- [ ] kValue에 최신 timestamp 있음
+- → **문제 해결됨**
+
+**Case 2: API 에러 (RstVal ≠ 200)**
+- [ ] 로그에서 실제 RstVal 값 확인: _______
+- [ ] 로그에서 실제 RstMsg 확인: _______
+- [ ] 로그에서 실제 ProcName 확인: _______
+- [ ] 로그에서 실제 Request jsondata 확인: _______
+- [ ] `/tmp/kvs_exec_response_*` 파일 내용 확인
+- [ ] 에러로그 DB에서 상세 정보 확인
+- → **실제 데이터로 원인 분석**
+
+**Case 3: 네트워크 에러 (wget 실패)**
+- [ ] 로그에 `[KVS-Log] ❌ wget failed` 있음
+- [ ] HTTP 상태 코드 확인: _______
+- [ ] stderr 파일에서 네트워크 에러 확인
+- → **네트워크 또는 API 엔드포인트 문제**
+
+#### ⚠️ 절대 금지 (추측 금지)
+
+다음 단계 전까지 **절대 하지 말 것**:
+- ❌ 로그 보기 전에 원인 추측
+- ❌ 실제 데이터 없이 코드 추가 수정
+- ❌ run.ps1이나 SP 수정 (절대 금지!)
+
+**먼저 할 것**:
+- ✅ 실제 서버 실행
+- ✅ 로그 수집
+- ✅ 디버깅 파일 확인
+- ✅ 에러로그 DB 확인
+- ✅ **실제 데이터를 보고** 원인 파악
+
+---
+
+**최종 업데이트**: 2025-12-31 13:40  
+**상태**: ⏳ 실제 서버 실행 및 데이터 수집 대기  
+**다음 작업**: 로그 수집 후 실제 데이터 기반 분석
+

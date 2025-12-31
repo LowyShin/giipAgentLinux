@@ -29,13 +29,27 @@ export LC_ALL=en_US.UTF-8
 CURRENT_PID=$$
 SCRIPT_ABS_PATH=$(readlink -f "${BASH_SOURCE[0]}")
 
-# Strict Singleton Pattern: If another instance is running, WE EXIT.
-# Do NOT kill the existing process, as that causes race conditions and infinite restart loops.
+# Relaxed Singleton Pattern: Kill only hung/stale processes (>5 minutes old)
+# Allow parallel execution for fresh processes (cron runs every 5 minutes)
+#
+# Strategy:
+#   1. Find all processes matching this script (except current PID)
+#   2. For each process, check runtime (elapsed seconds)
+#   3. If runtime > 300 seconds (5 minutes), kill it (hung process)
+#   4. Otherwise, allow it to run (normal parallel execution)
 
-if pgrep -f "bash $SCRIPT_ABS_PATH" | grep -v "$CURRENT_PID" > /dev/null; then
-    echo "⚠️  [$(date)] Another instance of $SCRIPT_ABS_PATH is already running. Exiting to prevent overlap."
-    exit 0
-fi
+while IFS= read -r other_pid; do
+    if [ -n "$other_pid" ] && [ "$other_pid" != "$CURRENT_PID" ]; then
+        # Get process start time in seconds since epoch
+        # Linux: ps -o etimes= (elapsed seconds)
+        elapsed_seconds=$(ps -o etimes= -p "$other_pid" 2>/dev/null | tr -d ' ')
+        
+        if [ -n "$elapsed_seconds" ] && [ "$elapsed_seconds" -gt 300 ]; then
+            echo "⚠️  [$(date)] Killing hung process (PID=$other_pid, runtime=${elapsed_seconds}s > 5min)"
+            kill -9 "$other_pid" 2>/dev/null
+        fi
+    fi
+done < <(pgrep -f "bash $SCRIPT_ABS_PATH" | grep -v "^$CURRENT_PID$")
 
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"

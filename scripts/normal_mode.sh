@@ -33,11 +33,16 @@ set -e  # Exit on error
 SCRIPT_ABS_PATH=$(readlink -f "${BASH_SOURCE[0]}")
 CURRENT_PID=$$
 
-# Check if another instance is running
-if pgrep -f "bash $SCRIPT_ABS_PATH" | grep -v "$CURRENT_PID" > /dev/null; then
-    echo "⚠️  [$(date)] Another instance of $SCRIPT_ABS_PATH is already running. Exiting."
-    exit 0
-fi
+# Relaxed Singleton Pattern: Kill only hung/stale processes (>5 minutes old)
+while IFS= read -r other_pid; do
+    if [ -n "$other_pid" ] && [ "$other_pid" != "$CURRENT_PID" ]; then
+        elapsed_seconds=$(ps -o etimes= -p "$other_pid" 2>/dev/null | tr -d ' ')
+        if [ -n "$elapsed_seconds" ] && [ "$elapsed_seconds" -gt 300 ]; then
+            echo "⚠️  [$(date)] Killing hung process (PID=$other_pid, runtime=${elapsed_seconds}s > 5min)"
+            kill -9 "$other_pid" 2>/dev/null
+        fi
+    fi
+done < <(pgrep -f "bash $SCRIPT_ABS_PATH" | grep -v "^$CURRENT_PID$")
 
 # ============================================================================
 # Initialize Script Paths
