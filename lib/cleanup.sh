@@ -57,6 +57,13 @@ cleanup_all_temp_files() {
 	cleanup_old_temp_files "kvs_put_auto_discover_networks_*.log"
 	cleanup_old_temp_files "kvs_put_auto_discover_services_*.log"
 	
+	# Clean up KVS API call temporary files (lib/kvs.sh)
+	cleanup_old_temp_files "kvs_put_response_*"
+	cleanup_old_temp_files "kvs_put_stderr_*"
+	cleanup_old_temp_files "kvs_exec_response_*"
+	cleanup_old_temp_files "kvs_exec_stderr_*"
+	cleanup_old_temp_files "kvs_exec_post_*"
+	
 	# Clean up gateway-related temporary files
 	cleanup_old_temp_files "gateway_servers_*.json"
 	cleanup_old_temp_files "gateway_self_queue_*.sh"
