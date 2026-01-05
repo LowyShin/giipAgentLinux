@@ -47,6 +47,7 @@ fi
 echo "Installing GIIP Agent cron entries..."
 (crontab -l 2>/dev/null; echo "# GIIP Agent - installed $(date '+%Y-%m-%d %H:%M:%S')") | crontab -
 (crontab -l; echo "* * * * * cd ${giippath}; bash --login -c 'sh ${giippath}/giipAgent.sh'") | crontab -
+(crontab -l; echo "0 * * * * cd ${giippath}; bash --login -c 'sh ${giippath}/scripts/collect-server-diagnostics.sh'") | crontab -
 (crontab -l; echo "59 23 * * * cd ${giippath}; bash --login -c 'sh ${giippath}/giiprecycle.sh'") | crontab -
 (crontab -l; echo "*/5 * * * * cd ${giippath}; bash --login -c 'sh ${giippath}/giip-auto-discover.sh'") | crontab -
 

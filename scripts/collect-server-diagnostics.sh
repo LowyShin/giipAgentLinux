@@ -392,6 +392,15 @@ echo "📤 Saving health summary to KVS..."
 kvs_put "lssn" "$lssn" "health_summary" "$SUMMARY_JSON"
 
 # ============================================================================
+# 9. Crontab List
+# ============================================================================
+if [ -f "${SCRIPT_DIR}/collect_crontab.sh" ]; then
+    bash "${SCRIPT_DIR}/collect_crontab.sh" "$lssn"
+else
+    echo "⚠ collect_crontab.sh not found, skipping crontab collection"
+fi
+
+# ============================================================================
 # Summary
 # ============================================================================
 
@@ -412,6 +421,7 @@ echo "  5. Disk Usage (kFactor: disk_usage)"
 echo "  6. Network Status (kFactor: network_status)"
 echo "  7. Process Info (kFactor: process_info)"
 echo "  8. Health Summary (kFactor: health_summary)"
+echo "  9. Crontab List (kFactor: crontab_list)"
 echo ""
 echo "🏥 Health Score: $HEALTH_SCORE/100 ($HEALTH_STATUS)"
 echo "========================================="
