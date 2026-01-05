@@ -395,7 +395,7 @@ kvs_put "lssn" "$lssn" "health_summary" "$SUMMARY_JSON"
 # 9. Crontab List
 # ============================================================================
 if [ -f "${SCRIPT_DIR}/collect_crontab.sh" ]; then
-    bash "${SCRIPT_DIR}/collect_crontab.sh" "$lssn"
+    . "${SCRIPT_DIR}/collect_crontab.sh" "$lssn"
 else
     echo "⚠ collect_crontab.sh not found, skipping crontab collection"
 fi
