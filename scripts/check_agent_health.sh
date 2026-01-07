@@ -84,4 +84,23 @@ elif [ "$(type -t kvs_put_quiet)" = "function" ]; then
     kvs_put_quiet "lssn" "$TARGET_LSSN" "agent_health_checklist" "$CHECKLIST_JSON"
 fi
 
+# ============================================================================
+# NEW: AI Skill Request Trigger (If Status is FAIL or PARTIAL)
+# ============================================================================
+if [ "$STATUS" = "FAIL" ] || [ "$STATUS" = "PARTIAL" ]; then
+    echo "🤖 Triggering AI Analysis for $STATUS status..."
+    AI_REQ_JSON=$(cat <<EOF
+{
+  "lssn": "$TARGET_LSSN",
+  "status": "$STATUS",
+  "issue": "Diagnostic Failure",
+  "context": $CHECKLIST_JSON
+}
+EOF
+)
+    if [ "$(type -t kvs_put_quiet)" = "function" ]; then
+        kvs_put_quiet "lssn" "$TARGET_LSSN" "ai_skill_request" "$AI_REQ_JSON"
+    fi
+fi
+
 echo "✅ Self-diagnostic completed with status: $STATUS"
