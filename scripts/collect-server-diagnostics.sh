@@ -401,6 +401,15 @@ else
 fi
 
 # ============================================================================
+# 10. Agent Self-Diagnostic Checklist
+# ============================================================================
+if [ -f "${SCRIPT_DIR}/check_agent_health.sh" ]; then
+    bash "${SCRIPT_DIR}/check_agent_health.sh" "$lssn"
+else
+    echo "⚠ check_agent_health.sh not found, skipping self-diagnostic"
+fi
+
+# ============================================================================
 # Summary
 # ============================================================================
 
