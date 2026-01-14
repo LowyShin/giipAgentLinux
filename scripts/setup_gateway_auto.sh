@@ -76,7 +76,7 @@ if [ ! -d "$INSTALL_DIR/.git" ]; then
     log_success "Repository cloned successfully"
 else
     log_info "Repository already exists. Pulling latest changes..."
-    git pull origin master
+    git pull origin real
     log_success "Repository updated"
 fi
 

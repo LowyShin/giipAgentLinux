@@ -83,13 +83,23 @@ if [ -z "$(git config user.name)" ] || [ -z "$(git config user.email)" ]; then
 fi
 
 # ============================================================
-# 현재 브랜치 확인
+# 현재 브랜치 확인 및 전환 (Force 'real')
 # ============================================================
+TARGET_BRANCH="real"
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>&1)
-if [ $? -ne 0 ]; then
-    log_error "Failed to get current branch"
-    exit 1
+
+if [ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]; then
+    log "Current branch is '$CURRENT_BRANCH'. Switching to '$TARGET_BRANCH'..."
+    git fetch origin "$TARGET_BRANCH" 2>&1 | tee -a "$LOG_FILE"
+    git checkout "$TARGET_BRANCH" 2>&1 | tee -a "$LOG_FILE"
+    
+    if [ $? -ne 0 ]; then
+        log_error "Failed to checkout '$TARGET_BRANCH'. Please check manually."
+        exit 1
+    fi
+    CURRENT_BRANCH="$TARGET_BRANCH"
 fi
+
 log "Current branch: $CURRENT_BRANCH"
 
 # ============================================================
