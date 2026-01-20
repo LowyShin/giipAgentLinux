@@ -100,6 +100,45 @@ bash cqe/giipCQE.sh --test
 
 ## 📚 문서 링크
 
+### 📊 서비스 모니터 아키텍처 (Service Monitor Flow)
+Service Monitor는 에이전트 스크립트, API, 데이터베이스 간의 유기적 흐름을 시각화합니다. 사용자는 노드 위치를 드래그하여 조정할 수 있으며, **SAVE LAYOUT** 기능을 통해 브라우저에 배치를 영구히 보존할 수 있습니다.
+
+```mermaid
+graph LR
+    subgraph Client
+        Web[Web Dashboard]
+    end
+
+    subgraph Input_Storage
+        URLT[tURLTestRequest]
+        ERR[ErrorLogs]
+    end
+
+    subgraph Scripts
+        HC[exec-health-check.sh]
+        MQEA[execmqeadv.sh]
+        MQE[execmqe.sh]
+        AICQE[exec-aicqe-service.sh]
+        URL[exec-url-tester.sh]
+    end
+
+    subgraph Output_Storage
+        MQL[tMQLog]
+        SKL[tSkillExecution]
+    end
+
+    Web -- Request --> URLT
+    URLT -- Poll --> URL
+    URL -- Complete --> URLT
+    
+    ERR -- Scout --> AICQE
+    AICQE -- Execute --> SKL
+    
+    HC -- Report --> MQL
+    MQL -- Analyze --> MQEA
+    MQL -- Send --> MQE
+```
+
 ### 🆕 핵심 문서
 - **[설정 파일 위치 가이드](../giipdb/docs/GIIP_CONFIG_FILE_LOCATION.md)** - ⭐ giipAgent.cnf 위치 명확화
 - **[CQE 명세서](docs/CQE_SPECIFICATION.md)** - 원격 명령 실행 시스템
