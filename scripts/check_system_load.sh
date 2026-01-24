@@ -57,12 +57,14 @@ if [ "$ALERT_TRIGGERED" -eq 1 ]; then
     JSON_DATA=$(jq -n \
         --arg lssn "$lssn" \
         --arg ts "$(date '+%Y-%m-%d %H:%M:%S')" \
+        --arg cpu "$(get_cpu_usage)" \
+        --arg mem "$(get_mem_usage)" \
         --arg load "$LOAD_AVG" \
         --arg proc "$PROC_COUNT" \
         --arg jq_c "$JQ_COUNT" \
         --arg curl_c "$CURL_COUNT" \
         --arg msg "$ALERT_MSG" \
-        '{lssn: $lssn, timestamp: $ts, load_avg: $load, total_procs: $proc, jq_count: $jq_c, curl_count: $curl_c, alert: $msg}')
+        '{lssn: $lssn, timestamp: $ts, cpu_usage: $cpu, mem_usage: $mem, load_avg: $load, total_procs: $proc, jq_count: $jq_c, curl_count: $curl_c, alert: $msg}')
     
     kvs_put "lssn" "$lssn" "agent_performance_alert" "$JSON_DATA"
 fi
