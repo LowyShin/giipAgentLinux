@@ -213,6 +213,64 @@ detect_os() {
 	echo "$os"
 }
 
+# Function: Get CPU usage percentage
+# Returns: Integer percentage (0-100)
+get_cpu_usage() {
+	local cpu_usage=0
+	if command -v top >/dev/null 2>&1; then
+		# top -bn1 gives a single snapshot
+		# We extract the idle percentage and subtract from 100
+		local idle=$(top -bn1 | grep "Cpu(s)" | awk '{print $8}' | cut -d. -f1)
+		# Handle different top formats (some have %id, some just id)
+		idle=$(echo "$idle" | tr -d '[:alpha:]%')
+		if [ -n "$idle" ]; then
+			cpu_usage=$((100 - idle))
+		fi
+	elif [ -f /proc/stat ]; then
+		# Fallback: parse /proc/stat
+		# cpu  user nice system idle iowait irq softirq steal guest guest_nice
+		local line=$(grep '^cpu ' /proc/stat)
+		local user=$(echo "$line" | awk '{print $2}')
+		local nice=$(echo "$line" | awk '{print $3}')
+		local system=$(echo "$line" | awk '{print $4}')
+		local idle=$(echo "$line" | awk '{print $5}')
+		local iowait=$(echo "$line" | awk '{print $6}')
+		local irq=$(echo "$line" | awk '{print $7}')
+		local softirq=$(echo "$line" | awk '{print $8}')
+		local steal=$(echo "$line" | awk '{print $9}')
+		
+		local total=$((user + nice + system + idle + iowait + irq + softirq + steal))
+		local active=$((user + nice + system + irq + softirq + steal))
+		
+		cpu_usage=$((active * 100 / total))
+	fi
+	echo "$cpu_usage"
+}
+
+# Function: Get Memory usage percentage
+# Returns: Integer percentage (0-100)
+get_mem_usage() {
+	local mem_usage=0
+	if command -v free >/dev/null 2>&1; then
+		# free -m | grep Mem: | awk '{print $3/$2 * 100.0}'
+		local used=$(free -m | grep Mem: | awk '{print $3}')
+		local total=$(free -m | grep Mem: | awk '{print $2}')
+		if [ -n "$used" ] && [ -n "$total" ] && [ "$total" -gt 0 ]; then
+			mem_usage=$((used * 100 / total))
+		fi
+	elif [ -f /proc/meminfo ]; then
+		local total=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+		local free=$(grep MemFree /proc/meminfo | awk '{print $2}')
+		local buffers=$(grep Buffers /proc/meminfo | awk '{print $2}')
+		local cached=$(grep ^Cached /proc/meminfo | awk '{print $2}')
+		if [ -n "$total" ] && [ -n "$free" ]; then
+			local used=$((total - free - buffers - cached))
+			mem_usage=$((used * 100 / total))
+		fi
+	fi
+	echo "$mem_usage"
+}
+
 # ============================================================================
 # Error Handling Functions
 # ============================================================================
@@ -376,4 +434,6 @@ export -f build_api_url
 export -f log_auto_discover_step
 export -f log_auto_discover_error
 export -f log_auto_discover_validation
+export -f get_cpu_usage
+export -f get_mem_usage
 

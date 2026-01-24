@@ -32,6 +32,8 @@ if ! declare -f kvs_put >/dev/null 2>&1; then
 fi
 
 # Load server_info module for IP collection
+# Use SCRIPT_DIR to locate server_info.sh relative to the current script location
+# Current script is at giipAgentLinux/lib/net3d.sh
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "${SCRIPT_DIR}/server_info.sh" ]]; then
     source "${SCRIPT_DIR}/server_info.sh"
@@ -194,8 +196,10 @@ _collect_with_ss() {
     # Parse ss output using external Python script
     local result=$(ss -ntap 2>/dev/null | $python_cmd "$PARSE_SCRIPT" "$lssn")
     
-    # Add timestamp (Python script leaves it empty)
-    echo "$result" | $python_cmd -c "import sys, json; data = json.load(sys.stdin); data['timestamp'] = '$(date +%s)'; print(json.dumps(data))"
+    # Add timestamp, CPU, and Memory usage (Python script leaves it empty)
+    local cpu=$(get_cpu_usage)
+    local mem=$(get_mem_usage)
+    echo "$result" | $python_cmd -c "import sys, json; data = json.load(sys.stdin); data['timestamp'] = '$(date +%s)'; data['cpu_usage'] = $cpu; data['mem_usage'] = $mem; print(json.dumps(data))"
 }
 
 # ============================================================================
@@ -217,6 +221,8 @@ _collect_with_netstat() {
     # Parse netstat output using external Python script
     local result=$(netstat -antp 2>/dev/null | $python_cmd "$PARSE_SCRIPT" "$lssn")
     
-    # Add timestamp (Python script leaves it empty)
-    echo "$result" | $python_cmd -c "import sys, json; data = json.load(sys.stdin); data['timestamp'] = '$(date +%s)'; print(json.dumps(data))"
+    # Add timestamp, CPU, and Memory usage (Python script leaves it empty)
+    local cpu=$(get_cpu_usage)
+    local mem=$(get_mem_usage)
+    echo "$result" | $python_cmd -c "import sys, json; data = json.load(sys.stdin); data['timestamp'] = '$(date +%s)'; data['cpu_usage'] = $cpu; data['mem_usage'] = $mem; print(json.dumps(data))"
 }

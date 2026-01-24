@@ -45,6 +45,8 @@ METRICS_JSON=$(cat <<EOF
   "check_time": "$CHECK_TIME",
   "status": "$STATUS",
   "total_process_count": $TOTAL_PROC_COUNT,
+  "cpu_usage": $(get_cpu_usage),
+  "mem_usage": $(get_mem_usage),
   "jq_count": $JQ_COUNT,
   "curl_count": $CURL_COUNT
 }
