@@ -366,6 +366,18 @@ if [ "${gateway_mode}" = "1" ]; then
 	fi
 fi
 
+# ============================================================================
+# Performance & Health Monitoring
+# ============================================================================
+
+AGENT_HEALTH_SCRIPT="${SCRIPT_DIR}/scripts/check_agent_health.sh"
+if [ -f "$AGENT_HEALTH_SCRIPT" ]; then
+	log_message "INFO" "Running agent performance & health monitoring"
+	bash "$AGENT_HEALTH_SCRIPT" "${lssn}"
+else
+	log_message "WARN" "check_agent_health.sh not found, skipping health check"
+fi
+
 # ========================================================================
 # NORMAL MODE - Always executed
 # ========================================================================
