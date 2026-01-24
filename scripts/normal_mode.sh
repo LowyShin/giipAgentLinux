@@ -211,6 +211,16 @@ else
 fi
 
 # ============================================================================
+# Execute Health Check & Performance Monitor
+# ============================================================================
+
+log_message "INFO" "Executing health check and performance monitor..."
+HEALTH_CHECK_SCRIPT="${SCRIPT_DIR}/scripts/check_system_load.sh"
+if [ -f "$HEALTH_CHECK_SCRIPT" ]; then
+    bash "$HEALTH_CHECK_SCRIPT" >> "${SCRIPT_DIR}/log/health_check.log" 2>&1 || log_message "WARN" "Health check failed"
+fi
+
+# ============================================================================
 # Execute Normal Mode
 # ============================================================================
 

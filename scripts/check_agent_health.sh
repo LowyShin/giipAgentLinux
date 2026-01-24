@@ -1,8 +1,8 @@
 #!/bin/bash
 ################################################################################
-# GIIP Agent - Self-Diagnostic Checklist
-# Purpose: Check all agent features and report status to tKVS
-# Usage: sh check_agent_health.sh <lssn>
+# GIIP Agent - Performance Monitor
+# Purpose: Check process counts and trigger alerts via kvs_put
+# Requirement: 2026-01-24 Task
 ################################################################################
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -21,86 +21,46 @@ if [ -z "$TARGET_LSSN" ]; then
     exit 1
 fi
 
-echo "🔍 Starting Self-Diagnostic for LSSN: $TARGET_LSSN..."
+echo "🔍 Monitoring Performance for LSSN: $TARGET_LSSN..."
 
-# 1. Heartbeat Check (API Connectivity)
-HEARTBEAT="OK"
-if ! kvs_put_quiet "lssn" "$TARGET_LSSN" "diag_heartbeat" "{\"status\":\"alive\"}" > /dev/null 2>&1; then
-    HEARTBEAT="FAIL"
+# 1. Collect Process Metrics
+TOTAL_PROC_COUNT=$(ps -ef | wc -l)
+JQ_COUNT=$(pgrep -c jq 2>/dev/null || echo 0)
+CURL_COUNT=$(pgrep -c curl 2>/dev/null || echo 0)
+
+echo "📊 Metrics: Total=$TOTAL_PROC_COUNT, jq=$JQ_COUNT, curl=$CURL_COUNT"
+
+# 2. Alert Logic
+STATUS="NORMAL"
+if [ "$TOTAL_PROC_COUNT" -gt 500 ]; then
+    STATUS="CRITICAL"
+elif [ "$TOTAL_PROC_COUNT" -gt 300 ]; then
+    STATUS="WARNING"
 fi
 
-# 2. System Info Collection Check
-SYSTEM_INFO="OK"
-if ! command -v df >/dev/null 2>&1 || ! command -v free >/dev/null 2>&1; then
-    SYSTEM_INFO="FAIL"
-fi
-
-# 3. Crontab List Collection Check
-CRONTAB_LIST="OK"
-if ! crontab -l >/dev/null 2>&1; then
-    CRONTAB_LIST="FAIL"
-fi
-
-# 4. Gateway Specific Checks (Default SKIP for normal agents)
-DB_PERF="SKIP"
-REMOTE_INFO="SKIP"
-
-# Detect if this is an Admin/Gateway agent
-if [ -f "${BASE_DIR}/giip-sysscript/exec-health-check.sh" ]; then
-    # Admin Agent Logic
-    DB_PERF="OK" # Default OK if script exists, logic to be refined
-    REMOTE_INFO="OK"
-fi
-
-# Determine overall status
-STATUS="PASS"
-if [ "$HEARTBEAT" = "FAIL" ] || [ "$SYSTEM_INFO" = "FAIL" ] || [ "$CRONTAB_LIST" = "FAIL" ]; then
-    STATUS="FAIL"
-elif [ "$DB_PERF" = "FAIL" ] || [ "$REMOTE_INFO" = "FAIL" ]; then
-    STATUS="PARTIAL"
-fi
-
-# Construct JSON
+# 3. Construct JSON
 CHECK_TIME=$(date '+%Y-%m-%d %H:%M:%S')
-CHECKLIST_JSON=$(cat <<EOF
+METRICS_JSON=$(cat <<EOF
 {
   "check_time": "$CHECK_TIME",
   "status": "$STATUS",
-  "features": {
-    "heartbeat": "$HEARTBEAT",
-    "system_info": "$SYSTEM_INFO",
-    "crontab_list": "$CRONTAB_LIST",
-    "db_performance": "$DB_PERF",
-    "remote_server_info": "$REMOTE_INFO"
-  }
+  "total_process_count": $TOTAL_PROC_COUNT,
+  "jq_count": $JQ_COUNT,
+  "curl_count": $CURL_COUNT
 }
 EOF
 )
 
-# Final report to KVS
+# 4. Report to KVS
 if [ "$(type -t kvs_put)" = "function" ]; then
-    kvs_put "lssn" "$TARGET_LSSN" "agent_health_checklist" "$CHECKLIST_JSON"
-elif [ "$(type -t kvs_put_quiet)" = "function" ]; then
-    kvs_put_quiet "lssn" "$TARGET_LSSN" "agent_health_checklist" "$CHECKLIST_JSON"
-fi
-
-# ============================================================================
-# NEW: AI Skill Request Trigger (If Status is FAIL or PARTIAL)
-# ============================================================================
-if [ "$STATUS" = "FAIL" ] || [ "$STATUS" = "PARTIAL" ]; then
-    echo "🤖 Triggering AI Analysis for $STATUS status..."
-    AI_REQ_JSON=$(cat <<EOF
-{
-  "lssn": "$TARGET_LSSN",
-  "status": "$STATUS",
-  "issue": "Diagnostic Failure",
-  "context": $CHECKLIST_JSON
-}
-EOF
-)
-    if [ "$(type -t kvs_put_quiet)" = "function" ]; then
-        kvs_put_quiet "lssn" "$TARGET_LSSN" "ai_skill_request" "$AI_REQ_JSON"
+    # Always report metrics
+    kvs_put "lssn" "$TARGET_LSSN" "agent_performance_metrics" "$METRICS_JSON"
+    
+    # Trigger alert factor if abnormal
+    if [ "$STATUS" != "NORMAL" ]; then
+        echo "⚠️  Triggering Performance Alert: $STATUS (Total Processes: $TOTAL_PROC_COUNT)"
+        kvs_put "lssn" "$TARGET_LSSN" "agent_performance_alert" "$METRICS_JSON"
     fi
 fi
 
-echo "✅ Self-diagnostic completed with status: $STATUS"
+echo "✅ Performance monitoring completed with status: $STATUS"

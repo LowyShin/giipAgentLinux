@@ -122,6 +122,7 @@ save_execution_log() {
 	local response_file="/tmp/kvs_exec_response_${timestamp_ms}"
 	local stderr_file="/tmp/kvs_exec_stderr_${timestamp_ms}"
 	wget -O "$response_file" \
+		--timeout=30 --tries=1 \
 		--post-data="$post_data" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"${kvs_url}" \
@@ -285,6 +286,7 @@ kvs_put() {
 	local stderr_file="/tmp/kvs_put_stderr_${timestamp_ms}"
 	
 	wget -O "$response_file" \
+		--timeout=30 --tries=1 \
 		--post-data="text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
 		"${kvs_url}" \
