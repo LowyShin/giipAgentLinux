@@ -45,8 +45,15 @@ while IFS= read -r other_pid; do
         elapsed_seconds=$(ps -o etimes= -p "$other_pid" 2>/dev/null | tr -d ' ')
         
         if [ -n "$elapsed_seconds" ] && [ "$elapsed_seconds" -gt 300 ]; then
-            echo "⚠️  [$(date)] Killing hung process (PID=$other_pid, runtime=${elapsed_seconds}s > 5min)"
-            kill -9 "$other_pid" 2>/dev/null
+            echo "⚠️  [$(date)] Cleaning up hung process (PID=$other_pid, runtime=${elapsed_seconds}s > 5min)"
+            # Try safer kill first (SIGTERM)
+            kill -15 "$other_pid" 2>/dev/null
+            sleep 1
+            # Check if still running, then force kill
+            if kill -0 "$other_pid" 2>/dev/null; then
+                 echo "⚠️  [$(date)] Force killing process (PID=$other_pid)"
+                 kill -9 "$other_pid" 2>/dev/null
+            fi
         fi
     fi
 done < <(pgrep -f "bash $SCRIPT_ABS_PATH" | grep -v "^$CURRENT_PID$")
@@ -139,7 +146,8 @@ fi
 # Load Configuration
 # ============================================================================
 
-load_config "../giipAgent.cnf"
+CONFIG_FILE="${SCRIPT_DIR}/../giipAgent.cnf"
+load_config "$CONFIG_FILE"
 if [ $? -ne 0 ]; then
 	echo "❌ Failed to load configuration"
 	exit 1
@@ -305,8 +313,21 @@ if [ "${lssn}" = "0" ]; then
 		--insecure -o $tmpFileName 2>&1
 	
 	lssn=$(cat ${tmpFileName})
-	cnfdmp=$(cat ../giipAgent.cnf | sed -e "s|lssn=\"0\"|lssn=\"${lssn}\"|g")
-	echo "${cnfdmp}" > ../giipAgent.cnf
+	
+	# SAFER CONFIG UPDATE: Use sed -i for atomic/safe edit instead of overwriting whole file
+	# Check if lssn is valid number before updating
+	if [[ "$lssn" =~ ^[0-9]+$ ]] && [ "$lssn" -ne 0 ]; then
+		# Use specific sed pattern to only replace the lssn="0" part
+		sed -i "s|lssn=\"0\"|lssn=\"${lssn}\"|g" "${CONFIG_FILE}"
+		if [ $? -eq 0 ]; then
+			log_message "INFO" "Successfully updated configuration with LSSN: ${lssn}"
+		else
+			log_message "ERROR" "Failed to update configuration file!"
+		fi
+	else
+		log_message "ERROR" "Invalid LSSN received from API: ${lssn}"
+	fi
+
 	rm -f $tmpFileName
 	
 	log_message "INFO" "Server registered with LSSN: ${lssn}"
