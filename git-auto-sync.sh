@@ -90,6 +90,8 @@ CNF_PATH=""
 
 # 탐색 위치 우선순위: 1. Parent, 2. User Home, 3. ScriptDir (Local)
 for d in "$(dirname "$SCRIPT_DIR")" "$HOME" "$SCRIPT_DIR"; do
+    # 빈 경로 제외
+    [ -z "$d" ] && continue
     for f in "giipAgent.cnf" "giipAgent.cfg"; do
         if [ -f "$d/$f" ]; then
             # 샘플 파일 제외 로직
@@ -106,12 +108,16 @@ done
 
 if [ -n "$CNF_PATH" ]; then
     log "Found configuration: $CNF_PATH"
-    # branch="value" 또는 branch=value 형태 추출
-    CFG_BRANCH=$(grep -E "^branch=" "$CNF_PATH" | cut -d'=' -f2 | sed 's/"//g' | sed "s/'//g" | tr -d '[:space:]')
+    # branch="value" 또는 branch=value 형태 추출 (공백 허용)
+    CFG_BRANCH=$(grep -E "^\s*branch\s*=" "$CNF_PATH" | head -1 | cut -d'=' -f2- | sed 's/["'\'']//g' | sed 's/#.*//' | tr -d '[:space:]')
     if [ -n "$CFG_BRANCH" ]; then
         TARGET_BRANCH="$CFG_BRANCH"
         log "Custom branch configured in configuration: $TARGET_BRANCH"
+    else
+        log "No 'branch' setting found in $CNF_PATH, using default: $TARGET_BRANCH"
     fi
+else
+    log "No configuration found in search paths, using default: $TARGET_BRANCH"
 fi
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>&1)
 
