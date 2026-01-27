@@ -40,13 +40,19 @@ fi
 
 # 3. Construct JSON
 CHECK_TIME=$(date '+%Y-%m-%d %H:%M:%S')
+CPU_VAL=$(get_cpu_usage)
+MEM_VAL=$(get_mem_usage)
+# Legacy compatibility: scale percentage to milliseconds/arbitrary unit for old SPs
+CPU_TIME_PROXY=$((CPU_VAL * 100))
+
 METRICS_JSON=$(cat <<EOF
 {
   "check_time": "$CHECK_TIME",
   "status": "$STATUS",
   "total_process_count": $TOTAL_PROC_COUNT,
-  "cpu_usage": $(get_cpu_usage),
-  "mem_usage": $(get_mem_usage),
+  "cpu_usage": $CPU_VAL,
+  "cpu_time": $CPU_TIME_PROXY,
+  "mem_usage": $MEM_VAL,
   "jq_count": $JQ_COUNT,
   "curl_count": $CURL_COUNT
 }
@@ -55,8 +61,8 @@ EOF
 
 # 4. Report to KVS
 if [ "$(type -t kvs_put)" = "function" ]; then
-    # Always report metrics
-    kvs_put "lssn" "$TARGET_LSSN" "agent_performance_metrics" "$METRICS_JSON"
+    # Always report metrics to the new standardized factor
+    kvs_put "lssn" "$TARGET_LSSN" "performance_metrics" "$METRICS_JSON"
     
     # Trigger alert factor if abnormal
     if [ "$STATUS" != "NORMAL" ]; then
