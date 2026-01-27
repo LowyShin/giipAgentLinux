@@ -88,36 +88,42 @@ fi
 TARGET_BRANCH="real"
 CNF_PATH=""
 
+log "Searching for configuration files..."
 # 탐색 위치 우선순위: 1. Parent, 2. User Home, 3. ScriptDir (Local)
 for d in "$(dirname "$SCRIPT_DIR")" "$HOME" "$SCRIPT_DIR"; do
-    # 빈 경로 제외
     [ -z "$d" ] && continue
     for f in "giipAgent.cnf" "giipAgent.cfg"; do
-        if [ -f "$d/$f" ]; then
+        CHECK_FILE="$d/$f"
+        # 상세 로그 추가: 어디를 확인하는지 기록
+        if [ -f "$CHECK_FILE" ]; then
             # 샘플 파일 제외 로직
-            if grep -qE "\(SAMPLE\)|# giipAgent CONFIGURATION" "$d/$f"; then
-                log "Skipping sample configuration: $d/$f"
+            if grep -qE "\(SAMPLE\)|# giipAgent CONFIGURATION" "$CHECK_FILE"; then
+                log "  - Skipping sample: $CHECK_FILE"
                 continue
             fi
-            CNF_PATH="$d/$f"
+            CNF_PATH="$CHECK_FILE"
+            log "  - Found valid configuration: $CNF_PATH"
             break
+        else
+            # 파일이 없을 경우 로그 (디버깅용)
+            # log "  - Not found: $CHECK_FILE" # 주석 해제 시 너무 시끄러울 수 있음
+            :
         fi
     done
     if [ -n "$CNF_PATH" ]; then break; fi
 done
 
 if [ -n "$CNF_PATH" ]; then
-    log "Found configuration: $CNF_PATH"
-    # branch="value" 또는 branch=value 형태 추출 (공백 허용)
+    # branch="value" 또는 branch=value 형태 추출 (공백 및 주석 대응)
     CFG_BRANCH=$(grep -E "^\s*branch\s*=" "$CNF_PATH" | head -1 | cut -d'=' -f2- | sed 's/["'\'']//g' | sed 's/#.*//' | tr -d '[:space:]')
     if [ -n "$CFG_BRANCH" ]; then
         TARGET_BRANCH="$CFG_BRANCH"
-        log "Custom branch configured in configuration: $TARGET_BRANCH"
+        log "Custom branch configured in $CNF_PATH: $TARGET_BRANCH"
     else
         log "No 'branch' setting found in $CNF_PATH, using default: $TARGET_BRANCH"
     fi
 else
-    log "No configuration found in search paths, using default: $TARGET_BRANCH"
+    log "No valid configuration found in search paths, using default: $TARGET_BRANCH"
 fi
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>&1)
 
