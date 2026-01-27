@@ -83,9 +83,36 @@ if [ -z "$(git config user.name)" ] || [ -z "$(git config user.email)" ]; then
 fi
 
 # ============================================================
-# 현재 브랜치 확인 및 전환 (Force 'real')
+# 현재 브랜치 확인 및 전환 (giipAgent.cnf/.cfg 설정 우선)
 # ============================================================
 TARGET_BRANCH="real"
+CNF_PATH=""
+
+# 탐색 위치 우선순위: 1. Parent, 2. User Home, 3. ScriptDir (Local)
+for d in "$(dirname "$SCRIPT_DIR")" "$HOME" "$SCRIPT_DIR"; do
+    for f in "giipAgent.cnf" "giipAgent.cfg"; do
+        if [ -f "$d/$f" ]; then
+            # 샘플 파일 제외 로직
+            if grep -qE "\(SAMPLE\)|# giipAgent CONFIGURATION" "$d/$f"; then
+                log "Skipping sample configuration: $d/$f"
+                continue
+            fi
+            CNF_PATH="$d/$f"
+            break
+        fi
+    done
+    if [ -n "$CNF_PATH" ]; then break; fi
+done
+
+if [ -n "$CNF_PATH" ]; then
+    log "Found configuration: $CNF_PATH"
+    # branch="value" 또는 branch=value 형태 추출
+    CFG_BRANCH=$(grep -E "^branch=" "$CNF_PATH" | cut -d'=' -f2 | sed 's/"//g' | sed "s/'//g" | tr -d '[:space:]')
+    if [ -n "$CFG_BRANCH" ]; then
+        TARGET_BRANCH="$CFG_BRANCH"
+        log "Custom branch configured in configuration: $TARGET_BRANCH"
+    fi
+fi
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>&1)
 
 if [ "$CURRENT_BRANCH" != "$TARGET_BRANCH" ]; then
