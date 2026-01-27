@@ -124,8 +124,17 @@ check_managed_databases() {
 		[ $? -ne 0 ] && continue
 		
 		IFS=$'\t' read -r mdb_id db_type db_name db_host db_port db_user db_password db_database \
-			http_enabled http_url http_method http_timeout http_expected <<< "$fields"
+			http_enabled http_url http_method http_timeout http_expected req_user_list <<< "$fields"
 		
+		# Handle User List Request
+		if [ "$req_user_list" == "1" ]; then
+			if declare -f collect_net3d_user_list >/dev/null; then
+				collect_net3d_user_list "$mdb_id" "$db_type" "$db_host" "$db_port" "$db_user" "$db_password" "$db_database" "$lssn"
+			else
+				echo "[Gateway] ⚠️  collect_net3d_user_list not found" >&2
+			fi
+		fi
+
 		echo "[Gateway]   Checking: $db_name ($db_type)" >&2
 		
 		# Call appropriate check function based on db_type
