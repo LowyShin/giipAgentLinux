@@ -4,6 +4,11 @@
 
 **Version**: 3.0 (Modular Architecture)
 
+> [!WARNING]
+> **Use `giipAgent3.sh` instead of `giipAgent.sh`!**
+> `giipAgent.sh` is a legacy single-file version (v1.x) and is **deprecated**. 
+> All new features (Gateway Mode, Auto-Discovery, Process List, etc.) are implemented in `giipAgent3.sh` and its `lib/` modules.
+
 ## 🌟 개념
 
 GIIP Agent는 서버 모니터링 및 원격 관리 시스템입니다.

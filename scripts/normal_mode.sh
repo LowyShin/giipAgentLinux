@@ -199,6 +199,12 @@ if [ -f "${LIB_DIR}/mssql.sh" ]; then
 	collect_mssql_data "${lssn}"
 fi
 
+# Load System Info module (Process List)
+if [ -f "${LIB_DIR}/sys_info.sh" ]; then
+	. "${LIB_DIR}/sys_info.sh"
+	collect_process_list "${lssn}"
+fi
+
 # ============================================================================
 # Load Normal Mode Functions
 # ============================================================================
