@@ -14,7 +14,7 @@ collect_process_list() {
 	fi
 
 	local kvs_type="sys_info"
-	local kvs_key="process_list_${lssn}"
+	local kvs_key="process_list"
 	local kvs_factor="linux_ps"
 	
 	# Capture ps -ef output, limit to 2000 lines, escape for JSON
