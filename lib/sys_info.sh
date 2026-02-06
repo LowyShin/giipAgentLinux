@@ -17,13 +17,10 @@ collect_process_list() {
 	local kvs_key="${lssn}"
 	local kvs_factor="process_list"
 	
-	# Capture ps -ef output, limit to 2000 lines, escape for JSON
-	# Escaping: \ -> \\, " -> \", newline -> \n literal
-	# Note: kvs_put handles raw strings, but for complex multiline text, pre-escaping is safer if passing as JSON property
-	# However, kvs_put expects "raw json value" for the 4th argument.
-	# If we want to store it as a string value inside kValue, we should format it as a JSON string.
-	
-	local ps_output=$(ps -ef | head -n 2000 | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')
+	# Capture ps -ef output, exclude kernel threads, limit to 5000 lines, escape for JSON
+	# Kernel threads are shown as [name] and typically have PPID=2 (kthreadd)
+	# We include the header line for context
+	local ps_output=$(ps -ef | head -n 5000 | sed 's/\\/\\\\/g' | sed 's/"/\\"/g' | awk '{printf "%s\\n", $0}')
 	
 	# Send to KVS
 	# kvs_put takes: kType kKey kFactor kValue_JSON
