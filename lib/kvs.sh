@@ -69,6 +69,8 @@
 
 # Error log file for encoding failures
 KVS_ERROR_LOG="${SCRIPT_DIR:-/tmp}/log/kvs_encoding_errors.log"
+# Ensure log directory exists (silent fail if not possible)
+mkdir -p "$(dirname "$KVS_ERROR_LOG")" 2>/dev/null
 
 # Function: Safe URL encode with validation
 # Usage: safe_url_encode "string_to_encode" "field_name"
@@ -106,19 +108,23 @@ safe_url_encode() {
 	
 	# === ENCODING: Use jq with timeout protection ===
 	local encoded
+	local jq_exit=0
 	if command -v timeout >/dev/null 2>&1; then
 		encoded=$(printf '%s' "$input" | timeout 5 jq -sRr '@uri' 2>/dev/null)
+		jq_exit=$?
 	else
 		encoded=$(printf '%s' "$input" | jq -sRr '@uri' 2>/dev/null)
+		jq_exit=$?
 	fi
 	
-	# Check if jq succeeded
-	if [ $? -ne 0 ] || [ -z "$encoded" ]; then
-		local error_msg="[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: jq encoding failed for '$field_name' (size: ${input_size}). Using fallback."
+	# Check if jq succeeded (capture exit code immediately to avoid race condition)
+	if [ $jq_exit -ne 0 ] || [ -z "$encoded" ]; then
+		local error_msg="[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: jq encoding failed for '$field_name' (size: ${input_size}, exit: ${jq_exit}). Using fallback."
 		echo "$error_msg" >> "$KVS_ERROR_LOG" 2>/dev/null
 		echo "$error_msg" >&2
 		# Fallback: simple percent encoding for common special chars
-		encoded=$(printf '%s' "$input" | sed 's/%/%25/g; s/ /%20/g; s/"/%22/g; s/#/%23/g; s/&/%26/g; s/+/%2B/g; s/=/%3D/g')
+		# NOTE: Incomplete encoding, handles common URL-unsafe chars only
+		encoded=$(printf '%s' "$input" | sed 's/%/%25/g; s/ /%20/g; s/"/%22/g; s/#/%23/g; s/&/%26/g; s/+/%2B/g; s/=/%3D/g; s/?/%3F/g; s/\\/%5C/g')
 	fi
 	
 	printf '%s' "$encoded"
