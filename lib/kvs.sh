@@ -56,6 +56,78 @@
 # KVS Execution Logging Functions
 # ============================================================================
 
+# ============================================================================
+# Safe URL Encoding with Validation (Added 2026-02-06)
+# ============================================================================
+# Purpose: Validate input BEFORE passing to jq to prevent hangs
+# If validation fails, log error and use fallback encoding
+#
+# Validation checks:
+# 1. Input size (max 500KB to prevent memory issues)
+# 2. Null bytes (can break jq parsing)
+# 3. Empty input handling
+
+# Error log file for encoding failures
+KVS_ERROR_LOG="${SCRIPT_DIR:-/tmp}/log/kvs_encoding_errors.log"
+
+# Function: Safe URL encode with validation
+# Usage: safe_url_encode "string_to_encode" "field_name"
+# Returns: URL-encoded string via stdout, exit code 0 on success, 1 on validation failure
+safe_url_encode() {
+	local input="$1"
+	local field_name="${2:-unknown}"
+	local max_size=512000  # 500KB limit
+	local input_size=${#input}
+	
+	# === VALIDATION 1: Size check ===
+	if [ "$input_size" -gt "$max_size" ]; then
+		local error_msg="[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Input too large for '$field_name': ${input_size} bytes (max: ${max_size})"
+		echo "$error_msg" >> "$KVS_ERROR_LOG" 2>/dev/null
+		echo "$error_msg" >&2
+		# Return truncated data with marker
+		printf '%s' "${input:0:$max_size}[TRUNCATED:${input_size}bytes]" | jq -sRr '@uri' 2>/dev/null || echo "${input:0:100}..."
+		return 1
+	fi
+	
+	# === VALIDATION 2: Null byte check ===
+	if printf '%s' "$input" | grep -q $'\x00'; then
+		local error_msg="[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Null bytes detected in '$field_name' (size: ${input_size})"
+		echo "$error_msg" >> "$KVS_ERROR_LOG" 2>/dev/null
+		echo "$error_msg" >&2
+		# Strip null bytes and continue
+		input=$(printf '%s' "$input" | tr -d '\0')
+	fi
+	
+	# === VALIDATION 3: Empty input ===
+	if [ -z "$input" ]; then
+		echo ""
+		return 0
+	fi
+	
+	# === ENCODING: Use jq with timeout protection ===
+	local encoded
+	if command -v timeout >/dev/null 2>&1; then
+		encoded=$(printf '%s' "$input" | timeout 5 jq -sRr '@uri' 2>/dev/null)
+	else
+		encoded=$(printf '%s' "$input" | jq -sRr '@uri' 2>/dev/null)
+	fi
+	
+	# Check if jq succeeded
+	if [ $? -ne 0 ] || [ -z "$encoded" ]; then
+		local error_msg="[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: jq encoding failed for '$field_name' (size: ${input_size}). Using fallback."
+		echo "$error_msg" >> "$KVS_ERROR_LOG" 2>/dev/null
+		echo "$error_msg" >&2
+		# Fallback: simple percent encoding for common special chars
+		encoded=$(printf '%s' "$input" | sed 's/%/%25/g; s/ /%20/g; s/"/%22/g; s/#/%23/g; s/&/%26/g; s/+/%2B/g; s/=/%3D/g')
+	fi
+	
+	printf '%s' "$encoded"
+	return 0
+}
+
+export -f safe_url_encode
+
+
 # Function: Save execution log to KVS (giipagent factor)
 # Usage: save_execution_log "event_type" "{\"details\":\"json\"}" OR "event_type" "any text value"
 # Event types: startup, queue_check, script_execution, error, shutdown, gateway_init, heartbeat
@@ -102,10 +174,10 @@ save_execution_log() {
 	# echo "[KVS-Debug] jsondata='${jsondata}'" >&2
 	
 	# Build POST data with proper URL encoding for each parameter
-	# wget --post-data does NOT automatically encode values, so we must encode jsondata
-	local encoded_text=$(printf '%s' "$text" | jq -sRr '@uri')
-	local encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri')
-	local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
+	# Using safe_url_encode to validate input before jq (Added 2026-02-06)
+	local encoded_text=$(safe_url_encode "$text" "text")
+	local encoded_token=$(safe_url_encode "$sk" "token")
+	local encoded_jsondata=$(safe_url_encode "$jsondata" "jsondata")
 	
 	local post_data="text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}"
 	
@@ -274,10 +346,10 @@ kvs_put() {
 	# No escaping - data embedded directly to preserve exact format
 	local jsondata="{\"kType\":\"${ktype}\",\"kKey\":\"${kkey}\",\"kFactor\":\"${kfactor}\",\"kValue\":${kvalue_json}}"
 	
-	# URL-encode all POST parameters (wget --post-data does NOT auto-encode)
-	local encoded_text=$(printf '%s' "$text" | jq -sRr '@uri')
-	local encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri')
-	local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
+	# URL-encode all POST parameters with validation (Added 2026-02-06)
+	local encoded_text=$(safe_url_encode "$text" "text")
+	local encoded_token=$(safe_url_encode "$sk" "token")
+	local encoded_jsondata=$(safe_url_encode "$jsondata" "jsondata")
 	
 	# Call API with response capture for debugging
 	# Use specific naming pattern for easier cleanup: kvs_put_response_<timestamp>
