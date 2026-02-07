@@ -23,6 +23,11 @@ lssn="0"
 # 60 = Check queue every 60 seconds
 giipagentdelay="60"
 
+# Git Branch for Agent Auto-Update (git-auto-sync.sh)
+# If not specified, defaults to 'real' branch
+# Common values: real, staging, dev, test
+branch="real"
+
 # ============================================================================
 # Gateway Configuration - 100% AUTO-DETECTED FROM DB
 # ============================================================================
