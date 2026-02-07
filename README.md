@@ -172,6 +172,7 @@ graph LR
 - **[제거 가이드](docs/UNINSTALLATION.md)** - 설치 제거
 
 ### 🔗 외부 문서
+- [GIIP Dev Agent (Multi-Agent Framework)](https://github.com/LowyShin/giip-dev-agent) - 🤖 자율 멀티 에이전트 프레임워크 (신규!)
 - [API 엔드포인트 비교](../giipfaw/docs/API_ENDPOINTS_COMPARISON.md) - giipApi vs giipApiSk vs giipApiSk2
 - [Agent 설치 가이드](../giipdb/docs/AGENT_INSTALLATION_GUIDE.md) - 전체 설치 프로세스
 - [테스트 서버 설정](../giipdb/docs/TEST_SERVER_INSTALLATION.md) - 테스트 환경
