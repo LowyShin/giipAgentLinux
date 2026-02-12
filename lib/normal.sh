@@ -17,7 +17,13 @@
 # Usage: execute_script "script_file"
 execute_script() {
 	local script_file=$1
+	local script_type_file="${script_file}.type"
+	local script_type="sh"
 	
+	if [ -f "$script_type_file" ]; then
+		script_type=$(cat "$script_type_file")
+	fi
+
 	if [ ! -s "$script_file" ]; then
 		echo "[Normal] Empty script file"
 		return 1
@@ -38,34 +44,40 @@ execute_script() {
 	# Convert DOS line endings
 	dos2unix "$script_file" 2>/dev/null
 	
-	# Check if it's an expect script
-	local n=$(cat "$script_file" | grep 'expect=' | wc -l)
-	
 	local script_start_time=$(date +%s)
 	local script_exit_code=0
 	
-	if [ ${n} -ge 1 ]; then
-		# Execute expect script
-		expect "$script_file" >> "$LogFileName" 2>&1
-		script_exit_code=$?
-		echo "[Normal] Executed expect script (exit_code=${script_exit_code})"
-	else
-		# Execute bash script
-		sh "$script_file" >> "$LogFileName" 2>&1
-		script_exit_code=$?
-		echo "[Normal] Executed bash script (exit_code=${script_exit_code})"
-	fi
+	echo "[Normal] Executing script with type: $script_type"
+
+	case "$script_type" in
+		py|python)
+			python3 "$script_file" >> "$LogFileName" 2>&1
+			script_exit_code=$?
+			;;
+		ps1|powershell)
+			pwsh "$script_file" >> "$LogFileName" 2>&1
+			script_exit_code=$?
+			;;
+		expect)
+			expect "$script_file" >> "$LogFileName" 2>&1
+			script_exit_code=$?
+			;;
+		*)
+			# Default to sh
+			sh "$script_file" >> "$LogFileName" 2>&1
+			script_exit_code=$?
+			;;
+	esac
 	
 	local script_end_time=$(date +%s)
 	local script_duration=$((script_end_time - script_start_time))
 	
-	# Save script execution to KVS
-	local script_type="bash"
-	[ ${n} -ge 1 ] && script_type="expect"
-	
 	local exec_details="{\"script_type\":\"${script_type}\",\"exit_code\":${script_exit_code},\"execution_time_seconds\":${script_duration}}"
 	save_execution_log "script_execution" "$exec_details"
 	
+	# Cleanup type file
+	rm -f "$script_type_file"
+
 	return $script_exit_code
 }
 

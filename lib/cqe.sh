@@ -119,14 +119,14 @@ queue_get() {
 		return 1
 	fi
 	
-	# Extract script from JSON response
-	# Try multiple methods to ensure robust parsing
-	
-	# Method 1: Using jq (most reliable)
+	# Extract script and type from JSON response
 	if command -v jq >/dev/null 2>&1; then
 		local script=$(jq -r '.data[0].ms_body // .ms_body // empty' "$temp_response" 2>/dev/null)
+		local script_type=$(jq -r '.data[0].script_type // .script_type // "sh"' "$temp_response" 2>/dev/null)
 		if [ -n "$script" ] && [ "$script" != "null" ]; then
 			echo "$script" > "$output_file"
+			# Save script type to a sidecar file or return it
+			echo "$script_type" > "${output_file}.type"
 			rm -f "$temp_response"
 			return 0
 		fi
