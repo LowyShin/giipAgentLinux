@@ -163,7 +163,9 @@ except Exception as e:
                         r.logical_reads,
                         r.start_time,
                         r.command,
-                        t.text as query_text
+                        t.text as query_text,
+                        CONVERT(VARCHAR(64), r.query_hash, 1) as query_hash,
+                        CONVERT(VARCHAR(130), r.sql_handle, 1) as sql_handle
                     FROM sys.dm_exec_requests r
                     JOIN sys.dm_exec_sessions s2 ON r.session_id = s2.session_id
                     OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t
