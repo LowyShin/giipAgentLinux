@@ -144,10 +144,12 @@ collect_net3d_mssql() {
         ISNULL(s.login_name, '') AS login_name,
         s.status,
         ISNULL(r.cpu_time, 0) AS cpu_time,
-        ISNULL(REPLACE(REPLACE(t.text, CHAR(13), ' '), CHAR(10), ' '), '') AS sql_text,
+        ISNULL(REPLACE(REPLACE(SUBSTRING(t.text, 1, 1000), CHAR(13), ' '), CHAR(10), ' '), '') AS sql_text,
         CASE WHEN trans.session_id IS NOT NULL THEN 1 ELSE 0 END as is_open_tran,
         ISNULL(DATEDIFF(MINUTE, trans.transaction_begin_time, GETDATE()), 0) as tran_duration,
-        ISNULL(trans.transaction_state_desc, '') as tran_state
+        ISNULL(trans.transaction_state_desc, '') as tran_state,
+        CONVERT(NVARCHAR(64), r.query_hash, 1) as query_hash,
+        CONVERT(NVARCHAR(130), r.sql_handle, 1) as sql_handle
     FROM sys.dm_exec_sessions s
     LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id
     OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t
@@ -194,7 +196,7 @@ for line in sys.stdin:
     if not line or "rows affected" in line: continue
     
     parts = line.split("\t")
-    # Expected 9 columns
+    # Expected characters
     if len(parts) >= 1: 
         # Safe extraction with defaults
         def get(idx, default=""):
@@ -209,7 +211,9 @@ for line in sys.stdin:
             "last_sql": get(5),
             "is_open_tran": (get(6) == "1"),
             "tran_duration": int(get(7)) if get(7).isdigit() else 0,
-            "tran_state": get(8)
+            "tran_state": get(8),
+            "query_hash": get(9),
+            "sql_handle": get(10)
         })
 
 print(json.dumps(sessions, ensure_ascii=False))
