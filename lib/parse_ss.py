@@ -65,7 +65,10 @@ def main():
                 'local_port': lport,
                 'remote_ip': rip,
                 'remote_port': rport,
-                'process': process_info
+                'process': process_info,
+                'query_hash': '',
+                'sql_handle': '',
+                'plan_handle': ''
             })
             
         print(json.dumps({

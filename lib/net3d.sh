@@ -74,6 +74,46 @@ collect_net3d_data() {
     local net_json="{}"
     local source_cmd=""
     
+    # 🔍 [NEW] ENRICHMENT: Local SQL Server Session Check
+    local sql_session_map="{}"
+    if pgrep -x "sqlservr" >/dev/null 2>&1; then
+        log_message "DEBUG" "[Net3D] Local SQL Server detected. Attempting to fetch session map."
+        # Use python to fetch session map if possible
+        sql_session_map=$($python_cmd -c "
+import sys, json
+try:
+    import pyodbc
+    conn_str = 'DRIVER={ODBC Driver 17 for SQL Server};SERVER=localhost;DATABASE=master;Trusted_Connection=yes;Connection Timeout=5;'
+    conn = pyodbc.connect(conn_str)
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT 
+            c.client_net_address,
+            c.client_tcp_port,
+            CONVERT(NVARCHAR(64), r.query_hash, 1) as query_hash,
+            CONVERT(NVARCHAR(130), r.sql_handle, 1) as sql_handle,
+            CONVERT(NVARCHAR(130), r.plan_handle, 1) as plan_handle,
+            c.local_tcp_port
+        FROM sys.dm_exec_connections c WITH(NOLOCK)
+        JOIN sys.dm_exec_requests r WITH(NOLOCK) ON c.session_id = r.session_id
+        WHERE c.net_transport = 'TCP'
+    ''')
+    res = {}
+    for row in cursor.fetchall():
+        key = f'{row.client_net_address.strip()}:{row.client_tcp_port}'
+        res[key] = {
+            'hash': row.query_hash,
+            'sql_handle': row.sql_handle,
+            'plan_handle': row.plan_handle,
+            'localPort': int(row.local_tcp_port)
+        }
+    conn.close()
+    print(json.dumps(res))
+except Exception as e:
+    print('{}')
+" 2>/dev/null)
+    fi
+
     # Try ss first (faster, modern)
     if command -v ss >/dev/null 2>&1; then
         source_cmd="ss"
@@ -104,6 +144,28 @@ collect_net3d_data() {
             log_message "WARN" "[Net3D] 'ss' returned 0 connections and 'netstat' is not available."
             return 1
         fi
+    fi
+
+    # [ENRICHMENT] Apply SQL session map to connections
+    if [ "$sql_session_map" != "{}" ]; then
+        net_json=$(echo "$net_json" | $python_cmd -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    session_map = json.loads(sys.argv[1])
+    for conn in data.get('connections', []):
+        key = f'{conn.get(\"remote_ip\")}:{conn.get(\"remote_port\")}'
+        if key in session_map:
+            s = session_map[key]
+            if str(conn.get(\"local_port\")) == str(s.get(\"localPort\")):
+                conn['query_hash'] = s.get('hash', '')
+                conn['sql_handle'] = s.get('sql_handle', '')
+                conn['plan_handle'] = s.get('plan_handle', '')
+    print(json.dumps(data))
+except Exception as e:
+    sys.stdin.seek(0)
+    print(sys.stdin.read())
+" "$sql_session_map")
     fi
     
     # 3. Validation & Count Logging
