@@ -74,45 +74,68 @@ collect_net3d_data() {
     local net_json="{}"
     local source_cmd=""
     
-    # 🔍 [NEW] ENRICHMENT: Local SQL Server Session Check
+    # 🔍 [NEW] ENRICHMENT: Local Database Session Check (MSSQL, MySQL, PostgreSQL)
     local sql_session_map="{}"
-    if pgrep -x "sqlservr" >/dev/null 2>&1; then
-        log_message "DEBUG" "[Net3D] Local SQL Server detected. Attempting to fetch session map."
-        # Use python to fetch session map if possible
-        sql_session_map=$($python_cmd -c "
-import sys, json
-try:
-    import pyodbc
-    conn_str = 'DRIVER={ODBC Driver 17 for SQL Server};SERVER=localhost;DATABASE=master;Trusted_Connection=yes;Connection Timeout=5;'
-    conn = pyodbc.connect(conn_str)
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT 
-            c.client_net_address,
-            c.client_tcp_port,
-            CONVERT(NVARCHAR(64), r.query_hash, 1) as query_hash,
-            CONVERT(NVARCHAR(130), r.sql_handle, 1) as sql_handle,
-            CONVERT(NVARCHAR(130), r.plan_handle, 1) as plan_handle,
-            c.local_tcp_port
-        FROM sys.dm_exec_connections c WITH(NOLOCK)
-        JOIN sys.dm_exec_requests r WITH(NOLOCK) ON c.session_id = r.session_id
-        WHERE c.net_transport = 'TCP'
-    ''')
-    res = {}
-    for row in cursor.fetchall():
-        key = f'{row.client_net_address.strip()}:{row.client_tcp_port}'
-        res[key] = {
-            'hash': row.query_hash,
-            'sql_handle': row.sql_handle,
-            'plan_handle': row.plan_handle,
-            'localPort': int(row.local_tcp_port)
-        }
-    conn.close()
-    print(json.dumps(res))
-except Exception as e:
-    print('{}')
+    sql_session_map=$($python_cmd -c "
+import sys, json, subprocess, hashlib
+
+def get_mssql_sessions():
+    sessions = {}
+    try:
+        import pyodbc
+        # Try local connection with Trusted_Connection (requires Kerberos/Domain on Linux, but kept for parity)
+        conn_str = 'DRIVER={ODBC Driver 17 for SQL Server};SERVER=localhost;DATABASE=master;Trusted_Connection=yes;Connection Timeout=3;'
+        conn = pyodbc.connect(conn_str)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT c.client_net_address, c.client_tcp_port, CONVERT(NVARCHAR(64), r.query_hash, 1) as query_hash,
+                   CONVERT(NVARCHAR(130), r.sql_handle, 1) as sql_handle, c.local_tcp_port
+            FROM sys.dm_exec_connections c JOIN sys.dm_exec_requests r ON c.session_id = r.session_id
+        ''')
+        for row in cursor.fetchall():
+            key = f'{row.client_net_address.strip()}:{row.client_tcp_port}'
+            sessions[key] = {'hash': row.query_hash, 'sql_handle': row.sql_handle, 'localPort': int(row.local_tcp_port)}
+        conn.close()
+    except: pass
+    return sessions
+
+def get_mysql_sessions():
+    sessions = {}
+    try:
+        # Requires mysql client and appropriate permissions (e.g. via /root/.my.cnf)
+        cmd = ['mysql', '-sN', '-e', 'SELECT host, info FROM information_schema.processlist WHERE command != \"Sleep\" AND host IS NOT NULL']
+        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=3).decode('utf-8')
+        for line in output.splitlines():
+            if '\t' in line:
+                host_str, sql = line.split('\t', 1)
+                if ':' in host_str:
+                    ip, port = host_str.rsplit(':', 1)
+                    qhash = '0x' + hashlib.md5(sql.encode('utf-8')).hexdigest() if sql else ''
+                    sessions[f'{ip}:{port}'] = {'hash': qhash, 'localPort': 3306}
+    except: pass
+    return sessions
+
+def get_pg_sessions():
+    sessions = {}
+    try:
+        # Requires psql client and appropriate permissions
+        cmd = ['psql', '-tA', '-F', '\t', '-c', \"SELECT client_addr, client_port, query FROM pg_stat_activity WHERE state = 'active' AND client_addr IS NOT NULL\"]
+        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=3).decode('utf-8')
+        for line in output.splitlines():
+            parts = line.split('\t')
+            if len(parts) >= 3:
+                ip, port, sql = parts[0], parts[1], parts[2]
+                qhash = '0x' + hashlib.md5(sql.encode('utf-8')).hexdigest() if sql else ''
+                sessions[f'{ip}:{port}'] = {'hash': qhash, 'localPort': 5432}
+    except: pass
+    return sessions
+
+all_sessions = {}
+all_sessions.update(get_mssql_sessions())
+all_sessions.update(get_mysql_sessions())
+all_sessions.update(get_pg_sessions())
+print(json.dumps(all_sessions))
 " 2>/dev/null)
-    fi
 
     # Try ss first (faster, modern)
     if command -v ss >/dev/null 2>&1; then
