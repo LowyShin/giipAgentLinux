@@ -224,6 +224,12 @@ COLLECTED_AT=$(date -u '+%Y-%m-%dT%H:%M:%S')
 JSON_HOSTS="[]"
 
 while IFS=$'\t' read -r host_name login_name status cpu_time reads writes logical_reads start_time command query_text; do
+    # Calculate MD5 hash for query_text if present
+    QUERY_HASH=""
+    if [ -n "$query_text" ]; then
+        QUERY_HASH=$(echo -n "$query_text" | md5sum | awk '{print $1}')
+    fi
+
     # Query 객체 생성
     QUERY_OBJ=$(jq -n \
         --arg login_name "$login_name" \
@@ -235,6 +241,7 @@ while IFS=$'\t' read -r host_name login_name status cpu_time reads writes logica
         --arg start_time "$start_time" \
         --arg command "$command" \
         --arg query_text "$query_text" \
+        --arg query_hash "$QUERY_HASH" \
         '{
             login_name: $login_name,
             status: $status,
@@ -244,7 +251,8 @@ while IFS=$'\t' read -r host_name login_name status cpu_time reads writes logica
             logical_reads: $logical_reads,
             start_time: $start_time,
             command: $command,
-            query_text: $query_text
+            query_text: $query_text,
+            query_hash: $query_hash
         }')
     
     # 호스트 찾기 또는 추가
