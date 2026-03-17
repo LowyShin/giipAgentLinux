@@ -19,7 +19,7 @@ collect_net3d_mysql() {
         return 1
     fi
 
-    local query="SELECT host, user, db, command, time, info FROM information_schema.processlist WHERE command != 'Sleep' AND user NOT IN ('system user', 'event_scheduler')"
+    local query="SELECT id, host, user, db, command, time, info FROM information_schema.processlist WHERE command != 'Sleep' AND user NOT IN ('system user', 'event_scheduler')"
 
     # Execute query (TSV output)
     local result
@@ -32,7 +32,7 @@ collect_net3d_mysql() {
 
     # Parse with Python
     echo "$result" | python3 -c '
-import sys, json, hashlib
+import sys, json, hashlib, datetime
 
 sessions = []
 for line in sys.stdin:
@@ -40,24 +40,33 @@ for line in sys.stdin:
     if not line: continue
     
     parts = line.split("\t")
-    # Expected: host, user, db, command, time, info
+    # Expected: id, host, user, db, command, time, info
     
-    if len(parts) >= 5:
-        host_str = parts[0] # e.g. 192.168.1.5:12345
+    if len(parts) >= 6:
+        host_str = parts[1] # e.g. 192.168.1.5:12345
         client_ip = host_str.split(":")[0] if ":" in host_str else host_str
         
-        info_sql = parts[5] if len(parts) > 5 else ""
+        info_sql = parts[6] if len(parts) > 6 else ""
         qhash = "0x" + hashlib.md5(info_sql.encode("utf-8")).hexdigest() if info_sql else ""
         
+        # Calculate start time
+        try:
+            time_val = int(parts[5]) if parts[5].isdigit() else 0
+            start_time = (datetime.datetime.now() - datetime.timedelta(seconds=time_val)).strftime("%Y-%m-%d %H:%M:%S")
+        except:
+            start_time = None
+
         sessions.append({
             "client_net_address": client_ip,
-            "login_name": parts[1],
-            "program_name": parts[3], # MySQL Command (Query, Execute, etc)
-            "db_name": parts[2],
+            "login_name": parts[2],
+            "program_name": parts[4], # MySQL Command (Query, Execute, etc)
+            "db_name": parts[3],
             "status": "active",
-            "cpu_load": int(parts[4]) if parts[4].isdigit() else 0,
+            "cpu_load": int(parts[5]) if parts[5].isdigit() else 0,
             "last_sql": info_sql,
-            "query_hash": qhash
+            "query_hash": qhash,
+            "query_id": parts[0],
+            "query_start_time": start_time
         })
 
 print(json.dumps(sessions, ensure_ascii=False))
@@ -79,7 +88,7 @@ collect_net3d_postgresql() {
         return 1
     fi
 
-    local query="SELECT client_addr, application_name, usename, datname, state, query, EXTRACT(EPOCH FROM (now() - query_start))::int FROM pg_stat_activity WHERE state = 'active' AND client_addr IS NOT NULL"
+    local query="SELECT pid, client_addr, application_name, usename, datname, state, query, query_start::text, EXTRACT(EPOCH FROM (now() - query_start))::int FROM pg_stat_activity WHERE state = 'active' AND client_addr IS NOT NULL"
 
     # Execute query (CSV/Aligned? -tA is best for pipe)
     # -t: tuples only (no header/footer)
@@ -102,19 +111,22 @@ for line in sys.stdin:
     if not line: continue
     
     parts = line.split("\t")
-    if len(parts) >= 7:
-        sql = parts[5]
+    # Expected: pid, client_addr, application_name, usename, datname, state, query, query_start, cpu_load
+    if len(parts) >= 9:
+        sql = parts[6]
         qhash = "0x" + hashlib.md5(sql.encode("utf-8")).hexdigest() if sql else ""
         
         sessions.append({
-            "client_net_address": parts[0],
-            "program_name": parts[1],
-            "login_name": parts[2],
-            "db_name": parts[3],
-            "status": parts[4],
+            "client_net_address": parts[1],
+            "program_name": parts[2],
+            "login_name": parts[3],
+            "db_name": parts[4],
+            "status": parts[5],
             "last_sql": sql,
-            "cpu_load": int(parts[6]) if parts[6].isdigit() else 0,
-            "query_hash": qhash
+            "cpu_load": int(parts[8]) if parts[8].isdigit() else 0,
+            "query_hash": qhash,
+            "query_id": parts[0],
+            "query_start_time": parts[7]
         })
 
 print(json.dumps(sessions, ensure_ascii=False))
@@ -150,7 +162,9 @@ collect_net3d_mssql() {
         ISNULL(DATEDIFF(MINUTE, trans.transaction_begin_time, GETDATE()), 0) as tran_duration,
         ISNULL(trans.transaction_state_desc, '') as tran_state,
         CONVERT(NVARCHAR(64), r.query_hash, 1) as query_hash,
-        CONVERT(NVARCHAR(130), r.sql_handle, 1) as sql_handle
+        CONVERT(NVARCHAR(130), r.sql_handle, 1) as sql_handle,
+        ISNULL(CONVERT(NVARCHAR(30), r.start_time, 120), '') as query_start_time,
+        s.session_id as query_id
     FROM sys.dm_exec_sessions s
     LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id
     OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t
@@ -214,7 +228,9 @@ for line in sys.stdin:
             "tran_duration": int(get(7)) if get(7).isdigit() else 0,
             "tran_state": get(8),
             "query_hash": get(9),
-            "sql_handle": get(10)
+            "sql_handle": get(10),
+            "query_start_time": get(11),
+            "query_id": get(12)
         })
 
 print(json.dumps(sessions, ensure_ascii=False))
