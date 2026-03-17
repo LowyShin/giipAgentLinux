@@ -32,7 +32,7 @@ collect_net3d_mysql() {
 
     # Parse with Python
     echo "$result" | python3 -c '
-import sys, json
+import sys, json, hashlib
 
 sessions = []
 for line in sys.stdin:
@@ -41,17 +41,13 @@ for line in sys.stdin:
     
     parts = line.split("\t")
     # Expected: host, user, db, command, time, info
-    # MySQL output can vary if fields are empty/NULL, simple split might be fragile for "info"
-    # But mysql -sN ensures tabs.
     
     if len(parts) >= 5:
         host_str = parts[0] # e.g. 192.168.1.5:12345
         client_ip = host_str.split(":")[0] if ":" in host_str else host_str
         
-        # Skip local/internal if needed, but Net3D filters mostly on frontend.
-        # However, keeping data clean is good.
-        
         info_sql = parts[5] if len(parts) > 5 else ""
+        qhash = "0x" + hashlib.md5(info_sql.encode("utf-8")).hexdigest() if info_sql else ""
         
         sessions.append({
             "client_net_address": client_ip,
@@ -60,7 +56,8 @@ for line in sys.stdin:
             "db_name": parts[2],
             "status": "active",
             "cpu_load": int(parts[4]) if parts[4].isdigit() else 0,
-            "last_sql": info_sql
+            "last_sql": info_sql,
+            "query_hash": qhash
         })
 
 print(json.dumps(sessions, ensure_ascii=False))
@@ -97,7 +94,7 @@ collect_net3d_postgresql() {
     fi
 
     echo "$result" | python3 -c '
-import sys, json
+import sys, json, hashlib
 
 sessions = []
 for line in sys.stdin:
@@ -106,14 +103,18 @@ for line in sys.stdin:
     
     parts = line.split("\t")
     if len(parts) >= 7:
+        sql = parts[5]
+        qhash = "0x" + hashlib.md5(sql.encode("utf-8")).hexdigest() if sql else ""
+        
         sessions.append({
             "client_net_address": parts[0],
             "program_name": parts[1],
             "login_name": parts[2],
             "db_name": parts[3],
             "status": parts[4],
-            "last_sql": parts[5],
-            "cpu_load": int(parts[6]) if parts[6].isdigit() else 0
+            "last_sql": sql,
+            "cpu_load": int(parts[6]) if parts[6].isdigit() else 0,
+            "query_hash": qhash
         })
 
 print(json.dumps(sessions, ensure_ascii=False))
