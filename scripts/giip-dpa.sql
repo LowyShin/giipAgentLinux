@@ -1,5 +1,5 @@
 -- MySQL / Aurora MySQL equivalent of SQL Server's
--- SELECT host_name, login_name, status, cpu_time, reads, writes, logical_reads, start_time, command, query_text
+-- SELECT host_name, login_name, status, cpu_time, reads, writes, logical_reads, start_time, command, query_text, query_hash
 --
 -- Notes:
 -- - Requires performance_schema to be enabled.
@@ -26,7 +26,8 @@ SELECT
   COALESCE(t.PROCESSLIST_COMMAND, '') AS command,
   -- prefer the full SQL text from events_statements_current; fallback to PROCESSLIST_INFO
   -- escape CR/LF and tabs in the SQL text so the client returns a single-line field
-  REPLACE(REPLACE(REPLACE(COALESCE(es.SQL_TEXT, t.PROCESSLIST_INFO), '\r', '\\r'), '\n', '\\n'), '\t', ' ') AS query_text
+  REPLACE(REPLACE(REPLACE(COALESCE(es.SQL_TEXT, t.PROCESSLIST_INFO), '\r', '\\r'), '\n', '\\n'), '\t', ' ') AS query_text,
+  es.DIGEST AS query_hash
 FROM performance_schema.threads t
 LEFT JOIN performance_schema.events_statements_current es ON es.THREAD_ID = t.THREAD_ID
 -- only user threads

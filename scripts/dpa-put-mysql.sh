@@ -180,21 +180,23 @@ log "Collecting MySQL performance data..."
 # 현재 실행중인 쿼리 수집
 QUERY_DATA=$(execute_mysql_query "
 SELECT 
-    COALESCE(pl.host, 'unknown') as host_name,
-    COALESCE(pl.user, 'unknown') as login_name,
-    COALESCE(pl.state, 'unknown') as status,
-    COALESCE(pl.time, 0) as cpu_time,
-    0 as reads,
-    0 as writes,
-    0 as logical_reads,
-    NOW() as start_time,
-    COALESCE(pl.command, 'unknown') as command,
-    COALESCE(pl.info, '') as query_text
-FROM information_schema.processlist pl
-WHERE pl.command != 'Sleep'
-  AND pl.user != 'system user'
-  AND pl.time > 50
-ORDER BY pl.time DESC
+    COALESCE(t.PROCESSLIST_HOST, 'unknown') as host_name,
+    COALESCE(t.PROCESSLIST_USER, 'unknown') as login_name,
+    COALESCE(t.PROCESSLIST_STATE, 'unknown') as status,
+    IFNULL(CAST(es.TIMER_WAIT AS DECIMAL(20,3)) / 1000000, CAST(t.PROCESSLIST_TIME AS SIGNED) * 1000) as cpu_time,
+    IFNULL(es.ROWS_EXAMINED, 0) as reads,
+    IFNULL(es.ROWS_SENT, 0) as writes,
+    IFNULL(es.ROWS_EXAMINED, 0) as logical_reads,
+    CASE WHEN t.PROCESSLIST_TIME IS NOT NULL THEN (NOW() - INTERVAL t.PROCESSLIST_TIME SECOND) ELSE NOW() END as start_time,
+    COALESCE(t.PROCESSLIST_COMMAND, 'unknown') as command,
+    REPLACE(REPLACE(REPLACE(COALESCE(es.SQL_TEXT, t.PROCESSLIST_INFO), '\r', '\\r'), '\n', '\\n'), '\t', ' ') as query_text,
+    COALESCE(es.DIGEST, '') as query_hash
+FROM performance_schema.threads t
+LEFT JOIN performance_schema.events_statements_current es ON es.THREAD_ID = t.THREAD_ID
+WHERE t.PROCESSLIST_COMMAND != 'Sleep'
+  AND COALESCE(t.PROCESSLIST_USER, '') != ''
+  AND t.PROCESSLIST_TIME > 50
+ORDER BY cpu_time DESC
 LIMIT 100;
 ")
 
@@ -223,11 +225,10 @@ COLLECTED_AT=$(date -u '+%Y-%m-%dT%H:%M:%S')
 # 호스트별 그룹화 및 JSON 생성
 JSON_HOSTS="[]"
 
-while IFS=$'\t' read -r host_name login_name status cpu_time reads writes logical_reads start_time command query_text; do
-    # Calculate MD5 hash for query_text if present
-    QUERY_HASH=""
-    if [ -n "$query_text" ]; then
-        QUERY_HASH=$(echo -n "$query_text" | md5sum | awk '{print $1}')
+while IFS=$'\t' read -r host_name login_name status cpu_time reads writes logical_reads start_time command query_text query_hash; do
+    # Fallback to manual hash if query_hash is empty
+    if [ -z "$query_hash" ] && [ -n "$query_text" ]; then
+        query_hash=$(echo -n "$query_text" | md5sum | awk '{print $1}')
     fi
 
     # Query 객체 생성
@@ -241,7 +242,7 @@ while IFS=$'\t' read -r host_name login_name status cpu_time reads writes logica
         --arg start_time "$start_time" \
         --arg command "$command" \
         --arg query_text "$query_text" \
-        --arg query_hash "$QUERY_HASH" \
+        --arg query_hash "$query_hash" \
         '{
             login_name: $login_name,
             status: $status,

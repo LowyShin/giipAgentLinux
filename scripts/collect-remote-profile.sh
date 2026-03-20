@@ -1,13 +1,15 @@
 #!/bin/bash
+set -e
 # ============================================================================
 # GIIP Agent - Remote Server Profiling & KVS Upload Component
-# Version: 1.0
+# Version: 1.1
 # Purpose: Collect performance metrics from remote server via SSH and upload to KVS
 # Usage: ./collect-remote-profile.sh <TARGET_IP> <TARGET_USER> <TARGET_LSSN> [SSH_KEY_PATH] [SSH_PASSWORD]
 # Dependency: lib/common.sh, lib/kvs.sh (automatically loaded)
 # ============================================================================
 
 # Initialize Script Paths
+# Standalone execution: find script directory absolutely
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
 LIB_DIR="${SCRIPT_DIR}/lib"
 CONFIG_FILE="${SCRIPT_DIR}/../giipAgent.cnf"
@@ -112,10 +114,10 @@ if [[ ! "$PROFILE_DATA" =~ ^\{.*\}$ ]]; then
 fi
 
 # Save to temp file (optional, for debugging or persistence)
-TMP_FILE="/tmp/remote_profile_${TARGET_LSSN}_$(date +%Y%m%d).json"
+TMP_FILE="/tmp/remote_profile_${TARGET_LSSN}_$(date +%Y%m%d%H%M%S).json"
 echo "$PROFILE_DATA" > "$TMP_FILE"
 
-log_message "INFO" "Profile collected: $PROFILE_DATA"
+log_message "INFO" "Profile collected and saved to $TMP_FILE: $PROFILE_DATA"
 
 # ============================================================================
 # 5. Upload to KVS (giipApiSk2)
