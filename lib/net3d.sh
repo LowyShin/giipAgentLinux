@@ -169,51 +169,46 @@ print(json.dumps(all_sessions))
         fi
     fi
 
-    # [ENRICHMENT] Apply SQL session map to connections
-    if [ "$sql_session_map" != "{}" ]; then
-        net_json=$(echo "$net_json" | $python_cmd -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    session_map = json.loads(sys.argv[1])
-    for conn in data.get('connections', []):
-        key = f'{conn.get(\"remote_ip\")}:{conn.get(\"remote_port\")}'
-        if key in session_map:
-            s = session_map[key]
-            if str(conn.get(\"local_port\")) == str(s.get(\"localPort\")):
-                conn['query_hash'] = s.get('hash', '')
-                conn['sql_handle'] = s.get('sql_handle', '')
-                conn['plan_handle'] = s.get('plan_handle', '')
-    print(json.dumps(data))
-except Exception as e:
-    sys.stdin.seek(0)
-    print(sys.stdin.read())
-" "$sql_session_map")
-    fi
-    
-    # 3. Validation & Count Logging
-    local json_len=${#net_json}
-    if [ "$json_len" -lt 10 ] || [[ "$net_json" == *"\"error\":"* ]]; then
-        log_message "WARN" "[Net3D] Collected data is invalid or contains error: ${net_json:0:100}..."
-        return 1
-    fi
-    
-    # Extract connection count for logging (using grep/sed purely for counting)
-    local conn_count=$(echo "$net_json" | grep -o "\"local_ip\"" | wc -l)
-    log_message "INFO" "[Net3D] Collected ${conn_count} connections using ${source_cmd}"
-    
-    # 4. Upload to KVS
-    # kFactor matches spec requirements: "netstat"
-    # Data is stored as raw JSON in kValue
-    # We include 'lssn' in the JSON body just in case the backend/frontend expects it inside
+    # 3. Upload Network Data to KVS (netstat factor)
     if kvs_put "lssn" "${lssn}" "netstat" "$net_json"; then
-        log_message "INFO" "[Net3D] Successfully uploaded netstat data (${json_len} bytes)"
-        
-        # Update state file only on success
+        log_message "INFO" "[Net3D] Successfully uploaded netstat data"
         echo "$(date +%s)" > "${NET3D_STATE_FILE}_${lssn}"
     else
         log_message "ERROR" "[Net3D] Failed to upload netstat data"
         return 1
+    fi
+
+    # 4. Upload DB Connection Data to KVS (db_connections factor)
+    # [NEW] Separation of concerns: DB data goes to its own factor as per global standards
+    if [ "$sql_session_map" != "{}" ]; then
+        local db_json=""
+        db_json=$($python_cmd -c "
+import sys, json
+try:
+    session_map = json.loads(sys.argv[1])
+    db_conns = []
+    for key, s in session_map.items():
+        ip, port = key.rsplit(':', 1)
+        db_conns.append({
+            'client_net_address': ip,
+            'remote_port': int(port),
+            'local_port': s.get('localPort'),
+            'query_hash': s.get('hash', ''),
+            'sql_handle': s.get('sql_handle', ''),
+            'status': 'active'
+        })
+    print(json.dumps(db_conns))
+except Exception as e:
+    print('[]')
+" "$sql_session_map")
+
+        if [ "$db_json" != "[]" ]; then
+            if kvs_put "lssn" "${lssn}" "db_connections" "$db_json"; then
+                log_message "INFO" "[Net3D] Successfully uploaded db_connections data"
+            else
+                log_message "ERROR" "[Net3D] Failed to upload db_connections data"
+            fi
+        fi
     fi
     
     # 5. Upload Server IP Information (if module available)
