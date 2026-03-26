@@ -6,8 +6,17 @@
 # Usage: source lib/server_info.sh && collect_server_ips <lssn>
 
 # UTF-8 환경 설정 (필수!)
-export LANG=en_US.UTF-8
-export LC_ALL=en_US.UTF-8
+# 수정: locale -a 로 실제 사용 가능한 인코딩을 확인 후 자동 폴백
+if locale -a 2>/dev/null | grep -q "en_US.UTF-8\|en_US.utf8"; then
+    export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+elif locale -a 2>/dev/null | grep -q "C.UTF-8\|C.utf8"; then
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+else
+    export LANG=C
+    export LC_ALL=C
+fi
 
 # ============================================================================
 # Dependencies Check

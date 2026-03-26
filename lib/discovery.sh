@@ -148,7 +148,7 @@ _collect_local_data() {
     
     _log_to_kvs "LOCAL_DB_SAVE" "$lssn" "SUCCESS" "Discovery data saved to DB"
     # echo "[Discovery] ✅ Local infrastructure discovery completed for LSSN=$lssn" >&2
-    echo "$(date +%s)" > "$DISCOVERY_STATE_FILE.lssn_$lssn"
+    { rm -f "$DISCOVERY_STATE_FILE.lssn_$lssn" && echo "$(date +%s)" > "$DISCOVERY_STATE_FILE.lssn_$lssn"; } 2>/dev/null || true
     
     return 0
 }
@@ -191,7 +191,7 @@ _collect_remote_data() {
             
             if _save_discovery_to_db "$lssn" "$discovery_json"; then
                 _log_to_kvs "REMOTE_DB_SAVE" "$lssn" "SUCCESS" "Discovery data saved to DB"
-                echo "$(date +%s)" > "$DISCOVERY_STATE_FILE.lssn_$lssn.remote_$ssh_host"
+                { rm -f "$DISCOVERY_STATE_FILE.lssn_$lssn.remote_$ssh_host" && echo "$(date +%s)" > "$DISCOVERY_STATE_FILE.lssn_$lssn.remote_$ssh_host"; } 2>/dev/null || true
                 return 0
             else
                 _log_to_kvs "REMOTE_DB_SAVE" "$lssn" "ERROR" "Failed to save discovery data to DB (method 1)"
@@ -265,7 +265,7 @@ _collect_remote_data() {
     
     # echo "[Discovery] ✅ Remote infrastructure discovery completed for LSSN=$lssn (Host=$ssh_host)" >&2
     _log_to_kvs "REMOTE_COMPLETE" "$lssn" "SUCCESS" "Remote discovery completed successfully for host=$ssh_host"
-    echo "$(date +%s)" > "$DISCOVERY_STATE_FILE.lssn_$lssn.remote_$ssh_host"
+    { rm -f "$DISCOVERY_STATE_FILE.lssn_$lssn.remote_$ssh_host" && echo "$(date +%s)" > "$DISCOVERY_STATE_FILE.lssn_$lssn.remote_$ssh_host"; } 2>/dev/null || true
     
     return 0
 }
