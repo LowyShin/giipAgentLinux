@@ -63,10 +63,8 @@ log_message() {
 		echo "[$timestamp] [$level] $message" >> "$LogFileName"
 	fi
 	
-	# Also print to console for important messages
-	if [ "$level" = "ERROR" ] || [ "$level" = "WARNING" ]; then
-		echo "[$timestamp] [$level] $message" >&2
-	fi
+	# Always print to stderr to avoid contaminating stdout (function return values / JSON)
+	echo "[$timestamp] [$level] $message" >&2
 }
 
 # Function: Log error to database via ErrorLogCreate API
@@ -144,6 +142,14 @@ check_dos2unix() {
 
 # Function: Check and install mssql-tools
 check_mssql_tools() {
+	# Add well-known mssql-tools paths to PATH first
+	if [ -d "/opt/mssql-tools18/bin" ]; then
+		export PATH="$PATH:/opt/mssql-tools18/bin"
+	fi
+	if [ -d "/opt/mssql-tools/bin" ]; then
+		export PATH="$PATH:/opt/mssql-tools/bin"
+	fi
+
 	if command -v sqlcmd >/dev/null 2>&1; then
 		return 0
 	fi
@@ -155,28 +161,69 @@ check_mssql_tools() {
 		if [ -f /etc/redhat-release ]; then
 			# RHEL/CentOS
 			# Check if already installed via rpm to avoid yum spam
-			if rpm -q mssql-tools >/dev/null 2>&1; then
-				# Installed but not in path?
-				if [ -d "/opt/mssql-tools/bin" ]; then
-					export PATH="$PATH:/opt/mssql-tools/bin"
-					if command -v sqlcmd >/dev/null 2>&1; then
-						return 0
-					fi
-				fi
+			if rpm -q mssql-tools >/dev/null 2>&1 || rpm -q mssql-tools18 >/dev/null 2>&1; then
+				# Installed but not in path - already handled above
+				:
+			else
+				log_message "INFO" "sqlcmd not found, attempting to install mssql-tools on RHEL/CentOS..."
+				curl -s https://packages.microsoft.com/config/rhel/8/prod.repo > /etc/yum.repos.d/msprod.repo
+				yum remove -y unixODBC-utf16 unixODBC-utf16-devel 2>/dev/null || true
+				ACCEPT_EULA=Y yum install -y mssql-tools18 unixODBC-devel
+			fi
+		elif [ -f /etc/lsb-release ] || [ -f /etc/debian_version ]; then
+			# Ubuntu/Debian - use Microsoft's official .deb package
+			# This method works reliably across Ubuntu 20.04, 22.04, 24.04 (Noble)
+			# because it does NOT rely on apt-key (deprecated) or manual GPG handling.
+			log_message "INFO" "sqlcmd not found, attempting to install mssql-tools on Ubuntu/Debian..."
+
+			# Detect Ubuntu version number for Microsoft's package repository URLs
+			# MS URLs use version numbers (e.g. 22.04), not codenames (e.g. jammy)
+			local os_version=""
+			if command -v lsb_release >/dev/null 2>&1; then
+				os_version=$(lsb_release -rs 2>/dev/null)
+			fi
+			if [ -z "$os_version" ] && [ -f /etc/os-release ]; then
+				os_version=$(. /etc/os-release && echo "${VERSION_ID:-}")
 			fi
 
-			log_message "INFO" "sqlcmd not found, attempting to install mssql-tools..."
-			
-			curl https://packages.microsoft.com/config/rhel/7/prod.repo > /etc/yum.repos.d/msprod.repo
-			yum remove -y unixODBC-utf16 unixODBC-utf16-devel
-			ACCEPT_EULA=Y yum install -y mssql-tools unixODBC-devel
-		elif [ -f /etc/lsb-release ] || [ -f /etc/debian_version ]; then
-			# Ubuntu/Debian logic omitted
-			:
+			# Map unsupported versions to the latest supported MS repo version
+			# Ubuntu 24.04+ → use 22.04 repo (latest officially supported)
+			local ms_version="$os_version"
+			case "$os_version" in
+				24.*|25.*|26.*) ms_version="22.04" ;;
+				23.*)           ms_version="22.04" ;;
+				22.04)          ms_version="22.04" ;;
+				20.04)          ms_version="20.04" ;;
+				18.04)          ms_version="18.04" ;;
+				*)              ms_version="22.04" ;;  # safe default
+			esac
+
+			local tmp_deb="/tmp/packages-microsoft-prod.deb"
+			local ms_deb_url="https://packages.microsoft.com/config/ubuntu/${ms_version}/packages-microsoft-prod.deb"
+
+			if curl -sSL "$ms_deb_url" -o "$tmp_deb" 2>/dev/null || \
+			   wget -q "$ms_deb_url" -O "$tmp_deb" 2>/dev/null; then
+				dpkg -i "$tmp_deb" 2>/dev/null || true
+				rm -f "$tmp_deb"
+
+				# Remove duplicate mssql-release list entries to suppress apt warnings
+				rm -f /etc/apt/sources.list.d/mssql-release.list 2>/dev/null || true
+
+				apt-get update -q 2>/dev/null || true
+				ACCEPT_EULA=Y DEBIAN_FRONTEND=noninteractive \
+					apt-get install -y mssql-tools18 unixodbc-dev 2>/dev/null || \
+				ACCEPT_EULA=Y DEBIAN_FRONTEND=noninteractive \
+					apt-get install -y mssql-tools unixodbc-dev 2>/dev/null || true
+			else
+				log_message "WARN" "Failed to download Microsoft package repository .deb"
+			fi
 		fi
 	fi
 	
-	# Add to PATH
+	# Re-add PATH after installation
+	if [ -d "/opt/mssql-tools18/bin" ]; then
+		export PATH="$PATH:/opt/mssql-tools18/bin"
+	fi
 	if [ -d "/opt/mssql-tools/bin" ]; then
 		export PATH="$PATH:/opt/mssql-tools/bin"
 	fi
@@ -217,17 +264,8 @@ detect_os() {
 # Returns: Integer percentage (0-100)
 get_cpu_usage() {
 	local cpu_usage=0
-	if command -v top >/dev/null 2>&1; then
-		# top -bn1 gives a single snapshot
-		# We extract the idle percentage and subtract from 100
-		local idle=$(top -bn1 | grep "Cpu(s)" | awk '{print $8}' | cut -d. -f1)
-		# Handle different top formats (some have %id, some just id)
-		idle=$(echo "$idle" | tr -d '[:alpha:]%')
-		if [ -n "$idle" ]; then
-			cpu_usage=$((100 - idle))
-		fi
-	elif [ -f /proc/stat ]; then
-		# Fallback: parse /proc/stat
+	# Prefer /proc/stat - locale-independent and always available on Linux
+	if [ -f /proc/stat ]; then
 		# cpu  user nice system idle iowait irq softirq steal guest guest_nice
 		local line=$(grep '^cpu ' /proc/stat)
 		local user=$(echo "$line" | awk '{print $2}')
@@ -242,7 +280,18 @@ get_cpu_usage() {
 		local total=$((user + nice + system + idle + iowait + irq + softirq + steal))
 		local active=$((user + nice + system + irq + softirq + steal))
 		
-		cpu_usage=$((active * 100 / total))
+		if [ "$total" -gt 0 ]; then
+			cpu_usage=$((active * 100 / total))
+		fi
+	elif command -v top >/dev/null 2>&1; then
+		# Fallback: top with LC_ALL=C to avoid locale-dependent decimal separators
+		# Extract the idle% field which follows "id," or "%id" depending on top version
+		local idle=$(LC_ALL=C top -bn1 | grep -E "%?Cpu" | head -1 | \
+			sed 's/,/\n/g' | grep 'id' | tr -d '[:alpha:]% ')
+		idle=$(echo "$idle" | cut -d. -f1)
+		if [ -n "$idle" ] && [ "$idle" -ge 0 ] 2>/dev/null; then
+			cpu_usage=$((100 - idle))
+		fi
 	fi
 	echo "$cpu_usage"
 }
@@ -251,20 +300,26 @@ get_cpu_usage() {
 # Returns: Integer percentage (0-100)
 get_mem_usage() {
 	local mem_usage=0
-	if command -v free >/dev/null 2>&1; then
-		# free -m | grep Mem: | awk '{print $3/$2 * 100.0}'
-		local used=$(free -m | grep Mem: | awk '{print $3}')
-		local total=$(free -m | grep Mem: | awk '{print $2}')
-		if [ -n "$used" ] && [ -n "$total" ] && [ "$total" -gt 0 ]; then
+	# Prefer /proc/meminfo - locale-independent and always available on Linux
+	if [ -f /proc/meminfo ]; then
+		local total=$(grep '^MemTotal:' /proc/meminfo | awk '{print $2}')
+		local free=$(grep '^MemFree:' /proc/meminfo | awk '{print $2}')
+		local buffers=$(grep '^Buffers:' /proc/meminfo | awk '{print $2}')
+		local cached=$(grep '^Cached:' /proc/meminfo | awk '{print $2}')
+		local sreclaimable=$(grep '^SReclaimable:' /proc/meminfo | awk '{print $2}')
+		buffers=${buffers:-0}
+		cached=${cached:-0}
+		sreclaimable=${sreclaimable:-0}
+		if [ -n "$total" ] && [ -n "$free" ] && [ "$total" -gt 0 ]; then
+			local used=$((total - free - buffers - cached - sreclaimable))
+			[ "$used" -lt 0 ] && used=0
 			mem_usage=$((used * 100 / total))
 		fi
-	elif [ -f /proc/meminfo ]; then
-		local total=$(grep MemTotal /proc/meminfo | awk '{print $2}')
-		local free=$(grep MemFree /proc/meminfo | awk '{print $2}')
-		local buffers=$(grep Buffers /proc/meminfo | awk '{print $2}')
-		local cached=$(grep ^Cached /proc/meminfo | awk '{print $2}')
-		if [ -n "$total" ] && [ -n "$free" ]; then
-			local used=$((total - free - buffers - cached))
+	elif command -v free >/dev/null 2>&1; then
+		# Fallback: free command
+		local used=$(LC_ALL=C free -m | grep '^Mem:' | awk '{print $3}')
+		local total=$(LC_ALL=C free -m | grep '^Mem:' | awk '{print $2}')
+		if [ -n "$used" ] && [ -n "$total" ] && [ "$total" -gt 0 ]; then
 			mem_usage=$((used * 100 / total))
 		fi
 	fi

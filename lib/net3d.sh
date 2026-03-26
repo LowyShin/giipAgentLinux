@@ -11,8 +11,17 @@
 # 목적: 일본어/한글 로케일 환경에서 Python 인라인 코드 파싱 에러 방지
 # 이슈: CentOS 7.4 일본어 환경에서 멀티바이트 문자 깨짐 문제 해결
 # 날짜: 2025-12-28
-export LANG=en_US.UTF-8
-export LC_ALL=en_US.UTF-8
+# 수정: locale -a 로 실제 사용 가능한 인코딩을 확인 후 자동 폴백
+if locale -a 2>/dev/null | grep -q "en_US.UTF-8\|en_US.utf8"; then
+    export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+elif locale -a 2>/dev/null | grep -q "C.UTF-8\|C.utf8"; then
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+else
+    export LANG=C
+    export LC_ALL=C
+fi
 
 
 # ============================================================================

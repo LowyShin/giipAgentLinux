@@ -25,8 +25,8 @@ echo "🔍 Monitoring Performance for LSSN: $TARGET_LSSN..."
 
 # 1. Collect Process Metrics
 TOTAL_PROC_COUNT=$(ps -ef | wc -l)
-JQ_COUNT=$(pgrep -c jq 2>/dev/null || echo 0)
-CURL_COUNT=$(pgrep -c curl 2>/dev/null || echo 0)
+JQ_COUNT=$(pgrep jq 2>/dev/null | wc -l)
+CURL_COUNT=$(pgrep curl 2>/dev/null | wc -l)
 
 echo "📊 Metrics: Total=$TOTAL_PROC_COUNT, jq=$JQ_COUNT, curl=$CURL_COUNT"
 
