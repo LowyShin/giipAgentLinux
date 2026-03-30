@@ -22,7 +22,6 @@ save_gateway_status() {
 	
 	# Build API URL
 	local kvs_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && kvs_url="${kvs_url}?code=${apiaddrcode}"
 	
 	# ✅ Follow giipapi_rules.md
 	local text="KVSPut kType kKey kFactor"

@@ -61,7 +61,7 @@ if [ -f "${PROJECT_ROOT}/giipdb/mgmt/addIssueComment.ps1" ]; then
         -content "$COMMENT" \
         -issuetype "result" 2>/dev/null || \
     bash -c "source '${BASE_DIR}/lib/common.sh' && load_config '${BASE_DIR}/giipAgent.cnf' && \
-        curl -s -X POST \"\${apiaddrv2}?code=\${apiaddrcode}\" \
+        curl -s -X POST \"\${apiaddrv2}\" \
         -d \"text=GiipIssueCommentPut+isn+content+issuetype&token=\${sk}&jsondata={\\\"isn\\\":${ISN},\\\"content\\\":\\\"${COMMENT//\"/\\\"}\\\",\\\"issuetype\\\":\\\"result\\\"}\" \
         -H 'Content-Type: application/x-www-form-urlencoded'"
 else
@@ -70,9 +70,9 @@ else
         source "${BASE_DIR}/lib/common.sh"
         if [ -f "${BASE_DIR}/giipAgent.cnf" ]; then
             load_config "${BASE_DIR}/giipAgent.cnf"
-            curl -s -X POST "${apiaddrv2}?code=${apiaddrcode}" \
-                -d "text=GiipIssueCommentPut+isn+content+issuetype&token=${sk}&jsondata={\"isn\":${ISN},\"content\":\"${COMMENT//\"/\\\"}\",\"issuetype\":\"result\"}" \
-                -H 'Content-Type: application/x-www-form-urlencoded'
+            curl -s -X POST "${apiaddrv2}" \
+        -d "text=GiipIssueCommentPut+isn+content+issuetype&token=${sk}&jsondata={\"isn\":${ISN},\"content\":\"${COMMENT//\"/\\\"}\",\"issuetype\":\"result\"}" \
+        -H 'Content-Type: application/x-www-form-urlencoded'
         fi
     fi
 fi

@@ -102,11 +102,8 @@ log "Test 1: API Endpoint Check" "$BLUE"
 log "========================================" "$BLUE"
 
 API_URL="${apiaddrv2}"
-if [ -n "$apiaddrcode" ]; then
-    API_URL="${API_URL}?code=${apiaddrcode}"
-fi
 
-log "API URL: ${API_URL%%\?*}?code=***" "$NC"
+log "API URL: ${API_URL}" "$NC"
 
 # Test API with simple command
 TEST_CMD="CQEQueueGet ${lssn} $(hostname) $(uname -s) op"

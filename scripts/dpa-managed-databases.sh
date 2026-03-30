@@ -90,7 +90,6 @@ load_config() {
         
         case "$key" in
             Endpoint|apiaddrv2) KVS_ENDPOINT="$value" ;;
-            FunctionCode|apiaddrcode) FUNCTION_CODE="$value" ;;
             UserToken|sk) USER_TOKEN="$value" ;;
             lssn|KKey) K_KEY="$value" ;;
             KType) K_TYPE="$value" ;;
@@ -117,9 +116,6 @@ fetch_managed_databases() {
     log "Fetching managed database list from API..."
     
     local endpoint_url="$KVS_ENDPOINT"
-    if [ -n "$FUNCTION_CODE" ]; then
-        endpoint_url="${endpoint_url}?code=${FUNCTION_CODE}"
-    fi
     
     local post_data="text=$(printf '%s' 'ManagedDatabaseListForAgent' | jq -sRr @uri)"
     post_data+="&token=$(printf '%s' "$USER_TOKEN" | jq -sRr @uri)"
@@ -435,9 +431,6 @@ main() {
             log_debug "  DPA JSON: ${kvsp_json:0:200}..."
             
             local endpoint_url="$KVS_ENDPOINT"
-            if [ -n "$FUNCTION_CODE" ]; then
-                endpoint_url="${endpoint_url}?code=${FUNCTION_CODE}"
-            fi
             
             local post_data="text=$(printf '%s' "$kvsp_text" | jq -sRr @uri)"
             post_data+="&token=$(printf '%s' "$USER_TOKEN" | jq -sRr @uri)"
@@ -474,9 +467,6 @@ main() {
     local health_update_data=$(echo "$health_results" | jq -c '.')
     
     local endpoint_url="$KVS_ENDPOINT"
-    if [ -n "$FUNCTION_CODE" ]; then
-        endpoint_url="${endpoint_url}?code=${FUNCTION_CODE}"
-    fi
     
     local post_data="text=$(printf '%s' 'ManagedDatabaseHealthUpdate jsondata' | jq -sRr @uri)"
     post_data+="&token=$(printf '%s' "$USER_TOKEN" | jq -sRr @uri)"

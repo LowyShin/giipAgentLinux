@@ -23,7 +23,7 @@ temp_file=$(mktemp)
 
 wget -O "$temp_file" \
     --post-data="text=ManagedDatabaseHealthUpdate jsondata&token=${sk}&jsondata=${health_data}" \
-    "${apiaddrv2}?code=${apiaddrcode}"
+    "${apiaddrv2}"
 
 echo ""
 echo "✅ API Response:"

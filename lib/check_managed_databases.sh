@@ -20,7 +20,7 @@ source "${SCRIPT_DIR}/db_check_mongodb.sh"
 source "${SCRIPT_DIR}/db_check_http.sh"
 
 # Function: Check managed databases and update health status
-# Requires: lssn, sk, apiaddrv2, apiaddrcode (from config)
+# Requires: lssn, sk, apiaddrv2 (from config)
 # Returns: 0 on success, 1 on error
 check_managed_databases() {
 	echo "[Gateway] 🔍 Checking managed databases..." >&2
@@ -34,13 +34,13 @@ check_managed_databases() {
 	echo "[Gateway-DB-API]   text: $text" >&2
 	echo "[Gateway-DB-API]   token: ${sk:0:20}..." >&2
 	echo "[Gateway-DB-API]   jsondata: $jsondata" >&2
-	echo "[Gateway-DB-API]   endpoint: ${apiaddrv2}?code=${apiaddrcode:0:20}..." >&2
+	echo "[Gateway-DB-API]   endpoint: ${apiaddrv2}..." >&2
 	
 	# Fetch managed database list from API
 	wget -O "$temp_file" --quiet \
 		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
-		"${apiaddrv2}?code=${apiaddrcode}" \
+		"${apiaddrv2}" \
 		--no-check-certificate 2>&1
 	
 	# DEBUG: API 응답 확인
@@ -189,7 +189,7 @@ check_managed_databases() {
 			local api_response=$(wget -O - --quiet \
 				--post-data="text=${text}&token=${sk}&jsondata=${encoded_jsondata}" \
 				--header="Content-Type: application/x-www-form-urlencoded" \
-				"${apiaddrv2}?code=${apiaddrcode}" \
+				"${apiaddrv2}" \
 				--no-check-certificate 2>&1)
 			
 			if echo "$api_response" | grep -q '"RstVal":"200"'; then

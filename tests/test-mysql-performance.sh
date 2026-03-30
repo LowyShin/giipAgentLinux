@@ -42,7 +42,7 @@ get_db_info_from_api() {
     wget -O "$temp_file" --quiet \
         --post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
         --header="Content-Type: application/x-www-form-urlencoded" \
-        "${apiaddrv2}?code=${apiaddrcode}" \
+        "${apiaddrv2}" \
         --no-check-certificate 2>&1
     
     if [ ! -s "$temp_file" ]; then

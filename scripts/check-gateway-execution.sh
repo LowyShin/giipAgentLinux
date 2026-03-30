@@ -63,7 +63,7 @@ if [ -f "$CNF_FILE" ]; then
     echo "API: $apiaddrv2"
     echo ""
     
-    API_URL="${apiaddrv2}?code=${apiaddrcode}"
+    API_URL="${apiaddrv2}"
     TEXT="GatewayRemoteServerListForAgent lssn"
     JSONDATA="{\"lssn\":${lssn}}"
     

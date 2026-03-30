@@ -35,7 +35,6 @@ report_ssh_test_result() {
 	
 	# Build API call per REMOTE_SERVER_SSH_TEST_DETAILED_SPEC.md
 	local api_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 	
 	# Prepare JSON data: lssn, gateway_lssn, test_type 만 전송
 	local jsondata="{\"lssn\":${lssn},\"gateway_lssn\":${gateway_lssn},\"test_type\":\"ssh\"}"

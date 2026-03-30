@@ -54,7 +54,7 @@ collect_mssql_data() {
     fi
     
     # 3. Fetch Registered Databases from API
-    local api_url=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
+    local api_url=$(build_api_url "${apiaddrv2}")
     local mdb_list_file="/tmp/giip_mssql_list_${lssn}.json"
     local mdb_targets_file="/tmp/giip_mssql_targets_${lssn}.txt"
     

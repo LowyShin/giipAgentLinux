@@ -37,7 +37,6 @@ queue_get() {
 	
 	# Build API URL
 	local api_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 	
 	# ✅ Follow giipapi_rules.md: text contains parameter names only!
 	local text="CQEQueueGet lssn hostname os op"

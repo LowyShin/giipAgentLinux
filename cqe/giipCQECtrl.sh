@@ -20,18 +20,15 @@ if [ -f "$CNFFILE" ]; then
     
     # v2 API 우선 사용
     APIADDRV2=$(grep -E "^apiaddrv2=" "$CNFFILE" 2>/dev/null | cut -d'"' -f2)
-    APIADDRCODE=$(grep -E "^apiaddrcode=" "$CNFFILE" 2>/dev/null | cut -d'"' -f2)
     
     # v1 API (fallback)
     APIADDR_V1=$(grep -E "^apiaddr=" "$CNFFILE" 2>/dev/null | cut -d'"' -f2)
     
     if [ -n "$APIADDRV2" ]; then
         APIADDR="$APIADDRV2"
-        APICODE="$APIADDRCODE"
         API_VERSION="v2"
     else
         APIADDR=${APIADDR_V1:-https://giipasp.azurewebsites.net}
-        APICODE=""
         API_VERSION="v1"
     fi
 else
@@ -49,7 +46,7 @@ call_api() {
     local jsondata=${2:-{}}
     
     if [ "$API_VERSION" = "v2" ]; then
-        curl -sS -X POST "$APIADDR?code=$APICODE" \
+        curl -sS -X POST "$APIADDR" \
             -H 'Content-Type: application/x-www-form-urlencoded' \
             --data-urlencode "text=$text" \
             --data-urlencode "sk=$SK" \

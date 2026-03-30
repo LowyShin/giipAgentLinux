@@ -212,7 +212,6 @@ sk="your-secret-key-here"
 lssn="0"
 giipagentdelay="60"
 apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
-apiaddrcode="YOUR_FUNCTION_CODE"
 EOF
 chmod 644 giipAgent.cnf
 ```

@@ -34,7 +34,6 @@ set -e
 #   lssn: Server LSSN
 #   sk: Server Key (token)
 #   apiaddrv2: API endpoint
-#   apiaddrcode: API function code (optional)
 #   sv: Agent version (optional)
 #
 # Example:
@@ -135,7 +134,6 @@ kvs_send() {
 	
 	# API URL 구성
 	local kvs_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && kvs_url="${kvs_url}?code=${apiaddrcode}"
 	
 	# ✅ giipapi_rules.md 준수: text에는 파라미터 이름만
 	local text="KVSPut kType kKey kFactor"

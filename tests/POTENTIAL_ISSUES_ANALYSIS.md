@@ -123,7 +123,7 @@ rm -f "${timeout_file}.err"
 
 #### 문제
 ```bash
-export sk apiaddrv2 apiaddrcode lssn  # 환경 변수로 내보냄
+export sk apiaddrv2 lssn  # 환경 변수로 내보냄
 ```
 
 - `ps aux | grep queue_get` 실행 시 명령줄에 API 키 노출
@@ -134,7 +134,7 @@ export sk apiaddrv2 apiaddrcode lssn  # 환경 변수로 내보냄
 ```bash
 # 환경 변수 대신 설정 파일 경로만 전달
 # 또는 wrapper에서만 직접 파일 로드 (export 불필요)
-unset sk apiaddrv2 apiaddrcode  # 테스트 후 정리
+unset sk apiaddrv2  # 테스트 후 정리
 ```
 
 ---

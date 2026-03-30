@@ -62,7 +62,7 @@ load_config() {
 # test-queue-get.sh에서
 export sk
 export apiaddrv2
-export apiaddrcode
+# export apiaddrcode (Deprecated, no longer needed)
 
 # 그 후 wrapper 실행
 ```
@@ -94,7 +94,7 @@ queue_get ...
 **test-queue-get.sh에서:**
 ```bash
 # 1. 환경 변수 export
-export sk apiaddrv2 apiaddrcode
+export sk apiaddrv2
 
 # 2. Wrapper도 설정 파일 로드하도록 수정
 ```

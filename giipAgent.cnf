@@ -46,8 +46,6 @@ branch="real"
 
 # API v2 (Recommended) - PowerShell-based, faster and more stable
 apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
-apiaddrcode="YOUR_AZURE_FUNCTION_KEY_HERE"
 
 # API v1 (Legacy) - ASP Classic-based
 apiaddr="https://giipasp.azurewebsites.net"
-

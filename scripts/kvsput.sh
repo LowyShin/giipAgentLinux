@@ -92,13 +92,6 @@ else
   exit 3
 fi
 
-# Add function code if available (apiaddrcode > FunctionCode, prefer v2)
-if [[ -n "${KVS_CONFIG[apiaddrcode]}" ]]; then
-  ENDPOINT+="?code=${KVS_CONFIG[apiaddrcode]}"
-elif [[ -n "${KVS_CONFIG[FunctionCode]}" ]]; then
-  ENDPOINT+="?code=${KVS_CONFIG[FunctionCode]}"
-fi
-
 # UserToken (sk for SK-based auth)
 if [[ -z "${KVS_CONFIG[UserToken]}" && -z "${KVS_CONFIG[sk]}" ]]; then
   echo "[ERROR] Missing config: UserToken or sk" >&2

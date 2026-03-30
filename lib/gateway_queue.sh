@@ -10,7 +10,6 @@ get_script_by_mssn() {
 	local output_file=$2
 	
 	local api_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 	
 	local text="CQERepoScript mssn"
 	local jsondata="{\"mssn\":${mssn}}"
@@ -36,7 +35,6 @@ get_remote_queue() {
 	local output_file=$4
 	
 	local api_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 	
 	local text="CQEQueueGet lssn hostname os op"
 	local jsondata="{\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"os\":\"${os}\",\"op\":\"op\"}"

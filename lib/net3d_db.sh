@@ -346,7 +346,7 @@ print(json.dumps(users))
     wget -O /dev/null --quiet \
         --post-data="text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
         --header="Content-Type: application/x-www-form-urlencoded" \
-        "${apiaddrv2}?code=${apiaddrcode}" \
+        "${apiaddrv2}" \
         --no-check-certificate
     
     if [ $? -eq 0 ]; then

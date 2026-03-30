@@ -51,8 +51,8 @@ fi
 source "${LIB_DIR}/kvs.sh"
 
 # Validate required variables
-if [ -z "$lssn" ] || [ -z "$sk" ] || [ -z "$apiaddrv2" ] || [ -z "$apiaddrcode" ]; then
-    echo "❌ Missing required config: lssn, sk, apiaddrv2, apiaddrcode"
+if [ -z "$lssn" ] || [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
+    echo "❌ Missing required config: lssn, sk, apiaddrv2"
     exit 1
 fi
 

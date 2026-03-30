@@ -83,7 +83,6 @@ log_error() {
 	fi
 	
 	local api_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 	
 	local hostname=$(hostname)
 	local source="giipAgent"
@@ -315,17 +314,13 @@ init_log_dir() {
 # API Helper Functions
 # ============================================================================
 
-# Function: Build API URL with code parameter
-# Usage: build_api_url "$apiaddrv2" "$apiaddrcode"
+# Function: Build API URL (now just returns base_url, code parameter deprecated)
+# Usage: build_api_url "$apiaddrv2"
 build_api_url() {
 	local base_url="$1"
-	local code="$2"
+	# Second parameter (code) is deprecated and ignored
 	
-	if [ -n "$code" ]; then
-		echo "${base_url}?code=${code}"
-	else
-		echo "${base_url}"
-	fi
+	echo "${base_url}"
 }
 
 # ============================================================================

@@ -113,7 +113,6 @@ load_config() {
     
     # v2 API 우선 사용
     APIADDRV2=$(grep -E "^apiaddrv2=" "$CNFFILE" 2>/dev/null | cut -d'"' -f2)
-    APIADDRCODE=$(grep -E "^apiaddrcode=" "$CNFFILE" 2>/dev/null | cut -d'"' -f2)
     
     # v1 API (fallback)
     APIADDR=$(grep -E "^apiaddr=" "$CNFFILE" 2>/dev/null | cut -d'"' -f2)
@@ -124,12 +123,10 @@ load_config() {
     # 기본값 설정
     if [ -n "$APIADDRV2" ]; then
         APIADDR="$APIADDRV2"
-        APICODE="$APIADDRCODE"
         API_VERSION="v2"
         log "✓ Using API v2: $APIADDR"
     else
         APIADDR=${APIADDR:-https://giipasp.azurewebsites.net}
-        APICODE=""
         API_VERSION="v1"
         log "⚠️  Using API v1 (legacy): $APIADDR"
     fi
@@ -217,8 +214,8 @@ fetch_queue() {
     log "DEBUG: json_data=$json_data"
     
     if [ "$API_VERSION" = "v2" ]; then
-        # v2 API: POST with code parameter
-        response=$(curl -sS -X POST "$url?code=$APICODE" \
+        # v2 API: POST
+        response=$(curl -sS -X POST "$url" \
             -H 'Content-Type: application/x-www-form-urlencoded' \
             --data-urlencode 'text=CQEQueueGet' \
             --data-urlencode "sk=$SK" \

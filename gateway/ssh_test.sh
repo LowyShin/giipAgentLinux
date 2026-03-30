@@ -56,7 +56,7 @@ if [ -f "${CONFIG_FILE}" ]; then
 		echo "🚨 ERROR: sk variable not configured properly!"
 		echo "   This file (${PARENT_DIR}/giipAgent.cnf) is a TEMPLATE ONLY"
 		echo "   Place REAL config file at: ${CONFIG_FILE}"
-		echo "   To verify: cat ${CONFIG_FILE} | grep -E '^(sk|apiaddrv2|apiaddrcode)='"
+		echo "   To verify: cat ${CONFIG_FILE} | grep -E '^(sk|apiaddrv2)='"
 		exit 1
 	fi
 else
@@ -501,8 +501,7 @@ main() {
   "output_file": "$queue_file",
   "api_variables": {
     "sk": "${sk:0:20}...",
-    "apiaddrv2": "$apiaddrv2",
-    "apiaddrcode": "${apiaddrcode:0:20}..."
+    "apiaddrv2": "$apiaddrv2"
   },
   "timestamp": "$(date '+%Y-%m-%d %H:%M:%S')"
 }

@@ -84,10 +84,8 @@ load_config() {
             MSSQLPassword) MSSQL_PASSWORD="$value" ;;
             MSSQLDatabase) MSSQL_DATABASE="$value" ;;
             Endpoint) KVS_ENDPOINT="$value" ;;
-            FunctionCode) FUNCTION_CODE="$value" ;;
             UserToken) USER_TOKEN="$value" ;;
             apiaddrv2) KVS_ENDPOINT="$value" ;;
-            apiaddrcode) FUNCTION_CODE="$value" ;;
             sk) USER_TOKEN="$value" ;;
             lssn) K_KEY="$value" ;;
             KType) K_TYPE="$value" ;;
@@ -352,9 +350,6 @@ POST_DATA+="&jsondata=$(printf '%s' "$KVSP_JSON" | jq -sRr @uri)"
 
 # API 호출
 ENDPOINT_URL="$KVS_ENDPOINT"
-if [ -n "$FUNCTION_CODE" ]; then
-    ENDPOINT_URL="${ENDPOINT_URL}?code=${FUNCTION_CODE}"
-fi
 
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$ENDPOINT_URL" \
     -H "Content-Type: application/x-www-form-urlencoded" \

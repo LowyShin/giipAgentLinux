@@ -41,12 +41,6 @@ if [ -z "$sk" ] || [ "$sk" = "<your secret key>" ]; then
 	exit 1
 fi
 
-if [ -z "$apiaddrcode" ] || [ "$apiaddrcode" = "YOUR_AZURE_FUNCTION_KEY_HERE" ]; then
-	echo "❌ ERROR: apiaddrcode not configured in $CONFIG_FILE"
-	echo "   Current value: $apiaddrcode"
-	echo "   You must set a real Azure function key"
-	exit 1
-fi
 echo ""
 
 # Test parameters

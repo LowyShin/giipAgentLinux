@@ -184,7 +184,7 @@ hn=$(hostname)
 # Fetch server config from DB
 echo "🔍 Fetching server configuration from DB..."
 config_tmpfile="giipTmpConfig.json"
-api_url=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
+api_url=$(build_api_url "${apiaddrv2}")
 
 # ✅ giipapi 규칙: text에는 파라미터명만, jsondata에 실제 값
 config_text="LSvrGetConfig lssn hostname"
@@ -309,7 +309,7 @@ if [ "${lssn}" = "0" ]; then
 	log_message "INFO" "Server not registered, registering now..."
 	
 	local tmpFileName="giipTmpScript.sh"
-	local lwAPIURL=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
+	local lwAPIURL=$(build_api_url "${apiaddrv2}")
 	
 	# Build JSON data (matching new API rules: text=parameter names, jsondata=actual values)
 	local jsondata
