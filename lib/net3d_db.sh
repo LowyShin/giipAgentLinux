@@ -329,14 +329,17 @@ print(json.dumps(users))
     fi
 
     # Upload using Net3dUserListPut
-    # Need to verify API logic here. `Net3dUserListPut` expects `jsondata` with `mdb_id`, `lssn`, `user_list`.
-    # AND `sk` is required. `sk` should be available in environment (loaded by common.sh/check_managed_databases.sh).
-
+    # MANDATE: Protect API (Sk2/Sk3) integrity with robust JSON formatting.
     log_message "INFO" "[Net3D-UserList] Uploading user list..."
     
     local text="Net3dUserListPut mdb_id lssn user_list"
-    # mdb_id is integer in JSON?
-    local jsondata="{\"mdb_id\":$mdb_id,\"lssn\":$lssn,\"user_list\":$user_list_json}"
+    
+    # Use jq to build a robust JSON object, avoiding manual string concatenation
+    local jsondata=$(jq -n \
+        --arg mdb_id "$mdb_id" \
+        --arg lssn "$lssn" \
+        --argjson user_list "$user_list_json" \
+        '{mdb_id: ($mdb_id|tonumber), lssn: ($lssn|tonumber), user_list: $user_list}')
     
     # URL encode
     local encoded_text=$(printf '%s' "$text" | jq -sRr '@uri')

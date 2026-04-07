@@ -1,8 +1,10 @@
 #!/bin/bash
-# giipAgent Common Functions Library
-# Version: 2.00
-# Date: 2025-01-10
-# Purpose: Common utilities for giipAgent (config loading, logging, error handling)
+# giipAgentLinux Library: Common Functions
+# Purpose: Core functions for Logging, Configuration and Communication
+# ============================================================================
+# 👉 MANDATORY: Read SPEC_AGENT_API_INTEGRITY_MANDATE.md before modification.
+# Agent MUST protect API (Sk2/Sk3) integrity by ensuring valid data transmission.
+# ============================================================================
 
 # ============================================================================
 # Configuration Functions
