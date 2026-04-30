@@ -161,6 +161,9 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 
+# Ensure mandatory tools are installed (Added 2026-04-30)
+check_jq
+
 # ============================================================================
 # Early Cleanup: Remove old GIIP temporary files from previous executions
 # ============================================================================
@@ -268,6 +271,13 @@ fi
 
 # Setup log directory
 init_log_dir "$SCRIPT_DIR"
+
+# Initialize session history tracking (Added 2026-04-30)
+# This file collects all execution events for the current run
+SESSION_HISTORY_FILE="/tmp/giip_history_${lssn:-0}_$$.jsonl"
+export SESSION_HISTORY_FILE
+rm -f "$SESSION_HISTORY_FILE" # Ensure fresh start
+log_message "INFO" "Session history tracking initialized: $SESSION_HISTORY_FILE"
 
 # Log startup
 logdt=$(date '+%Y%m%d%H%M%S')
@@ -429,6 +439,33 @@ fi
 
 # Record execution shutdown log
 save_execution_log "shutdown" "{\"mode\":\"$([ "$gateway_mode" = "1" ] && echo "gateway+normal" || echo "normal")\",\"status\":\"normal_exit\"}"
+
+# ============================================================================
+# Final Session History Upload (Added 2026-04-30)
+# ============================================================================
+if [ -f "$SESSION_HISTORY_FILE" ] && [ -s "$SESSION_HISTORY_FILE" ]; then
+    log_message "INFO" "Uploading session execution history to KVS..."
+    
+    # Convert JSONL to JSON Array using jq
+    # Wrap entries in a root object for KVS
+    HISTORY_JSON=$(jq -s '.' "$SESSION_HISTORY_FILE")
+    
+    if [ $? -eq 0 ] && [ -n "$HISTORY_JSON" ]; then
+        # kFactor: giip_execution_history
+        kvs_put "lssn" "${lssn}" "giip_execution_history" "$HISTORY_JSON"
+        
+        if [ $? -eq 0 ]; then
+            log_message "INFO" "✅ Session history successfully uploaded to KVS"
+        else
+            log_message "WARN" "⚠️ Failed to upload session history to KVS"
+        fi
+    else
+        log_message "ERROR" "❌ Failed to format session history JSON"
+    fi
+    
+    # Clean up
+    rm -f "$SESSION_HISTORY_FILE"
+fi
 
 log_message "INFO" "GIIP Agent V${sv} completed"
 exit 0

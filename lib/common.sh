@@ -191,6 +191,44 @@ check_mssql_tools() {
 	fi
 }
 
+# Function: Check and install jq
+check_jq() {
+	if command -v jq >/dev/null 2>&1; then
+		return 0
+	fi
+	
+	log_message "INFO" "jq not found, attempting to install..."
+	
+	# Detect OS
+	local uname=`uname -a | awk '{print $1}'`
+	
+	if [ "${uname}" = "Darwin" ]; then
+		brew install jq
+	else
+		# Linux - check package manager
+		if command -v apt-get >/dev/null 2>&1; then
+			apt-get update -q && apt-get install -y -q jq
+		elif command -v yum >/dev/null 2>&1; then
+			# yum requires epel-release for jq on some RHEL/CentOS versions
+			yum install -y -q epel-release 2>/dev/null || true
+			yum install -y -q jq
+		elif command -v dnf >/dev/null 2>&1; then
+			dnf install -y -q jq
+		else
+			log_message "WARN" "No known package manager found to install jq"
+			return 1
+		fi
+	fi
+	
+	if command -v jq >/dev/null 2>&1; then
+		log_message "INFO" "jq installed successfully"
+		return 0
+	else
+		log_message "WARN" "Failed to install jq automatically"
+		return 1
+	fi
+}
+
 # Function: Detect OS information
 detect_os() {
 	local uname=`uname -a | awk '{print $1}'`
@@ -424,6 +462,7 @@ export -f load_config
 export -f log_message
 export -f check_dos2unix
 export -f check_mssql_tools
+export -f check_jq
 export -f detect_os
 export -f error_handler
 export -f init_log_dir

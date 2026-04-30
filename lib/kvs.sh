@@ -164,6 +164,11 @@ save_execution_log() {
 	# details_json이 JSON이면 JSON으로, 텍스트면 텍스트로 그대로 저장됨
 	local kvalue="{\"event_type\":\"${event_type}\",\"timestamp\":\"${timestamp}\",\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"mode\":\"${mode}\",\"version\":\"${sv}\",\"details\":${details_json}}"
 	
+	# Append to local session history file if variable is set (Added 2026-04-30)
+	if [ -n "$SESSION_HISTORY_FILE" ]; then
+		echo "$kvalue" >> "$SESSION_HISTORY_FILE"
+	fi
+	
 	# Minimal log for debugging if needed
 	# echo "[KVS-Debug] event_type='${event_type}'" >&2
 	
