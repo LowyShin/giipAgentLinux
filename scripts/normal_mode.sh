@@ -226,6 +226,13 @@ if [ -f "$HEALTH_CHECK_SCRIPT" ]; then
     bash "$HEALTH_CHECK_SCRIPT" >> "${SCRIPT_DIR}/log/health_check.log" 2>&1 || log_message "WARN" "Health check failed"
 fi
 
+# Execute Enhanced Metrics Collection (Added 2026-05-13)
+ENHANCED_METRICS_SCRIPT="${SCRIPT_DIR}/scripts/collect_enhanced_metrics.sh"
+if [ -f "$ENHANCED_METRICS_SCRIPT" ]; then
+    log_message "INFO" "Executing enhanced metrics collection..."
+    bash "$ENHANCED_METRICS_SCRIPT" >> "${SCRIPT_DIR}/log/enhanced_metrics.log" 2>&1 || log_message "WARN" "Enhanced metrics collection failed"
+fi
+
 # ============================================================================
 # Execute Normal Mode
 # ============================================================================

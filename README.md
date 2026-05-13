@@ -145,6 +145,7 @@ graph LR
 ```
 
 ### 🆕 핵심 문서
+- **[유지보수 주의사항](MAINTENANCE_PRECAUTIONS.md)** - ⭐ 개발 및 유지보수 시 필수 준수 사항
 - **[설정 파일 위치 가이드](../giipdb/docs/GIIP_CONFIG_FILE_LOCATION.md)** - ⭐ giipAgent.cnf 위치 명확화
 - **[CQE 명세서](docs/CQE_SPECIFICATION.md)** - 원격 명령 실행 시스템
 - **[giipAgent3.sh 명세서](docs/GIIPAGENT3_SPECIFICATION.md)** - 실행 조건, 동작 흐름
