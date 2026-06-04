@@ -102,9 +102,10 @@ kvs_send() {
 	local kvs_cpu_usage=0 kvs_mem_usage=0 kvs_disk_usage=0 kvs_load_avg="0.00" kvs_proc_count=0 kvs_conn_count=0
 	local lib_dir
 	lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-	if [ -f "${lib_dir}/kvs_metrics.sh" ]; then
-		. "${lib_dir}/kvs_metrics.sh"
-		_get_kvs_system_metrics
+	if [ -f "${lib_dir}/kvs_metrics.sh" ] && . "${lib_dir}/kvs_metrics.sh" 2>/dev/null; then
+		if command -v _get_kvs_system_metrics >/dev/null 2>&1; then
+			_get_kvs_system_metrics || true
+		fi
 	fi
 	
 	# jq를 사용하여 표준 구조 생성
