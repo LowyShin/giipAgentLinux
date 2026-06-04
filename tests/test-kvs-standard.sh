@@ -87,8 +87,10 @@ print_pass "lib/kvs_standard.sh exists"
 
 # Source the module
 print_test "Sourcing kvs_standard.sh"
+ERREXIT_WAS_SET=0
+[[ "$-" == *e* ]] && ERREXIT_WAS_SET=1
 if source "$LIB_DIR/kvs_standard.sh" 2>/dev/null; then
-  set +e
+  [ $ERREXIT_WAS_SET -eq 1 ] || set +e
   print_pass "Module loaded successfully"
 else
   print_fail "Failed to load module"
