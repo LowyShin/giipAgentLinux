@@ -1,6 +1,6 @@
 #!/bin/bash
 # lib/kvs_metrics.sh - Helper function to collect core system metrics for KVS logging
-# This is a separate file to keep standard library files (lib/kvs.sh, lib/kvs_standard.sh) clean and untouched.
+# Kept in a separate file to keep metrics collection logic isolated from the core KVS send/put implementations.
 
 _get_kvs_system_metrics() {
 	# 1. CPU Usage
