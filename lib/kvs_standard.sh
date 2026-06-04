@@ -6,7 +6,7 @@
 # Purpose: KVS 데이터 송신 표준화
 #
 # SPECIFICATIONS:
-#   - Standard: giipdb/docs/KVS_STANDARD_SPECIFICATION.md ⭐⭐⭐
+#   - Standard: giipdb/docs/KVS_STANDARD_SPECIFICATION.md (STANDARD)
 #   - API Rules: giipfaw/docs/giipapi_rules.md
 #   - Parser: giipv3/src/lib/kvsParser.ts
 #
@@ -55,13 +55,13 @@ kvs_send() {
 	# ============================================================================
 	
 	if [ -z "$kfactor" ]; then
-		echo "[KVS-Send] ❌ ERROR: kfactor required (1st parameter)" >&2
+		echo "[KVS-Send] [ERROR] kfactor required (1st parameter)" >&2
 		echo "[KVS-Send] Usage: kvs_send <kfactor> <event_type> <details_json>" >&2
 		return 1
 	fi
 	
 	if [ -z "$event_type" ]; then
-		echo "[KVS-Send] ❌ ERROR: event_type required (2nd parameter)" >&2
+		echo "[KVS-Send] [ERROR] event_type required (2nd parameter)" >&2
 		echo "[KVS-Send] Usage: kvs_send <kfactor> <event_type> <details_json>" >&2
 		return 1
 	fi
@@ -76,17 +76,17 @@ kvs_send() {
 	# ============================================================================
 	
 	if [ -z "$lssn" ]; then
-		echo "[KVS-Send] ❌ ERROR: lssn not set (environment variable required)" >&2
+		echo "[KVS-Send] [ERROR] lssn not set (environment variable required)" >&2
 		return 1
 	fi
 	
 	if [ -z "$sk" ]; then
-		echo "[KVS-Send] ❌ ERROR: sk not set (environment variable required)" >&2
+		echo "[KVS-Send] [ERROR] sk not set (environment variable required)" >&2
 		return 1
 	fi
 	
 	if [ -z "$apiaddrv2" ]; then
-		echo "[KVS-Send] ❌ ERROR: apiaddrv2 not set (environment variable required)" >&2
+		echo "[KVS-Send] [ERROR] apiaddrv2 not set (environment variable required)" >&2
 		return 1
 	fi
 	
@@ -98,13 +98,22 @@ kvs_send() {
 	local hostname=$(hostname)
 	local version="${sv:-unknown}"
 	
+	# Load metrics helper from separate file
+	local kvs_cpu_usage=0 kvs_mem_usage=0 kvs_disk_usage=0 kvs_load_avg="0.00" kvs_proc_count=0 kvs_conn_count=0
+	local lib_dir
+	lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+	if [ -f "${lib_dir}/kvs_metrics.sh" ]; then
+		. "${lib_dir}/kvs_metrics.sh"
+		_get_kvs_system_metrics
+	fi
+	
 	# jq를 사용하여 표준 구조 생성
 	if ! command -v jq >/dev/null 2>&1; then
-		echo "[KVS-Send] ❌ ERROR: jq is required but not installed" >&2
+		echo "[KVS-Send] [ERROR] jq is required but not installed" >&2
 		return 1
 	fi
 	
-	# ✅ 표준 kValue 구조 (KVS_STANDARD_SPECIFICATION.md 준수)
+	# 표준 kValue 구조 (KVS_STANDARD_SPECIFICATION.md 준수)
 	local kvalue
 	kvalue=$(jq -n \
 		--arg event_type "$event_type" \
@@ -112,6 +121,12 @@ kvs_send() {
 		--arg lssn "$lssn" \
 		--arg hostname "$hostname" \
 		--arg version "$version" \
+		--arg cpu_usage "$kvs_cpu_usage" \
+		--arg mem_usage "$kvs_mem_usage" \
+		--arg disk_usage "$kvs_disk_usage" \
+		--arg load_avg "$kvs_load_avg" \
+		--arg proc_count "$kvs_proc_count" \
+		--arg conn_count "$kvs_conn_count" \
 		--argjson details "$details_json" \
 		'{
 			event_type: $event_type,
@@ -119,11 +134,17 @@ kvs_send() {
 			lssn: ($lssn | tonumber),
 			hostname: $hostname,
 			version: $version,
+			cpu_usage: ($cpu_usage | tonumber),
+			mem_usage: ($mem_usage | tonumber),
+			disk_usage: ($disk_usage | tonumber),
+			load_avg: $load_avg,
+			proc_count: ($proc_count | tonumber),
+			conn_count: ($conn_count | tonumber),
 			details: $details
 		}')
 	
 	if [ $? -ne 0 ]; then
-		echo "[KVS-Send] ❌ ERROR: Failed to build kValue (invalid details_json?)" >&2
+		echo "[KVS-Send] [ERROR] Failed to build kValue (invalid details_json?)" >&2
 		echo "[KVS-Send] details_json: ${details_json:0:200}..." >&2
 		return 1
 	fi
@@ -135,10 +156,10 @@ kvs_send() {
 	# API URL 구성
 	local kvs_url="${apiaddrv2}"
 	
-	# ✅ giipapi_rules.md 준수: text에는 파라미터 이름만
+	# giipapi_rules.md 준수: text에는 파라미터 이름만
 	local text="KVSPut kType kKey kFactor"
 	
-	# ✅ jsondata에 실제 값 (kValue는 JSON 객체로 전달)
+	# jsondata에 실제 값 (kValue는 JSON 객체로 전달)
 	local jsondata
 	jsondata=$(jq -n \
 		--arg kType "lssn" \
@@ -148,11 +169,11 @@ kvs_send() {
 		'{kType: $kType, kKey: $kKey, kFactor: $kFactor, kValue: $kValue}')
 	
 	if [ $? -ne 0 ]; then
-		echo "[KVS-Send] ❌ ERROR: Failed to build jsondata" >&2
+		echo "[KVS-Send] [ERROR] Failed to build jsondata" >&2
 		return 1
 	fi
 	
-	# ✅ URL 인코딩 (jq 사용)
+	# URL 인코딩 (jq 사용)
 	local post_data="text=$(printf '%s' "$text" | jq -sRr '@uri')"
 	post_data+="&token=$(printf '%s' "$sk" | jq -sRr '@uri')"
 	post_data+="&jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')"
@@ -161,14 +182,14 @@ kvs_send() {
 	# Step 5: 로깅 (최소화)
 	# ============================================================================
 	
-	echo "[KVS-Send] 📤 Sending: kFactor=$kfactor, event=$event_type, lssn=$lssn" >&2
+	echo "[KVS-Send] [SEND] Sending: kFactor=$kfactor, event=$event_type, lssn=$lssn" >&2
 	
 	# Payload 크기 확인
 	local payload_size=${#jsondata}
-	echo "[KVS-Send] 📦 Payload size: $payload_size bytes" >&2
+	echo "[KVS-Send] [INFO] Payload size: $payload_size bytes" >&2
 	
 	if [ $payload_size -gt 1000000 ]; then
-		echo "[KVS-Send] ⚠️  WARNING: Large payload (>1MB) may cause timeout" >&2
+		echo "[KVS-Send] [WARN] WARNING: Large payload (>1MB) may cause timeout" >&2
 	fi
 	
 	# ============================================================================
@@ -198,23 +219,23 @@ kvs_send() {
 	if [ $exit_code -eq 0 ]; then
 		# 응답 파싱 (RstVal=200 확인)
 		if jq -e '.data[0].RstVal == 200' "$response_file" >/dev/null 2>&1; then
-			echo "[KVS-Send] ✅ Success: $event_type" >&2
+			echo "[KVS-Send] [OK] Success: $event_type" >&2
 			rm -f "$response_file" "$stderr_file"
 			return 0
 		else
 			# API 에러 (200이 아님)
 			local rstval=$(jq -r '.data[0].RstVal // "unknown"' "$response_file" 2>/dev/null)
 			local rstmsg=$(jq -r '.data[0].RstMsg // "unknown"' "$response_file" 2>/dev/null)
-			echo "[KVS-Send] ❌ API Error: RstVal=$rstval, Msg=$rstmsg" >&2
-			echo "[KVS-Send] ❌ Response: $(cat "$response_file" | head -c 200)" >&2
+			echo "[KVS-Send] [ERROR] API Error: RstVal=$rstval, Msg=$rstmsg" >&2
+			echo "[KVS-Send] [ERROR] Response: $(cat "$response_file" | head -c 200)" >&2
 			rm -f "$response_file" "$stderr_file"
 			return 3
 		fi
 	else
 		# 네트워크 에러
 		local http_status=$(grep "HTTP/" "$stderr_file" 2>/dev/null | tail -1)
-		echo "[KVS-Send] ❌ Network Error: exit_code=$exit_code" >&2
-		echo "[KVS-Send] ❌ HTTP Status: $http_status" >&2
+		echo "[KVS-Send] [ERROR] Network Error: exit_code=$exit_code" >&2
+		echo "[KVS-Send] [ERROR] HTTP Status: $http_status" >&2
 		
 		case $exit_code in
 			4) echo "[KVS-Send] Network failure (check connection)" >&2 ;;
@@ -257,17 +278,17 @@ kvs_send_file() {
 	# ============================================================================
 	
 	if [ -z "$json_file" ]; then
-		echo "[KVS-Send-File] ❌ ERROR: json_file required (1st parameter)" >&2
+		echo "[KVS-Send-File] [ERROR] json_file required (1st parameter)" >&2
 		return 1
 	fi
 	
 	if [ ! -f "$json_file" ]; then
-		echo "[KVS-Send-File] ❌ ERROR: File not found: $json_file" >&2
+		echo "[KVS-Send-File] [ERROR] File not found: $json_file" >&2
 		return 1
 	fi
 	
 	if [ -z "$kfactor" ]; then
-		echo "[KVS-Send-File] ❌ ERROR: kfactor required (2nd parameter)" >&2
+		echo "[KVS-Send-File] [ERROR] kfactor required (2nd parameter)" >&2
 		return 1
 	fi
 	
@@ -279,13 +300,13 @@ kvs_send_file() {
 	file_content=$(cat "$json_file")
 	
 	if [ -z "$file_content" ]; then
-		echo "[KVS-Send-File] ❌ ERROR: Empty file: $json_file" >&2
+		echo "[KVS-Send-File] [ERROR] Empty file: $json_file" >&2
 		return 1
 	fi
 	
 	# JSON 유효성 검증
 	if ! echo "$file_content" | jq empty >/dev/null 2>&1; then
-		echo "[KVS-Send-File] ❌ ERROR: Invalid JSON in file: $json_file" >&2
+		echo "[KVS-Send-File] [ERROR] Invalid JSON in file: $json_file" >&2
 		echo "[KVS-Send-File] First 200 chars: ${file_content:0:200}" >&2
 		return 1
 	fi
@@ -302,7 +323,7 @@ kvs_send_file() {
 		event_type="data_upload"
 	fi
 	
-	echo "[KVS-Send-File] 📄 Reading: $json_file (event=$event_type)" >&2
+	echo "[KVS-Send-File] [FILE] Reading: $json_file (event=$event_type)" >&2
 	
 	# ============================================================================
 	# Step 4: kvs_send 호출 (파일 내용을 details로 전달)
@@ -319,4 +340,4 @@ kvs_send_file() {
 export -f kvs_send
 export -f kvs_send_file
 
-echo "[KVS-Standard] ✅ Loaded: kvs_send, kvs_send_file" >&2
+echo "[KVS-Standard] [OK] Loaded: kvs_send, kvs_send_file" >&2
