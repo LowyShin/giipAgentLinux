@@ -91,9 +91,10 @@ _get_kvs_system_metrics() {
 	fi
 
 	# 5. Process Count
+	# 5. Process Count
 	kvs_proc_count=0
 	if command -v ps >/dev/null 2>&1; then
-		kvs_proc_count=$(ps -e 2>/dev/null | wc -l | tr -d '[:space:]' || echo 0)
+		kvs_proc_count=$(ps -e 2>/dev/null | tail -n +2 | wc -l | tr -d '[:space:]' || echo 0)
 	fi
 	if [[ ! "$kvs_proc_count" =~ ^[0-9]+$ ]]; then
 		kvs_proc_count=0
