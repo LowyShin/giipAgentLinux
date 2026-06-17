@@ -46,6 +46,12 @@ load_config() {
 		return 1
 	fi
 	
+	# Export critical configuration variables for sub-shells and metrics collection scripts
+	export lssn
+	export sk
+	export apiaddrv2
+	export gateway_mode
+	
 	return 0
 }
 
