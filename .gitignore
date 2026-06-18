@@ -13,6 +13,11 @@ giipAgentGateway_servers.csv
 /var/log/giipAgent_*.log
 /var/log/giipAgentGateway_*.log
 /var/log/giip-auto-discover.log
+log/error_*.json
+log/perfmon/perfmon_*.json
+log/perfmon/perfmon_*.log
+log/*.json
+
 
 # Temporary Files
 *.tmp
