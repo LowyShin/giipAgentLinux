@@ -467,5 +467,14 @@ if [ -f "$SESSION_HISTORY_FILE" ] && [ -s "$SESSION_HISTORY_FILE" ]; then
     rm -f "$SESSION_HISTORY_FILE"
 fi
 
+# ============================================================================
+# Collect and upload server logs for remote RCA diagnostics (Added 2026-06-18)
+# ============================================================================
+COLLECT_LOGS_SCRIPT="${SCRIPT_DIR}/scripts/collect_server_logs.sh"
+if [ -f "$COLLECT_LOGS_SCRIPT" ]; then
+    log_message "INFO" "Running remote diagnostics log collection..."
+    bash "$COLLECT_LOGS_SCRIPT"
+fi
+
 log_message "INFO" "GIIP Agent V${sv} completed"
 exit 0

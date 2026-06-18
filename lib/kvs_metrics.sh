@@ -110,4 +110,24 @@ _get_kvs_system_metrics() {
 	if [[ ! "$kvs_conn_count" =~ ^[0-9]+$ ]]; then
 		kvs_conn_count=0
 	fi
+
+	# 7. Uptime
+	kvs_uptime="N/A"
+	if [ -f /proc/uptime ]; then
+		local uptime_sec=$(cat /proc/uptime | awk '{print int($1)}' 2>/dev/null)
+		if [ -n "$uptime_sec" ] && [[ "$uptime_sec" =~ ^[0-9]+$ ]]; then
+			local uptime_days=$((uptime_sec / 86400))
+			local uptime_hours=$(((uptime_sec % 86400) / 3600))
+			local uptime_mins=$(((uptime_sec % 3600) / 60))
+			if [ $uptime_days -gt 0 ]; then
+				kvs_uptime="${uptime_days}d ${uptime_hours}h ${uptime_mins}m"
+			elif [ $uptime_hours -gt 0 ]; then
+				kvs_uptime="${uptime_hours}h ${uptime_mins}m"
+			else
+				kvs_uptime="${uptime_mins}m"
+			fi
+		fi
+	elif command -v uptime >/dev/null 2>&1; then
+		kvs_uptime=$(uptime -p 2>/dev/null | sed 's/^up //')
+	fi
 }
