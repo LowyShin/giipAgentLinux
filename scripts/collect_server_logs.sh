@@ -80,25 +80,6 @@ MESSAGES_DATA=$(read_log_file "/var/log/messages" 50)
 [ "$MESSAGES_DATA" = "File not found: /var/log/messages" ] && MESSAGES_DATA=$(read_log_file "/var/log/syslog" 50)
 CRON_DATA=$(read_log_file "/tmp/giipAgent/cron.log" 30)
 
-# Detect DB log files
-DB_LOG=$(read_log_file "/var/log/mariadb/mariadb.log" 30)
-if [[ "$DB_LOG" == "File not found"* ]]; then
-    DB_LOG=$(read_log_file "/var/log/mysql/error.log" 30)
-fi
-if [[ "$DB_LOG" == "File not found"* ]]; then
-    DB_LOG=$(read_log_file "/var/log/postgresql/postgresql.log" 30)
-fi
-if [[ "$DB_LOG" == "File not found"* ]]; then
-    # Fallback to find command if possible
-    local found_db_log
-    found_db_log=$(find /var/log -type f -name "mysql*.log" -o -name "mariadb*.log" -o -name "postgres*.log" 2>/dev/null | head -1)
-    if [ -n "$found_db_log" ]; then
-        DB_LOG=$(read_log_file "$found_db_log" 30)
-    else
-        DB_LOG="No Database error log found in standard paths (/var/log/mariadb/, /var/log/mysql/)"
-    fi
-fi
-
 # Ensure jq is installed
 if ! command -v jq >/dev/null 2>&1; then
     echo "❌ Error: jq is required but not installed." >&2
@@ -113,15 +94,13 @@ LOGS_JSON=$(jq -n \
     --arg dmesg "$DMESG_DATA" \
     --arg messages "$MESSAGES_DATA" \
     --arg cron "$CRON_DATA" \
-    --arg db "$DB_LOG" \
     '{
         timestamp: $ts,
         hostname: $hn,
         lssn: ($lssn | tonumber),
         dmesg: $dmesg,
         messages: $messages,
-        cron_log: $cron,
-        db_log: $db
+        cron_log: $cron
     }')
 
 # Send to KVS
