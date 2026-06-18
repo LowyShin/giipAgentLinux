@@ -30,17 +30,29 @@ echo "🔍 Collecting server logs for LSSN: $lssn..."
 read_log_file() {
     local file_path="$1"
     local lines="$2"
-    if [ ! -f "$file_path" ]; then
-        echo "File not found: $file_path"
-    elif [ ! -r "$file_path" ]; then
-        # Try running with sudo if passwordless sudo is configured
-        if sudo -n true 2>/dev/null; then
-            sudo tail -n "$lines" "$file_path" 2>/dev/null
-        else
-            echo "Permission denied: Cannot read $file_path (Run agent with sudo or add giip user to syslog group to read system logs)"
-        fi
-    else
+    
+    # 1. Try reading directly first
+    if [ -f "$file_path" ] && [ -r "$file_path" ]; then
         tail -n "$lines" "$file_path" 2>/dev/null
+        return 0
+    fi
+    
+    # 2. Try using sudo if passwordless sudo is configured
+    if sudo -n true 2>/dev/null; then
+        if sudo [ -f "$file_path" ]; then
+            sudo tail -n "$lines" "$file_path" 2>/dev/null
+            return 0
+        fi
+    fi
+    
+    # 3. Fallback/error messaging
+    # If the directory is readable but file is not, or directory is restricted
+    local dir_path
+    dir_path=$(dirname "$file_path")
+    if [ -d "$dir_path" ] && [ ! -r "$file_path" ]; then
+        echo "Permission denied: Cannot read $file_path (Run agent with sudo or add giip user to syslog/mysql group)"
+    else
+        echo "File not found: $file_path"
     fi
 }
 
@@ -69,15 +81,15 @@ MESSAGES_DATA=$(read_log_file "/var/log/messages" 50)
 CRON_DATA=$(read_log_file "/tmp/giipAgent/cron.log" 30)
 
 # Detect DB log files
-DB_LOG=""
-if [ -f "/var/log/mariadb/mariadb.log" ]; then
-    DB_LOG=$(read_log_file "/var/log/mariadb/mariadb.log" 30)
-elif [ -f "/var/log/mysql/error.log" ]; then
+DB_LOG=$(read_log_file "/var/log/mariadb/mariadb.log" 30)
+if [[ "$DB_LOG" == "File not found"* ]]; then
     DB_LOG=$(read_log_file "/var/log/mysql/error.log" 30)
-elif [ -f "/var/log/postgresql/postgresql.log" ]; then
+fi
+if [[ "$DB_LOG" == "File not found"* ]]; then
     DB_LOG=$(read_log_file "/var/log/postgresql/postgresql.log" 30)
-else
-    # Check if we can find any DB log files in common directories
+fi
+if [[ "$DB_LOG" == "File not found"* ]]; then
+    # Fallback to find command if possible
     local found_db_log
     found_db_log=$(find /var/log -type f -name "mysql*.log" -o -name "mariadb*.log" -o -name "postgres*.log" 2>/dev/null | head -1)
     if [ -n "$found_db_log" ]; then
