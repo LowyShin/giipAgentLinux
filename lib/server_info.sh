@@ -9,6 +9,10 @@
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
+# Ensure standard system administration paths are included in PATH (for cron run)
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+
+
 # ============================================================================
 # Dependencies Check
 # ============================================================================
