@@ -72,8 +72,10 @@ _get_kvs_system_metrics() {
 
 	# 3. Disk Usage (Root filesystem '/')
 	kvs_disk_usage=0
+	kvs_disk_h="N/A"
 	if command -v df >/dev/null 2>&1; then
 		kvs_disk_usage=$(df -P / 2>/dev/null | awk 'NR==2 {print $5}' | tr -d '%' || echo 0)
+		kvs_disk_h=$(df -h / 2>/dev/null | tail -n 1 | awk '{print $3 " / " $2 " (" $5 ")"}' || echo "N/A")
 	fi
 	if [[ ! "$kvs_disk_usage" =~ ^[0-9]+$ ]]; then
 		kvs_disk_usage=0
@@ -130,4 +132,11 @@ _get_kvs_system_metrics() {
 	elif command -v uptime >/dev/null 2>&1; then
 		kvs_uptime=$(uptime -p 2>/dev/null | sed 's/^up //')
 	fi
+
+	# 8. OS and Kernel Info
+	kvs_os="Linux"
+	if [ -f /etc/os-release ]; then
+		kvs_os=$(cat /etc/os-release | grep PRETTY_NAME | cut -d'"' -f2 || echo "Linux")
+	fi
+	kvs_kernel=$(uname -r 2>/dev/null || echo "")
 }

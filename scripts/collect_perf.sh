@@ -65,9 +65,15 @@ if command -v jq > /dev/null 2>&1; then
     done
 fi
 
+# 3.5 Disk Usage
+DISK_INFO=$(df -h / 2>/dev/null | tail -n 1)
+DISK_USAGE=$(echo "$DISK_INFO" | awk '{print $5}' | tr -d '%' || echo "0")
+DISK_H=$(echo "$DISK_INFO" | awk '{print $3 " / " $2 " (" $5 ")"}' || echo "N/A")
+
 # 4. System Info
 UPTIME=$(uptime -p 2>/dev/null || echo "up unknown")
 OS_INFO=$(cat /etc/os-release 2>/dev/null | grep PRETTY_NAME | cut -d'"' -f2 || echo "Linux")
+KERNEL_INFO=$(uname -r 2>/dev/null || echo "")
 HOSTNAME=$(hostname 2>/dev/null || echo "unknown")
 
 # 5. Build Final JSON
@@ -76,9 +82,11 @@ if command -v jq > /dev/null 2>&1; then
         --argjson cpu "{\"usage_pct\": $CPU_USAGE, \"cores\": $CPU_CORES, \"load_avg\": $LOAD_AVG}" \
         --argjson mem "{\"total_mb\": $MEM_TOTAL, \"used_mb\": $MEM_USED, \"free_mb\": $MEM_FREE, \"usage_pct\": $MEM_PCT}" \
         --argjson proc "$PROCESSES_JSON" \
-        --argjson sys "{\"uptime\": \"$UPTIME\", \"os\": \"$OS_INFO\", \"hostname\": \"$HOSTNAME\"}" \
+        --argjson sys "{\"uptime\": \"$UPTIME\", \"os\": \"$OS_INFO\", \"kernel\": \"$KERNEL_INFO\", \"hostname\": \"$HOSTNAME\"}" \
+        --arg disk_usage "$DISK_USAGE" \
+        --arg disk_h "$DISK_H" \
         --arg ts "$(date '+%Y-%m-%d %H:%M:%S')" \
-        '{cpu: $cpu, memory: $mem, processes: $proc, system: $sys, timestamp: $ts}' 2>/dev/null)
+        '{cpu: $cpu, memory: $mem, processes: $proc, system: $sys, timestamp: $ts, disk_usage: ($disk_usage | tonumber), disk_h: $disk_h}' 2>/dev/null)
 else
     # Minimal fallback JSON
     PERF_JSON="{\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\", \"hostname\":\"$HOSTNAME\", \"error\":\"jq_missing\"}"

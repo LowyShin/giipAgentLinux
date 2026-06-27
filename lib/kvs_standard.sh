@@ -99,7 +99,7 @@ kvs_send() {
 	local version="${sv:-unknown}"
 	
 	# Load metrics helper from separate file
-	local kvs_cpu_usage=0 kvs_mem_usage=0 kvs_disk_usage=0 kvs_load_avg="0.00" kvs_proc_count=0 kvs_conn_count=0 kvs_uptime="N/A"
+	local kvs_cpu_usage=0 kvs_mem_usage=0 kvs_disk_usage=0 kvs_load_avg="0.00" kvs_proc_count=0 kvs_conn_count=0 kvs_uptime="N/A" kvs_os="Linux" kvs_kernel="" kvs_disk_h="N/A"
 	local lib_dir
 	lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 	if [ -f "${lib_dir}/kvs_metrics.sh" ] && . "${lib_dir}/kvs_metrics.sh" 2>/dev/null; then
@@ -125,10 +125,13 @@ kvs_send() {
 		--arg cpu_usage "$kvs_cpu_usage" \
 		--arg mem_usage "$kvs_mem_usage" \
 		--arg disk_usage "$kvs_disk_usage" \
+		--arg disk_h "$kvs_disk_h" \
 		--arg load_avg "$kvs_load_avg" \
 		--arg proc_count "$kvs_proc_count" \
 		--arg conn_count "$kvs_conn_count" \
 		--arg uptime "$kvs_uptime" \
+		--arg os "$kvs_os" \
+		--arg kernel "$kvs_kernel" \
 		--argjson details "$details_json" \
 		'{
 			event_type: $event_type,
@@ -139,12 +142,14 @@ kvs_send() {
 			cpu_usage: ($cpu_usage | tonumber),
 			mem_usage: ($mem_usage | tonumber),
 			disk_usage: ($disk_usage | tonumber),
+			disk_h: $disk_h,
 			load_avg: $load_avg,
 			proc_count: ($proc_count | tonumber),
 			conn_count: ($conn_count | tonumber),
 			system: {
 				uptime: $uptime,
-				os: "Linux",
+				os: $os,
+				kernel: $kernel,
 				hostname: $hostname
 			},
 			details: $details
