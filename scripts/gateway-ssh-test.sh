@@ -115,7 +115,7 @@ if bash "${GATEWAY_DIR}/ssh_test.sh"; then
 	
 	exit 0
 else
-	local ssh_test_exit_code=$?
+	ssh_test_exit_code=$?
 	# 🔴 [로깅 포인트 #5.3] SSH 테스트 실패
 	echo "[gateway-ssh-test.sh] ⚠️  [5.3] SSH 테스트 실패/경고: lssn=${lssn}, exit_code=${ssh_test_exit_code}" >&2
 	log_message "WARN" "SSH test script exited with code: $ssh_test_exit_code"

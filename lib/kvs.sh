@@ -91,14 +91,8 @@ safe_url_encode() {
 		return 1
 	fi
 	
-	# === VALIDATION 2: Null byte check ===
-	if printf '%s' "$input" | grep -q $'\x00'; then
-		local error_msg="[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Null bytes detected in '$field_name' (size: ${input_size})"
-		echo "$error_msg" >> "$KVS_ERROR_LOG" 2>/dev/null
-		echo "$error_msg" >&2
-		# Strip null bytes and continue
-		input=$(printf '%s' "$input" | tr -d '\0')
-	fi
+	# Strip null bytes from input (bash vars can't hold null bytes, but strip for safety)
+	input=$(printf '%s' "$input" | tr -d '\0')
 	
 	# === VALIDATION 3: Empty input ===
 	if [ -z "$input" ]; then
@@ -243,11 +237,11 @@ save_execution_log() {
 	local api_response=$(cat "$response_file" 2>/dev/null)
 	
 	# Parse RstVal from response
-	local rst_val=$(echo "$api_response" | jq -r '.data[0].RstVal // .RstVal // "unknown"' 2>/dev/null)
+	local rst_val=$(echo "$api_response" | head -c 2000 | jq -r '.data[0].RstVal // .RstVal // "unknown"' 2>/dev/null)
 	
 	# If jq fails or RstVal not found, try grep
 	if [ -z "$rst_val" ] || [ "$rst_val" = "unknown" ] || [ "$rst_val" = "null" ]; then
-		rst_val=$(echo "$api_response" | grep -o '"RstVal"\s*:\s*"[^"]*"' 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
+		rst_val=$(echo "$api_response" | grep -oE '"RstVal"[[:space:]]*:[[:space:]]*([0-9]+|"[^"]*")' 2>/dev/null | head -1 | grep -oE '([0-9]+|"[^"]*")$' | tr -d '"')
 	fi
 	
 	# Check if API call was successful (RstVal = 200)
@@ -393,11 +387,11 @@ kvs_put() {
 	local api_response=$(cat "$response_file" 2>/dev/null)
 	
 	# Parse RstVal from response
-	local rst_val=$(echo "$api_response" | jq -r '.data[0].RstVal // .RstVal // "unknown"' 2>/dev/null)
+	local rst_val=$(echo "$api_response" | head -c 2000 | jq -r '.data[0].RstVal // .RstVal // "unknown"' 2>/dev/null)
 	
 	# If jq fails or RstVal not found, try grep
 	if [ -z "$rst_val" ] || [ "$rst_val" = "unknown" ] || [ "$rst_val" = "null" ]; then
-		rst_val=$(echo "$api_response" | grep -o '"RstVal"\s*:\s*"[^"]*"' 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
+		rst_val=$(echo "$api_response" | grep -oE '"RstVal"[[:space:]]*:[[:space:]]*([0-9]+|"[^"]*")' 2>/dev/null | head -1 | grep -oE '([0-9]+|"[^"]*")$' | tr -d '"')
 	fi
 	
 	# Check if API call was successful (RstVal = 200)

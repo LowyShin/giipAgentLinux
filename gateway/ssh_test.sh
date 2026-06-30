@@ -365,13 +365,15 @@ main() {
 	# Count potential servers
 	local server_count=0
 	if command -v jq &> /dev/null; then
-		server_count=$(jq '[.data[]? // .[]? // .]? | length' "$json_file" 2>/dev/null || echo "0")
+		server_count=$(jq '.data | if type == "array" then length else 0 end' "$json_file" 2>/dev/null || echo "0")
 	else
 		server_count=$(grep -o '{[^}]*}' "$json_file" | wc -l)
 	fi
 	
 	if [ "$server_count" -eq 0 ]; then
-		exit_with_error "No server data found in JSON file: ${json_file}" 1
+		print_warning "No remote servers registered in API for LSSN:${lssn} (data:[])"
+		log_message "INFO" "No remote servers to test - skipping SSH tests"
+		exit 0
 	fi
 	
 	print_success "Found ${server_count} server(s) in JSON file"
@@ -436,7 +438,7 @@ main() {
 	if command -v jq &> /dev/null; then
 		# Extract to temp file first to preserve array in main shell
 		local temp_servers="/tmp/servers_to_test_$$.jsonl"
-		jq -c '.data[]? // .[]? // .' "$json_file" 2>/dev/null > "$temp_servers"
+		jq -c '.data[]?' "$json_file" 2>/dev/null > "$temp_servers"
 		
 		while IFS= read -r server_json; do
 			[ -z "$server_json" ] && continue

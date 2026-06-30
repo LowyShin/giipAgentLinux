@@ -263,12 +263,11 @@ detect_os() {
 get_cpu_usage() {
 	local cpu_usage=0
 	if command -v top >/dev/null 2>&1; then
-		# top -bn1 gives a single snapshot
-		# We extract the idle percentage and subtract from 100
-		local idle=$(top -bn1 | grep "Cpu(s)" | awk '{print $8}' | cut -d. -f1)
-		# Handle different top formats (some have %id, some just id)
-		idle=$(echo "$idle" | tr -d '[:alpha:]%')
-		if [ -n "$idle" ]; then
+		# top -bn1 gives a single snapshot; extract the idle field robustly
+		# When idle=100.0, top omits the leading space: "ni,100.0 id" (not "ni, 100.0 id")
+		# so positional awk field extraction is unreliable - use grep -oE instead
+		local idle=$(top -bn1 | grep "Cpu(s)" | grep -oE '[0-9]+[.,][0-9]+ *id|[0-9]+ *id' | head -1 | grep -oE '[0-9]+' | head -1)
+		if [ -n "$idle" ] && [[ "$idle" =~ ^[0-9]+$ ]]; then
 			cpu_usage=$((100 - idle))
 		fi
 	elif [ -f /proc/stat ]; then

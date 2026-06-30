@@ -8,9 +8,19 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 BASE_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
 
+# Load common functions (get_cpu_usage, get_mem_usage)
+if [ -f "${BASE_DIR}/lib/common.sh" ]; then
+    . "${BASE_DIR}/lib/common.sh"
+fi
+
 # Load KVS library
 if [ -f "${BASE_DIR}/lib/kvs.sh" ]; then
     . "${BASE_DIR}/lib/kvs.sh"
+fi
+
+# Load config so lssn/sk/apiaddrv2 are available if not inherited
+if [ -f "${BASE_DIR}/../giipAgent.cnf" ] && [ -z "$sk" ]; then
+    . "${BASE_DIR}/../giipAgent.cnf"
 fi
 
 TARGET_LSSN=$1
@@ -25,8 +35,8 @@ echo "🔍 Monitoring Performance for LSSN: $TARGET_LSSN..."
 
 # 1. Collect Process Metrics
 TOTAL_PROC_COUNT=$(ps -ef | wc -l)
-JQ_COUNT=$(pgrep -c jq 2>/dev/null || echo 0)
-CURL_COUNT=$(pgrep -c curl 2>/dev/null || echo 0)
+JQ_COUNT=$(pgrep jq 2>/dev/null | wc -l)
+CURL_COUNT=$(pgrep curl 2>/dev/null | wc -l)
 
 echo "📊 Metrics: Total=$TOTAL_PROC_COUNT, jq=$JQ_COUNT, curl=$CURL_COUNT"
 
@@ -43,16 +53,16 @@ CHECK_TIME=$(date '+%Y-%m-%d %H:%M:%S')
 CPU_VAL=$(get_cpu_usage)
 MEM_VAL=$(get_mem_usage)
 # Legacy compatibility: scale percentage to milliseconds/arbitrary unit for old SPs
-CPU_TIME_PROXY=$((CPU_VAL * 100))
+CPU_TIME_PROXY=$(( ${CPU_VAL:-0} * 100 ))
 
 METRICS_JSON=$(cat <<EOF
 {
   "check_time": "$CHECK_TIME",
   "status": "$STATUS",
   "total_process_count": $TOTAL_PROC_COUNT,
-  "cpu_usage": $CPU_VAL,
+  "cpu_usage": ${CPU_VAL:-0},
   "cpu_time": $CPU_TIME_PROXY,
-  "mem_usage": $MEM_VAL,
+  "mem_usage": ${MEM_VAL:-0},
   "jq_count": $JQ_COUNT,
   "curl_count": $CURL_COUNT
 }
