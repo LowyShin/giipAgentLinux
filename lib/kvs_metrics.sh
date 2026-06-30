@@ -139,4 +139,17 @@ _get_kvs_system_metrics() {
 		kvs_os=$(cat /etc/os-release | grep PRETTY_NAME | cut -d'"' -f2 || echo "Linux")
 	fi
 	kvs_kernel=$(uname -r 2>/dev/null || echo "")
+
+	# 9. Stuck Process Counts (jq, curl)
+	kvs_jq_count=0
+	kvs_curl_count=0
+	if command -v pgrep >/dev/null 2>&1; then
+		kvs_jq_count=$(pgrep -x jq | wc -l || echo 0)
+		kvs_curl_count=$(pgrep -x curl | wc -l || echo 0)
+	else
+		kvs_jq_count=$(ps -e 2>/dev/null | grep -w jq | wc -l || echo 0)
+		kvs_curl_count=$(ps -e 2>/dev/null | grep -w curl | wc -l || echo 0)
+	fi
+	if [[ ! "$kvs_jq_count" =~ ^[0-9]+$ ]]; then kvs_jq_count=0; fi
+	if [[ ! "$kvs_curl_count" =~ ^[0-9]+$ ]]; then kvs_curl_count=0; fi
 }
