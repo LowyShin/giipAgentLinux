@@ -86,7 +86,9 @@ cd /path/to/installation
 cat giipAgent.cnf | grep -E "sk=|lssn=|apiaddrv2="
 
 # Cron 등록 확인
-crontab -l | grep giip
+# ⚠️ 설치는 `sudo ./admin/giipcronreg.sh`로 실행하므로 크론은 root 계정에 등록됩니다.
+#    일반 사용자 `crontab -l`은 "no crontab for <user>"가 뜰 수 있으니 sudo로 확인하세요.
+sudo crontab -l | grep giip
 ```
 
 ### 3. 배포 모드 선택

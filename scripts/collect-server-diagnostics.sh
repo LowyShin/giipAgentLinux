@@ -20,8 +20,9 @@ trap "kill $TIMEOUT_PID 2>/dev/null" EXIT
 # ============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LIB_DIR="${SCRIPT_DIR}/lib"
-CONFIG_FILE="$SCRIPT_DIR/../giipAgent.cnf"
+# lib/ sits at the repo root (parent of scripts/); cnf sits in the repo's parent dir.
+LIB_DIR="${SCRIPT_DIR}/../lib"
+CONFIG_FILE="$SCRIPT_DIR/../../giipAgent.cnf"
 
 # ============================================================================
 # Load Library Modules
