@@ -266,7 +266,7 @@ if [ "$PULLED" = true ]; then
     log "Running Auto-Discovery after Git pull"
     log "=========================================="
     
-    DISCOVER_SCRIPT="$SCRIPT_DIR/giip-auto-discover.sh"
+    DISCOVER_SCRIPT="$SCRIPT_DIR/scripts/giip-auto-discover.sh"
     
     if [ -f "$DISCOVER_SCRIPT" ]; then
         log "Executing: $DISCOVER_SCRIPT"
