@@ -21,21 +21,21 @@ if [ $? -ne 0 ]; then
 fi
 
 # Check existing GIIP installations
-cntgiip=`crontab -l 2>/dev/null | grep "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh" | wc -l`
+cntgiip=`crontab -l 2>/dev/null | grep "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|git-auto-sync.sh" | wc -l`
 
 if [ $cntgiip -gt 0 ]; then
     echo "⚠ Existing GIIP Agent installation detected!"
     echo ""
     echo "Current GIIP cron entries:"
-    crontab -l | grep "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh"
+    crontab -l | grep "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|git-auto-sync.sh"
     echo ""
     read -p "Do you want to REMOVE old entries and reinstall? (y/N): " -n 1 -r
     echo ""
-    
+
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo "Removing old GIIP cron entries..."
         # Remove all GIIP related entries
-        crontab -l | grep -v "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|# 160701 Lowy, for giip" | crontab -
+        crontab -l | grep -v "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|git-auto-sync.sh\|# 160701 Lowy, for giip" | crontab -
         echo "Old entries removed."
         echo ""
     else
@@ -51,10 +51,11 @@ echo "Installing GIIP Agent cron entries..."
 (crontab -l; echo "0 * * * * cd ${giippath}; bash --login -c 'bash ${giippath}/scripts/collect-server-diagnostics.sh'") | crontab -
 (crontab -l; echo "59 23 * * * cd ${giippath}; bash --login -c 'bash ${giippath}/admin/giiprecycle.sh'") | crontab -
 (crontab -l; echo "*/5 * * * * cd ${giippath}; bash --login -c 'bash ${giippath}/scripts/giip-auto-discover.sh'") | crontab -
+(crontab -l; echo "*/5 * * * * cd ${giippath}; bash --login -c 'bash ${giippath}/git-auto-sync.sh'") | crontab -
 
 echo ""
 echo "✓ GIIP Agent cron entries installed:"
-crontab -l | grep "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh"
+crontab -l | grep "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|git-auto-sync.sh"
 echo ""
 
 # check and install dos2unix
@@ -98,6 +99,7 @@ echo "Installed components:"
 echo "  • GIIP Agent (runs every 1 minute)"
 echo "  • Auto-Discovery (runs every 5 minutes)"
 echo "  • Daily recycle (runs at 23:59)"
+echo "  • Git Auto-Sync (runs every 5 minutes, pull-only, logs to ~/logs/)"
 echo ""
 echo "Log files:"
 echo "  • /var/log/giipAgent_YYYYMMDD.log"
