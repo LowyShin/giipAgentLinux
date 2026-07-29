@@ -17,12 +17,15 @@
 #                          (giipdb pApiCQERunForcebyAk / pApiCQEQGetbySk REPLACE).
 #                          Must set:
 #                            GaProperty='properties/123456789'
-#                            GaKeyFile='/home/giip/ga-service-account.json'
-#                          optional: GaFactor (default 'daily'), GaRange (default 'yesterday')
+#                          optional: GaKeyFile (local override path, skips DB fetch),
+#                                    GaFactor (default 'daily'), GaRange (default 'yesterday')
+#
+# giip-803: GA4 서비스계정 키는 서버에 파일로 미리 배치하지 않는다 — ga-property 화면에서
+#   입력/관리되는 값을 실행 시점에 pApiGaKeyGetbySk(자기 sk 인증)로 받아 임시파일로만 쓰고
+#   즉시 삭제한다. $GaKeyFile 을 custom_values 로 명시 주입한 경우에만 로컬 파일을 우선한다.
 #
 # Remote PC prerequisites:
 #   - openssl, curl, jq (already required by the rest of giipAgentLinux).
-#   - GA4 service-account key JSON present at $GaKeyFile (NOT shipped in ms_body).
 #
 # Registration: giipdb/mgmt/register-ga-cqe.ps1 -MsType sh -ScriptFile <this file>
 # Spec: giip-678 / SPEC_20260720_GA_KVS_AI_REPORT.md T3 (CQE delivery variant)
@@ -37,8 +40,11 @@ GaKeyFile="${GaKeyFile:-}"
 
 log() { echo "[$(date '+%Y-%m-%dT%H:%M:%S')] [ga-cqe] $1: $2"; }
 
+FETCHED_KEY_FILE=""
+cleanup() { [ -n "$FETCHED_KEY_FILE" ] && rm -f "$FETCHED_KEY_FILE"; }
+trap cleanup EXIT
+
 if [ -z "$GaProperty" ]; then log ERROR "GaProperty not set (custom_values)."; exit 1; fi
-if [ -z "$GaKeyFile" ] || [ ! -f "$GaKeyFile" ]; then log ERROR "GaKeyFile not found: '$GaKeyFile'."; exit 1; fi
 if [ -z "${sk:-}" ]; then log ERROR "giip sk token not present in environment (expected from load_config export)."; exit 1; fi
 if [ -z "${apiaddrv2:-}" ]; then log ERROR "apiaddrv2 not present in environment."; exit 1; fi
 for bin in openssl curl jq; do
@@ -48,6 +54,33 @@ done
 base64url() {
 	openssl base64 -A | tr '+/' '-_' | tr -d '='
 }
+
+# --- GA4 서비스계정 키 확보: 로컬 override 없으면 DB(ga-property 화면)에서 조회 ---
+if [ -z "$GaKeyFile" ] || [ ! -f "$GaKeyFile" ]; then
+	key_text="GaKeyGet gaPropertyId"
+	key_jsondata="{\"gaPropertyId\":\"${GaProperty}\"}"
+	key_encoded_text=$(printf '%s' "$key_text" | jq -sRr '@uri')
+	key_encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri')
+	key_encoded_jsondata=$(printf '%s' "$key_jsondata" | jq -sRr '@uri')
+
+	key_resp=$(curl -s -X POST "$apiaddrv2" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		-d "text=${key_encoded_text}&token=${key_encoded_token}&jsondata=${key_encoded_jsondata}")
+
+	# giipfaw 디스패처가 "\n"(리터럴 백슬래시+n) 을 실제 개행으로 깨버리는 버그가 있어
+	# (2026-07-29 실측 확인) SP 가 base64 로 인코딩해 반환한다 — 여기서 디코드.
+	key_b64=$(printf '%s' "$key_resp" | jq -r '.data[0].gaKeyJsonB64 // .gaKeyJsonB64 // empty' 2>/dev/null)
+	if [ -z "$key_b64" ]; then
+		pm=$(printf '%s' "$key_resp" | jq -r '.data[0].Proc_MSG // .Proc_MSG // empty' 2>/dev/null)
+		log ERROR "GaKeyGet failed (property not registered with a key on ga-property page?): ${pm:-$key_resp}"
+		exit 1
+	fi
+
+	FETCHED_KEY_FILE=$(mktemp)
+	chmod 600 "$FETCHED_KEY_FILE"
+	printf '%s' "$key_b64" | base64 -d > "$FETCHED_KEY_FILE"
+	GaKeyFile="$FETCHED_KEY_FILE"
+fi
 
 client_email=$(jq -r '.client_email // empty' "$GaKeyFile")
 token_uri=$(jq -r '.token_uri // "https://oauth2.googleapis.com/token"' "$GaKeyFile")
@@ -65,14 +98,13 @@ claim_b64=$(printf '%s' "$claim_json" | base64url)
 signing_input="${header_b64}.${claim_b64}"
 
 privkey_file=$(mktemp)
-trap 'rm -f "$privkey_file"' EXIT
+cleanup() { [ -n "$FETCHED_KEY_FILE" ] && rm -f "$FETCHED_KEY_FILE"; rm -f "$privkey_file"; }
 jq -r '.private_key // empty' "$GaKeyFile" > "$privkey_file"
 if [ ! -s "$privkey_file" ]; then log ERROR "SA JSON missing private_key."; exit 1; fi
 chmod 600 "$privkey_file"
 
 sig_b64=$(printf '%s' "$signing_input" | openssl dgst -sha256 -sign "$privkey_file" | base64url)
 rm -f "$privkey_file"
-trap - EXIT
 
 jwt="${signing_input}.${sig_b64}"
 
