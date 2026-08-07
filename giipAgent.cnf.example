@@ -49,3 +49,16 @@ apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
 
 # API v1 (Legacy) - ASP Classic-based
 apiaddr="https://giipasp.azurewebsites.net"
+
+# ============================================================================
+# Azure SQL Monitor metrics (OPTIONAL, giip-issue #921)
+# ============================================================================
+# Only needed if this CSN has an Azure SQL (PaaS) database registered in
+# database-management (db_host like *.database.windows.net). Same keys/pattern
+# as the azure_cost collector (see giipdb/docs/30_Specs/AZURE_COST_COLLECTOR_SPECIFICATION.md).
+# If omitted, the agent falls back to an existing `az login` session if present,
+# otherwise Azure metrics are reported as azure_status="login_required" (not an error).
+# az_subscription="<subscription id>"
+# az_client_id="<service principal app id>"
+# az_client_secret="<service principal secret>"
+# az_tenant_id="<azure ad tenant id>"

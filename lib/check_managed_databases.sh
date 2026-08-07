@@ -11,6 +11,10 @@ source "${SCRIPT_DIR}/dpa_postgresql.sh"
 source "${SCRIPT_DIR}/net3d_db.sh"
 source "${SCRIPT_DIR}/http_health_check.sh"
 
+# Load performance diagnostics modules (giip-issue #921: Query Store + Azure Monitor)
+source "${SCRIPT_DIR}/db_perf_diag_mssql.sh"
+source "${SCRIPT_DIR}/azure_sql_metrics.sh"
+
 # Load DB check modules (provide perform_check_* functions)
 source "${SCRIPT_DIR}/db_check_mysql.sh"
 source "${SCRIPT_DIR}/db_check_mssql.sh"
