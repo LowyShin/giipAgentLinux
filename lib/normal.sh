@@ -19,9 +19,21 @@ execute_script() {
 	local script_file=$1
 	local script_type_file="${script_file}.type"
 	local script_type="sh"
-	
+	# giip-967: mslsn/mssn sidecar files written by queue_get() (lib/cqe.sh) so the
+	# script_execution KVS log can be traced back to which CQE schedule ran it
+	local script_mslsn_file="${script_file}.mslsn"
+	local script_mssn_file="${script_file}.mssn"
+	local script_mslsn=""
+	local script_mssn=""
+
 	if [ -f "$script_type_file" ]; then
 		script_type=$(cat "$script_type_file")
+	fi
+	if [ -f "$script_mslsn_file" ]; then
+		script_mslsn=$(cat "$script_mslsn_file")
+	fi
+	if [ -f "$script_mssn_file" ]; then
+		script_mssn=$(cat "$script_mssn_file")
 	fi
 
 	if [ ! -s "$script_file" ]; then
@@ -72,11 +84,18 @@ execute_script() {
 	local script_end_time=$(date +%s)
 	local script_duration=$((script_end_time - script_start_time))
 	
-	local exec_details="{\"script_type\":\"${script_type}\",\"exit_code\":${script_exit_code},\"execution_time_seconds\":${script_duration}}"
+	# giip-967: tag with mslsn/mssn (falls back to JSON null when queue_get() didn't
+	# provide them, e.g. force-run paths) so this log can be filtered per CQE schedule
+	local mslsn_json="null"
+	local mssn_json="null"
+	[ -n "$script_mslsn" ] && mslsn_json="$script_mslsn"
+	[ -n "$script_mssn" ] && mssn_json="$script_mssn"
+
+	local exec_details="{\"script_type\":\"${script_type}\",\"exit_code\":${script_exit_code},\"execution_time_seconds\":${script_duration},\"mslsn\":${mslsn_json},\"mssn\":${mssn_json}}"
 	save_execution_log "script_execution" "$exec_details"
-	
-	# Cleanup type file
-	rm -f "$script_type_file"
+
+	# Cleanup type/mslsn/mssn sidecar files
+	rm -f "$script_type_file" "$script_mslsn_file" "$script_mssn_file"
 
 	return $script_exit_code
 }

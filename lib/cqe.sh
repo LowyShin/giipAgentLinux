@@ -122,10 +122,17 @@ queue_get() {
 	if command -v jq >/dev/null 2>&1; then
 		local script=$(jq -r '.data[0].ms_body // .ms_body // empty' "$temp_response" 2>/dev/null)
 		local script_type=$(jq -r '.data[0].script_type // .script_type // "sh"' "$temp_response" 2>/dev/null)
+		# giip-967: capture mslsn/mssn too so execute_script() can tag the
+		# resulting KVS script_execution log with which CQE schedule this was
+		local resp_mslsn=$(jq -r '.data[0].mslsn // .mslsn // empty' "$temp_response" 2>/dev/null)
+		local resp_mssn=$(jq -r '.data[0].mssn // .mssn // empty' "$temp_response" 2>/dev/null)
 		if [ -n "$script" ] && [ "$script" != "null" ]; then
 			echo "$script" > "$output_file"
 			# Save script type to a sidecar file or return it
 			echo "$script_type" > "${output_file}.type"
+			# giip-967: sidecar files for mslsn/mssn (mirrors .type pattern above)
+			[ -n "$resp_mslsn" ] && [ "$resp_mslsn" != "null" ] && echo "$resp_mslsn" > "${output_file}.mslsn"
+			[ -n "$resp_mssn" ] && [ "$resp_mssn" != "null" ] && echo "$resp_mssn" > "${output_file}.mssn"
 			rm -f "$temp_response"
 			return 0
 		fi
