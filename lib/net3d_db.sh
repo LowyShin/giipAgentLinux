@@ -19,7 +19,13 @@ collect_net3d_mysql() {
         return 1
     fi
 
-    local query="SELECT id, host, user, db, command, time, info FROM information_schema.processlist WHERE command != 'Sleep' AND user NOT IN ('system user', 'event_scheduler')"
+    # giip-issue #1027 fix: previously filtered "command != 'Sleep'" which excludes
+    # every idle-but-connected client (the vast majority of pooled app connections),
+    # so the topology almost never showed a DB's actually-connected clients.
+    # Now we return ALL real client connections (Sleep included) so "connected
+    # clients" match the feature's intent, and exclude only this monitoring
+    # connection itself (CONNECTION_ID()) and internal/system accounts.
+    local query="SELECT id, host, user, db, command, time, info FROM information_schema.processlist WHERE id != CONNECTION_ID() AND user NOT IN ('system user', 'event_scheduler') AND host IS NOT NULL AND host != ''"
 
     # Execute query (TSV output)
     local result
@@ -56,12 +62,13 @@ for line in sys.stdin:
         except:
             start_time = None
 
+        command = parts[4]
         sessions.append({
             "client_net_address": client_ip,
             "login_name": parts[2],
-            "program_name": parts[4], # MySQL Command (Query, Execute, etc)
+            "program_name": command, # MySQL Command (Query, Execute, Sleep, etc)
             "db_name": parts[3],
-            "status": "active",
+            "status": "sleeping" if command == "Sleep" else "running",
             "cpu_load": int(parts[5]) if parts[5].isdigit() else 0,
             "last_sql": info_sql,
             "query_hash": qhash,
@@ -88,7 +95,11 @@ collect_net3d_postgresql() {
         return 1
     fi
 
-    local query="SELECT pid, client_addr, application_name, usename, datname, state, query, query_start::text, EXTRACT(EPOCH FROM (now() - query_start))::int FROM pg_stat_activity WHERE state = 'active' AND client_addr IS NOT NULL"
+    # giip-issue #1027 fix: previously filtered "state = 'active'" which excludes
+    # every idle-but-connected client (idle/idle-in-transaction), so genuinely
+    # connected clients almost never showed up. Now include all real client
+    # connections and exclude only this monitoring backend itself.
+    local query="SELECT pid, client_addr, application_name, usename, datname, state, query, query_start::text, EXTRACT(EPOCH FROM (now() - query_start))::int FROM pg_stat_activity WHERE client_addr IS NOT NULL AND pid != pg_backend_pid()"
 
     # Execute query (CSV/Aligned? -tA is best for pipe)
     # -t: tuples only (no header/footer)
@@ -148,11 +159,26 @@ collect_net3d_mssql() {
         return 1
     fi
 
-    # Enhanced query to capture Running Queries OR Open Transactions
+    # giip-issue #1027 fix (root cause, verified live against giipdb-server.database.windows.net):
+    # 1) "s.client_net_address" does NOT exist on sys.dm_exec_sessions (that column only
+    #    exists on sys.dm_exec_connections). Every run of this query has always failed with
+    #    SQL error 207 "Invalid column name 'client_net_address'", so sqlcmd returned nothing
+    #    and this function always fell through to echo "[]" -> kvs_put was skipped -> tKVS
+    #    NEVER received a single kType='database'/kFactor='db_connections' row, ever
+    #    (confirmed empirically: 0 rows in tKVS history for that kType/kFactor pair, while
+    #    sibling db_perf_diag/status_log writes via the exact same kvs_put path succeeded).
+    #    Fix: JOIN sys.dm_exec_connections and read client_net_address from there.
+    # 2) The WHERE clause only kept sessions with status='running' OR an open transaction —
+    #    a razor-thin snapshot window that misses ordinary idle-but-connected pooled clients,
+    #    which is what "이 DB에 연결된 클라이언트" (clients connected to this DB) actually means.
+    #    Fix: return every real user connection (idle included), and use
+    #    sys.dm_exec_connections.most_recent_sql_handle as a fallback so idle sessions still
+    #    show their last executed query text, and exclude this monitoring session itself plus
+    #    connections with no real client address (e.g. "<named pipe>" service connections).
     # Columns: client_net_address, program_name, login_name, status, cpu_time, sql_text, is_open_tran, duration, tran_state
-    local query="SET NOCOUNT ON; 
-    SELECT 
-        ISNULL(s.client_net_address, '') AS client_net_address,
+    local query="SET NOCOUNT ON;
+    SELECT
+        ISNULL(c.client_net_address, '') AS client_net_address,
         ISNULL(s.program_name, '') AS program_name,
         ISNULL(s.login_name, '') AS login_name,
         s.status,
@@ -162,12 +188,13 @@ collect_net3d_mssql() {
         ISNULL(DATEDIFF(MINUTE, trans.transaction_begin_time, GETDATE()), 0) as tran_duration,
         ISNULL(trans.transaction_state_desc, '') as tran_state,
         CONVERT(NVARCHAR(64), r.query_hash, 1) as query_hash,
-        CONVERT(NVARCHAR(130), r.sql_handle, 1) as sql_handle,
+        CONVERT(NVARCHAR(130), COALESCE(r.sql_handle, c.most_recent_sql_handle), 1) as sql_handle,
         ISNULL(CONVERT(NVARCHAR(30), r.start_time, 120), '') as query_start_time,
         s.session_id as query_id
     FROM sys.dm_exec_sessions s
+    LEFT JOIN sys.dm_exec_connections c ON s.session_id = c.session_id
     LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id
-    OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t
+    OUTER APPLY sys.dm_exec_sql_text(COALESCE(r.sql_handle, c.most_recent_sql_handle)) t
     LEFT JOIN (
         SELECT
             st.session_id,
@@ -186,9 +213,10 @@ collect_net3d_mssql() {
         FROM sys.dm_tran_active_transactions t
         INNER JOIN sys.dm_tran_session_transactions st ON t.transaction_id = st.transaction_id
     ) trans ON s.session_id = trans.session_id
-    WHERE 
-        s.is_user_process = 1 
-        AND (s.status = 'running' OR trans.session_id IS NOT NULL)"
+    WHERE
+        s.is_user_process = 1
+        AND s.session_id <> @@SPID
+        AND ISNULL(c.client_net_address, '') NOT IN ('', '<named pipe>')"
     
     # Execute with sqlcmd
     # -W: remove trailing spaces
