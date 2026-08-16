@@ -51,6 +51,33 @@ apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
 apiaddr="https://giipasp.azurewebsites.net"
 
 # ============================================================================
+# Agent Command Management (OPTIONAL, giip #1172 — slack-bot 에이전트 관리 Phase 1)
+# ============================================================================
+# admin/giip-agent-command-poll.sh 가 주기적으로(cron */5분) 이 값을 읽어
+# slack-bot -> giipfaw 로 발급된 restart/stop/start/status 명령을 폴링/실행한다.
+# 'ak'가 비어있으면 스크립트는 아무 것도 하지 않고 조용히 종료한다(기존 설치를
+# 깨지 않기 위함) — 즉 이 섹션 전체를 생략해도 안전하다.
+#
+# ⚠️ 'ak'는 위의 'sk'(서버별 secret key)와 다른 값이다. 'ak'는 corp user의
+#    access token(uAccesstoken, tCorpUser 테이블)이다 — giipv3 로그인 세션 토큰과
+#    동일한 종류. 발급/조회 방법은 giipdb/docs/30_Specs/ApiArchitecture/
+#    01_TOKEN_AND_ENV_GUIDE.md 참고. 이 저장소에는 자동 발급 경로가 없으므로
+#    설치 시 관리자가 수동으로 값을 넣어줘야 한다.
+# ak="<corp user access token (uAccesstoken), NOT sk>"
+
+# (선택) tAgentRegistry.agentName 으로 쓸 이름. 기본값: giipAgentLinux-$(hostname)
+# agent_name="giipAgentLinux-01"
+
+# (선택) agent-register/agent-heartbeat/agent-command-poll/agent-command-complete
+# Function들의 base URL. 기본값: apiaddrv2에서 마지막 path segment(giipApiSk2)를
+# 뗀 값 (예: https://giipfaw.azurewebsites.net/api)
+# agentapibase="https://giipfaw.azurewebsites.net/api"
+
+# (선택) 위 Function들이 authLevel=function 이라 Azure Functions key가 필요한
+# 경우에만 설정 (x-functions-key 헤더 + ?code= 쿼리 둘 다 시도됨)
+# agentfunctionkey="<azure functions key>"
+
+# ============================================================================
 # Azure SQL Monitor metrics (OPTIONAL, giip-issue #921)
 # ============================================================================
 # Only needed if this CSN has an Azure SQL (PaaS) database registered in
