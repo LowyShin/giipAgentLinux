@@ -21,13 +21,13 @@ if [ $? -ne 0 ]; then
 fi
 
 # Check existing GIIP installations
-cntgiip=`crontab -l 2>/dev/null | grep "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|git-auto-sync.sh" | wc -l`
+cntgiip=`crontab -l 2>/dev/null | grep "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|git-auto-sync.sh\|giip-agent-command-poll.sh" | wc -l`
 
 if [ $cntgiip -gt 0 ]; then
     echo "⚠ Existing GIIP Agent installation detected!"
     echo ""
     echo "Current GIIP cron entries:"
-    crontab -l | grep "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|git-auto-sync.sh"
+    crontab -l | grep "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|git-auto-sync.sh\|giip-agent-command-poll.sh"
     echo ""
     read -p "Do you want to REMOVE old entries and reinstall? (y/N): " -n 1 -r
     echo ""
@@ -35,7 +35,7 @@ if [ $cntgiip -gt 0 ]; then
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         echo "Removing old GIIP cron entries..."
         # Remove all GIIP related entries
-        crontab -l | grep -v "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|git-auto-sync.sh\|# 160701 Lowy, for giip" | crontab -
+        crontab -l | grep -v "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|git-auto-sync.sh\|giip-agent-command-poll.sh\|# 160701 Lowy, for giip" | crontab -
         echo "Old entries removed."
         echo ""
     else
@@ -52,10 +52,14 @@ echo "Installing GIIP Agent cron entries..."
 (crontab -l; echo "59 23 * * * cd ${giippath}; bash --login -c 'bash ${giippath}/admin/giiprecycle.sh'") | crontab -
 (crontab -l; echo "*/5 * * * * cd ${giippath}; bash --login -c 'bash ${giippath}/scripts/giip-auto-discover.sh'") | crontab -
 (crontab -l; echo "*/5 * * * * cd ${giippath}; bash --login -c 'bash ${giippath}/git-auto-sync.sh'") | crontab -
+# giip #1172: slack-bot 에이전트 관리(restart/stop/start/status) 명령 폴링 실행 경로.
+# 'ak' 미설정이면 스크립트가 아무 것도 하지 않고 조용히 종료하므로(기존 설치를 깨지
+# 않음) 항상 등록해도 안전하다. giipAgent.cnf.example의 ak/agent_name 주석 참고.
+(crontab -l; echo "*/5 * * * * cd ${giippath}; bash --login -c 'bash ${giippath}/admin/giip-agent-command-poll.sh'") | crontab -
 
 echo ""
 echo "✓ GIIP Agent cron entries installed:"
-crontab -l | grep "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|git-auto-sync.sh"
+crontab -l | grep "giipAgent.sh\|giipAgent3.sh\|giip-auto-discover.sh\|giiprecycle.sh\|collect-server-diagnostics.sh\|git-auto-sync.sh\|giip-agent-command-poll.sh"
 echo ""
 
 # check and install dos2unix
@@ -100,10 +104,12 @@ echo "  • GIIP Agent (runs every 1 minute)"
 echo "  • Auto-Discovery (runs every 5 minutes)"
 echo "  • Daily recycle (runs at 23:59)"
 echo "  • Git Auto-Sync (runs every 5 minutes, pull-only, logs to ~/logs/)"
+echo "  • Agent command poll (runs every 5 minutes, no-op until 'ak' set in giipAgent.cnf)"
 echo ""
 echo "Log files:"
 echo "  • /var/log/giipAgent_YYYYMMDD.log"
 echo "  • /var/log/giip-auto-discover.log"
+echo "  • /var/log/giip-agent-command-poll.log"
 echo ""
 echo "To verify installation:"
 echo "  sudo crontab -l   # entries are installed under root's crontab (apt needs sudo)"
