@@ -61,17 +61,26 @@ queue_get() {
 	fi
 	
 	# Call CQEQueueGet API with URL-encoded parameters
+	# giip #1209: lssn 71174(cctrank03) observed hanging with no log output after the
+	# DEBUG line above, for multiple consecutive cron cycles (cron.log, 07:45~09:45).
+	# This curl call previously had no timeout, so an unresponsive/slow API could make
+	# it block indefinitely, matching that symptom exactly. --connect-timeout/--max-time
+	# values match the existing convention in lib/mssql.sh.
 	curl -s -X POST "$api_url" \
 		-d "text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
-		--insecure -o "$temp_response" 2>&1
-	
+		--insecure --connect-timeout 10 --max-time 30 -o "$temp_response" 2>&1
+
 	local curl_exit_code=$?
-	
+
 	# Check if response file was created and has content
 	if [ ! -s "$temp_response" ]; then
 		rm -f "$temp_response"
-		echo "[queue_get] ❌ API call failed or no response (curl exit code: $curl_exit_code)" >&2
+		if [ "$curl_exit_code" -eq 28 ]; then
+			echo "[queue_get] ❌ API call timed out (curl exit code: 28, connect-timeout=10s/max-time=30s)" >&2
+		else
+			echo "[queue_get] ❌ API call failed or no response (curl exit code: $curl_exit_code)" >&2
+		fi
 		
 		# Log to ErrorLogs DB
 		if command -v log_error >/dev/null 2>&1; then
