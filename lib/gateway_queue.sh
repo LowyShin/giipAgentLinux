@@ -8,12 +8,18 @@
 get_script_by_mssn() {
 	local mssn=$1
 	local output_file=$2
-	
-	local api_url="${apiaddrv2}"
-	
+
+	# giip #1215: giipApiSk2(성역)는 jsondata를 필드치환에 쓴 뒤에도 무조건 마지막 위치
+	# 인자로 한번 더 자동첨부하는 버그가 있다. pApiCQERepoScriptbySk(@sk, @mssn)처럼
+	# 고정 2-파라미터 SP에서는 이 자동첨부값이 "too many arguments"로 매번 실패한다
+	# (실측 확인). 성역(run.ps1) 수정 대신 버그 없는 giipApiSk4(파라미터 진짜 바인딩)로
+	# 이 호출만 전환한다 — apiaddrv2(giipApiSk2, 다른 커맨드들이 계속 쓰는 전역 설정)는
+	# 건드리지 않고, 이 함수 안에서만 giipApiSk2 -> giipApiSk4로 URL을 치환한다.
+	local api_url="${apiaddrv2/giipApiSk2/giipApiSk4}"
+
 	local text="CQERepoScript mssn"
 	local jsondata="{\"mssn\":${mssn}}"
-	
+
 	wget -O "$output_file" \
 		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
