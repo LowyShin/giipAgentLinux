@@ -40,6 +40,19 @@ else
     exit 1
 fi
 
+# Load Server Info module (collect_server_ips)
+# giip #1551: net3d_mode.sh는 giipAgent3.sh가 `bash net3d_mode.sh ...`로 별도
+# 서브프로세스 실행하므로 부모 프로세스(giipAgent3.sh)가 로드해둔 함수가 여기로
+# 전달되지 않는다. lib/net3d.sh 안에도 server_info.sh를 자체적으로 재source하는
+# 방어 코드가 있지만(SCRIPT_DIR 재계산), net3d_mode.sh 자신도 명시적으로 로드해
+# collect_server_ips 가용성을 이 스크립트 레벨에서 보장한다.
+if [ -f "${LIB_DIR}/server_info.sh" ]; then
+    . "${LIB_DIR}/server_info.sh"
+else
+    log_message "ERROR" "server_info.sh not found"
+    exit 1
+fi
+
 # Load Net3D module
 if [ -f "${LIB_DIR}/net3d.sh" ]; then
     . "${LIB_DIR}/net3d.sh"
