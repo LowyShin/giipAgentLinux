@@ -9,6 +9,14 @@
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
+# giip #1551 (cctrank03/lssn 71174 실측): cron/CQE로 실행되는 giipAgent3.sh 프로세스의
+# PATH에는 /usr/sbin, /sbin이 빠져있어(대화형 로그인 셸에만 포함되는 경우가 많음) `ip`/
+# `ifconfig`가 command -v로 전혀 안 잡히고 collect_server_ips()가 매번
+# "No network tools available" 에러로 조용히 실패했다(2026-08-08 수동 테스트 3건 이후
+# 무한 스킵, tKVS server_ips factor 실측으로 확인). ip/ifconfig 바이너리가 있는 표준
+# 경로를 PATH 앞에 추가해 방어한다.
+export PATH="/usr/sbin:/sbin:/usr/local/sbin:${PATH}"
+
 # ============================================================================
 # Dependencies Check
 # ============================================================================
