@@ -64,7 +64,11 @@ log_message() {
 	fi
 	
 	# Also print to console for important messages
-	if [ "$level" = "ERROR" ] || [ "$level" = "WARNING" ]; then
+	# giip #1551: 코드베이스 전체가 "WARN"만 쓰고 "WARNING"은 한 번도 안 쓰는데(실측:
+	# grep 31건 vs 0건) 이 조건이 "WARNING"만 걸러서 WARN 레벨 로그가 콘솔/stderr에
+	# 전혀 안 찍히고 있었다 — cctrank03 net3d_mode.sh 진단 시 이 때문에 실제 실패 원인
+	# (server_info.sh의 WARN 로그)이 안 보여 진단이 어려웠다.
+	if [ "$level" = "ERROR" ] || [ "$level" = "WARN" ] || [ "$level" = "WARNING" ]; then
 		echo "[$timestamp] [$level] $message" >&2
 	fi
 }
