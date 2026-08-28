@@ -220,6 +220,60 @@ QCOUNT_FINAL=$(find "$QSUB" -type f -name '*.json.gz' 2>/dev/null | wc -l | tr -
 assert_eq "flush_retry_queue drains the queue once API is healthy again" "0" "$QCOUNT_FINAL"
 
 echo ""
+echo "=== 6. bootstrap_scheduler_agent (giip #1638) ==="
+# curl을 shell function으로 override해서 실제 네트워크 호출 없이 검증한다
+# (bootstrap_scheduler_agent는 api_post가 아니라 curl을 직접 호출하므로 api_post
+# mock과는 별도로 mock 필요 - kvs.sh/kvs_standard.sh와 동일한 apiaddrv2 직접 호출 계약).
+apiaddrv2="https://example.invalid/api/giipApiSk2"
+sk="TEST_SK_DUMMY"
+MOCK_CURL_RESPONSE='{"data":[{"RstVal":200,"RstMsg":"Agent registered"}]}'
+MOCK_CURL_ARGS_FILE="${SANDBOX}/curl_last_args.txt"
+# NOTE: bootstrap_scheduler_agent captures curl's stdout via command substitution
+# ($(...)), which forks a subshell - a plain variable assignment inside this mock
+# would not survive back to the parent shell, so args are recorded to a file instead.
+curl() {
+    printf '%s' "$*" > "$MOCK_CURL_ARGS_FILE"
+    printf '%s' "$MOCK_CURL_RESPONSE"
+}
+get_mock_curl_args() { cat "$MOCK_CURL_ARGS_FILE" 2>/dev/null; }
+
+# -- success path (RstVal=200), agent_name unset -> displayName fallback -----
+unset agent_name
+: > "$LOGFILE"
+BOOTSTRAP_RC=0
+bootstrap_scheduler_agent "test-agent-key-1" || BOOTSTRAP_RC=$?
+assert_eq "bootstrap_scheduler_agent returns 0 when RstVal=200" "0" "$BOOTSTRAP_RC"
+assert_contains "curl called with SchedulerAgentUpsert text param" "$(get_mock_curl_args)" "text=SchedulerAgentUpsert agentKey displayName"
+assert_contains "curl called with token=sk" "$(get_mock_curl_args)" "token=${sk}"
+assert_contains "displayName falls back to giipAgentLinux-\$(hostname) when agent_name unset" "$(get_mock_curl_args)" "\"displayName\": \"giipAgentLinux-$(hostname)\""
+assert_contains "success path logs OK" "$(cat "$LOGFILE")" "OK: bootstrap_scheduler_agent OK agentKey=test-agent-key-1"
+
+# -- displayName honors agent_name when set -----------------------------------
+agent_name="custom-display-name"
+: > "$LOGFILE"
+bootstrap_scheduler_agent "test-agent-key-2" >/dev/null
+assert_contains "displayName uses agent_name when set" "$(get_mock_curl_args)" "\"displayName\": \"custom-display-name\""
+unset agent_name
+
+# -- failure path (RstVal != 200) ---------------------------------------------
+MOCK_CURL_RESPONSE='{"data":[{"RstVal":401,"RstMsg":"Unauthorized"}]}'
+: > "$LOGFILE"
+BOOTSTRAP_RC=0
+bootstrap_scheduler_agent "test-agent-key-3" || BOOTSTRAP_RC=$?
+assert_eq "bootstrap_scheduler_agent returns 1 when RstVal != 200" "1" "$BOOTSTRAP_RC"
+assert_contains "failure path logs WARN" "$(cat "$LOGFILE")" "WARN: bootstrap_scheduler_agent failed agentKey=test-agent-key-3"
+
+# -- failure path (network/curl error, non-JSON response) ---------------------
+MOCK_CURL_RESPONSE='curl: (7) Failed to connect to example.invalid'
+: > "$LOGFILE"
+BOOTSTRAP_RC=0
+bootstrap_scheduler_agent "test-agent-key-4" || BOOTSTRAP_RC=$?
+assert_eq "bootstrap_scheduler_agent returns 1 on network error response" "1" "$BOOTSTRAP_RC"
+assert_contains "network error path logs WARN" "$(cat "$LOGFILE")" "WARN: bootstrap_scheduler_agent failed agentKey=test-agent-key-4"
+
+unset -f curl
+
+echo ""
 echo "================================================================"
 echo "Results: PASS=$PASS FAIL=$FAIL"
 echo "================================================================"
