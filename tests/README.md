@@ -16,6 +16,11 @@
 - `test-agent-refactored.sh` - 리팩토링된 Agent 테스트
 - `test-giipagent-diagnosis.sh` - Agent 진단 테스트
 
+### Log Collector 테스트 (giip #1635)
+- `test-log-collector-offset-rotation.sh` - lib/log_collector.sh 오프셋 추적, 회전
+  감지(inode 변경/truncate), 비밀 마스킹, 재시도 큐(용량 제한+drop-oldest) 단위 테스트.
+  네트워크 호출은 로컬에서 mock 처리(api_post override) - 실 서버에 붙지 않는다.
+
 ### Gateway 테스트
 - `test-gateway.sh` - Gateway 기본 테스트
 - `test-gateway-discovery.sh` - Gateway 발견 테스트

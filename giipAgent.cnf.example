@@ -78,6 +78,47 @@ apiaddr="https://giipasp.azurewebsites.net"
 # agentfunctionkey="<azure functions key>"
 
 # ============================================================================
+# Log Collector (OPTIONAL, giip #1635 — giip #1614 3단계: Linux FDE Box 로그 수집)
+# ============================================================================
+# lib/log_collector.sh 가 주기적으로(cron 매 1분, 내부에서 최대
+# logcollector_run_duration_sec초 루프) 로그 파일을 tail하여 giipfaw의
+# agent-log-register/agent-log-ingest 로 전송한다. 'logcollector_enabled'이
+# 1/true/yes 가 아니면 스크립트는 아무 것도 하지 않고 조용히 종료한다(기존
+# 설치를 깨지 않기 위함) — 즉 이 섹션 전체를 생략해도 안전하다.
+#
+# 인증은 위의 'sk'(서버별 secret key)를 그대로 재사용한다(x-api-key 헤더,
+# agent-log-register/ingest는 SK 기반 SP를 호출하므로 'ak'가 아니다).
+#
+# logcollector_enabled=1
+
+# (선택) 콤마 구분 glob 목록. 기본값은 giipAgent.sh 자신의 운영 로그 하나:
+#   "<repo>/log/giipAgent_*.log"
+# opt-in으로 다른 로그도 추가하려면 아래처럼(예: Claude Code / Codex 세션 로그):
+# logcollector_globs="~/giipAgentLinux/log/giipAgent_*.log,~/.claude/projects/*/*.jsonl,~/.codex/sessions/**/*.jsonl"
+
+# (선택) 파일 경로 패턴 -> streamType 명시적 매핑("glob:streamType,glob:streamType,...").
+# 매칭 안 되는 파일은 파일명 기반 휴리스틱(agent_operational/claude_jsonl/codex_jsonl/
+# generic_log)으로 자동 판단한다.
+# logcollector_streamtype_map="~/.claude/projects/*/*.jsonl:claude_jsonl,~/.codex/sessions/**/*.jsonl:codex_jsonl"
+
+# (선택) giipdb.tSchedulerAgent류 Box 식별에 쓸 agentKey. 비어있으면
+# hostname + /etc/machine-id 기반으로 자동 생성해 INSTALL_DIR/
+# .giip_logcollector_agentkey 에 캐시한다(재부팅/재실행해도 동일 값 유지).
+# logcollector_agentkey="<원하면 직접 지정>"
+
+# (선택) 배치 전송 튜닝값. 기본: 2초 또는 128KB 중 먼저 도달하는 쪽에서 전송.
+# logcollector_batch_interval_sec="2"
+# logcollector_batch_max_bytes="131072"
+
+# (선택) 1회 cron tick 내에서 루프를 지속할 시간(초). 기본 50(다음 분 tick 전에 종료).
+# logcollector_run_duration_sec="50"
+
+# (선택) 전송 실패 시 로컬 재시도 큐 용량 제한(넘으면 가장 오래된 배치부터 드롭,
+# 드롭 사실은 로그에 남는다). 기본: 최대 500개 배치 / 20MB.
+# logcollector_queue_max_batches="500"
+# logcollector_queue_max_mb="20"
+
+# ============================================================================
 # Azure SQL Monitor metrics (OPTIONAL, giip-issue #921)
 # ============================================================================
 # Only needed if this CSN has an Azure SQL (PaaS) database registered in
