@@ -268,6 +268,48 @@ api_post() {
         2>&1
 }
 
+# tSchedulerAgent 부트스트랩 (giip #1638)
+#
+# 배경: agent-log-register / agent-log-ingest Function은 호출 전에 csn+agentKey로
+# tSchedulerAgent 행이 이미 존재해야 한다 - 없으면 "Agent not found - register via
+# pApiSchedulerAgentUpsertBySK first" 404가 난다. giipAgentWin 쪽 LogCollector.ps1이
+# giip #1637(PR #33)로 먼저 발견/수정한 것과 동일한 갭이며, 이 함수는 그 대칭
+# 구현이다. SP(pApiSchedulerAgentUpsertBySK, giip #1634로 giipdb에 이미 배포됨)는
+# csn+agentKey 기준 idempotent upsert이므로, 이번 tick의 부트스트랩이 실패해도
+# 다음 tick에서 안전하게 재시도된다 - 그래서 실패를 치명적으로 취급하지 않고
+# WARN만 남긴 뒤 계속 진행한다.
+#
+# NOT NULL 파라미터(agentKey, displayName)만 넘긴다: giipApiSk2 디스패처(apiaddrv2)는
+# text에 나열한 파라미터 이름 순서대로 positional 처리하기 때문에 나머지 옵션
+# 파라미터(hostIdentifier 등)에 NULL 리터럴을 안전하게 끼워 넣을 방법이 없다 -
+# giipAgentWin의 Invoke-SchedulerAgentBootstrap이 두 개만 넘기는 것과 같은 이유.
+#
+# 호출 규약은 lib/kvs_standard.sh의 kvs_send()/lib/kvs.sh의 save_execution_log()와
+# 동일: apiaddrv2에 form-encoded text(파라미터 이름만)/token(=sk)/jsondata(실제 값)를
+# POST하고, 응답은 .data[0].RstVal == 200 으로 판정한다. (agent-log-register/ingest가
+# 쓰는 AGENT_API_BASE + x-api-key 방식과는 다른, apiaddrv2 직접 호출 방식이다.)
+bootstrap_scheduler_agent() {
+    local agent_key="$1"
+    local display_name="${agent_name:-giipAgentLinux-$(hostname)}"
+    local jsondata resp
+
+    jsondata="$(jq -n --arg agentKey "$agent_key" --arg displayName "$display_name" \
+        '{agentKey:$agentKey, displayName:$displayName}')"
+
+    resp="$(curl -sS --max-time 15 --connect-timeout 5 -X POST "${apiaddrv2}" \
+        --data-urlencode "text=SchedulerAgentUpsert agentKey displayName" \
+        --data-urlencode "token=${sk}" \
+        --data-urlencode "jsondata=${jsondata}" \
+        2>&1)"
+
+    if echo "$resp" | jq -e '.data[0].RstVal == 200' >/dev/null 2>&1; then
+        log_ok "bootstrap_scheduler_agent OK agentKey=$agent_key"
+        return 0
+    fi
+    log_warn "bootstrap_scheduler_agent failed agentKey=$agent_key resp=$resp"
+    return 1
+}
+
 register_stream() {
     local stream_key="$1" stream_type="$2" inode="$3" rotation_gen="$4"
     local body resp
@@ -633,6 +675,10 @@ main() {
         AGENT_API_BASE="$(dirname "$apiaddrv2")"
     fi
     AGENT_KEY="$(resolve_agent_key)"
+
+    # tSchedulerAgent 부트스트랩 (giip #1638) - 루프 시작 전 1회만 (loop iteration마다 아님)
+    bootstrap_scheduler_agent "$AGENT_KEY" || \
+        log_warn "bootstrap_scheduler_agent unsuccessful this pass - stream register/ingest will likely 404 until this succeeds (SP is idempotent; will retry next tick). continuing this pass anyway."
 
     # --- self-count guard: 이전 실행이 아직 도는 중이면 이번 tick은 skip -----
     local self_count
