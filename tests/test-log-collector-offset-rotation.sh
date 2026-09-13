@@ -239,6 +239,7 @@ get_mock_curl_args() { cat "$MOCK_CURL_ARGS_FILE" 2>/dev/null; }
 
 # -- success path (RstVal=200), agent_name unset -> displayName fallback -----
 unset agent_name
+lssn="71197"
 : > "$LOGFILE"
 BOOTSTRAP_RC=0
 bootstrap_scheduler_agent "test-agent-key-1" || BOOTSTRAP_RC=$?
@@ -247,6 +248,23 @@ assert_contains "curl called with SchedulerAgentUpsert text param" "$(get_mock_c
 assert_contains "curl called with token=sk" "$(get_mock_curl_args)" "token=${sk}"
 assert_contains "displayName falls back to giipAgentLinux-\$(hostname) when agent_name unset" "$(get_mock_curl_args)" "\"displayName\": \"giipAgentLinux-$(hostname)\""
 assert_contains "success path logs OK" "$(cat "$LOGFILE")" "OK: bootstrap_scheduler_agent OK agentKey=test-agent-key-1"
+
+# -- giip #2390: lssn/osType/agentType (and the intermediate positional
+#    params they require: hostIdentifier/windowsTaskName/projectName/
+#    scheduleDesc/isActive) are sent so schedulerrunhistory?lssn=<N> works --
+assert_contains "text param includes hostIdentifier..agentType in SP-declared order" "$(get_mock_curl_args)" "text=SchedulerAgentUpsert agentKey displayName hostIdentifier windowsTaskName projectName scheduleDesc isActive lssn osType agentType"
+assert_contains "jsondata carries hostIdentifier=hostname" "$(get_mock_curl_args)" "\"hostIdentifier\": \"$(hostname)\""
+assert_contains "jsondata carries lssn from config" "$(get_mock_curl_args)" "\"lssn\": 71197"
+assert_contains "jsondata carries osType=Linux" "$(get_mock_curl_args)" "\"osType\": \"Linux\""
+assert_contains "jsondata carries agentType=giipAgentLinux" "$(get_mock_curl_args)" "\"agentType\": \"giipAgentLinux\""
+assert_contains "jsondata carries isActive=1" "$(get_mock_curl_args)" "\"isActive\": 1"
+
+# -- lssn unset in config -> defaults to 0 (never blocks bootstrap) -----------
+unset lssn
+: > "$LOGFILE"
+bootstrap_scheduler_agent "test-agent-key-1b" >/dev/null
+assert_contains "jsondata defaults lssn to 0 when unset" "$(get_mock_curl_args)" "\"lssn\": 0"
+lssn="71197"
 
 # -- displayName honors agent_name when set -----------------------------------
 agent_name="custom-display-name"
