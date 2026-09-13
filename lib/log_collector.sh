@@ -268,7 +268,7 @@ api_post() {
         2>&1
 }
 
-# tSchedulerAgent 부트스트랩 (giip #1638)
+# tSchedulerAgent 부트스트랩 (giip #1638, lssn/osType/agentType 보강: giip #2390)
 #
 # 배경: agent-log-register / agent-log-ingest Function은 호출 전에 csn+agentKey로
 # tSchedulerAgent 행이 이미 존재해야 한다 - 없으면 "Agent not found - register via
@@ -279,10 +279,18 @@ api_post() {
 # 다음 tick에서 안전하게 재시도된다 - 그래서 실패를 치명적으로 취급하지 않고
 # WARN만 남긴 뒤 계속 진행한다.
 #
-# NOT NULL 파라미터(agentKey, displayName)만 넘긴다: giipApiSk2 디스패처(apiaddrv2)는
-# text에 나열한 파라미터 이름 순서대로 positional 처리하기 때문에 나머지 옵션
-# 파라미터(hostIdentifier 등)에 NULL 리터럴을 안전하게 끼워 넣을 방법이 없다 -
-# giipAgentWin의 Invoke-SchedulerAgentBootstrap이 두 개만 넘기는 것과 같은 이유.
+# giipApiSk2 디스패처(apiaddrv2)는 text에 나열한 파라미터 이름 순서대로 positional
+# 처리한다(중간 파라미터를 건너뛸 수 없고, SQL NULL 리터럴을 안전하게 끼워 넣을
+# 방법도 없다 - 빈 토큰이 문자열 "NULL"로 치환되어 타입 변환 에러를 유발할 수 있음).
+# 애초에(giip #1638) agentKey/displayName 두 개만 넘긴 것도 이 제약 때문이다.
+#
+# giip #2390(csn=47 스케줄러 실행 이력 페이지)에서 lssn/osType/agentType이 필요해져,
+# SP 선언 순서(@agentKey, @displayName, @hostIdentifier, @windowsTaskName,
+# @projectName, @scheduleDesc, @isActive, @lssn, @osType, @agentType, ...)를 그대로
+# 따라 hostIdentifier~isActive까지도 함께 채운다(중간을 건너뛸 수 없으므로). 다섯
+# 값 모두 매 tick 동일한 값을 보낸다(hostIdentifier=hostname은 실제 유효한 값,
+# windowsTaskName/projectName/scheduleDesc는 Linux Box에는 해당 없어 빈 문자열,
+# isActive=1은 SP 기본값과 동일) - 그래서 덮어써도 정보 손실이 없다.
 #
 # 호출 규약은 lib/kvs_standard.sh의 kvs_send()/lib/kvs.sh의 save_execution_log()와
 # 동일: apiaddrv2에 form-encoded text(파라미터 이름만)/token(=sk)/jsondata(실제 값)를
@@ -291,19 +299,33 @@ api_post() {
 bootstrap_scheduler_agent() {
     local agent_key="$1"
     local display_name="${agent_name:-giipAgentLinux-$(hostname)}"
-    local jsondata resp
+    local host_identifier jsondata resp
 
-    jsondata="$(jq -n --arg agentKey "$agent_key" --arg displayName "$display_name" \
-        '{agentKey:$agentKey, displayName:$displayName}')"
+    host_identifier="$(hostname 2>/dev/null || echo unknown-host)"
+
+    jsondata="$(jq -n \
+        --arg agentKey "$agent_key" \
+        --arg displayName "$display_name" \
+        --arg hostIdentifier "$host_identifier" \
+        --arg windowsTaskName "" \
+        --arg projectName "" \
+        --arg scheduleDesc "" \
+        --argjson isActive 1 \
+        --argjson lssn "${lssn:-0}" \
+        --arg osType "Linux" \
+        --arg agentType "giipAgentLinux" \
+        '{agentKey:$agentKey, displayName:$displayName, hostIdentifier:$hostIdentifier,
+          windowsTaskName:$windowsTaskName, projectName:$projectName, scheduleDesc:$scheduleDesc,
+          isActive:$isActive, lssn:$lssn, osType:$osType, agentType:$agentType}')"
 
     resp="$(curl -sS --max-time 15 --connect-timeout 5 -X POST "${apiaddrv2}" \
-        --data-urlencode "text=SchedulerAgentUpsert agentKey displayName" \
+        --data-urlencode "text=SchedulerAgentUpsert agentKey displayName hostIdentifier windowsTaskName projectName scheduleDesc isActive lssn osType agentType" \
         --data-urlencode "token=${sk}" \
         --data-urlencode "jsondata=${jsondata}" \
         2>&1)"
 
     if echo "$resp" | jq -e '.data[0].RstVal == 200' >/dev/null 2>&1; then
-        log_ok "bootstrap_scheduler_agent OK agentKey=$agent_key"
+        log_ok "bootstrap_scheduler_agent OK agentKey=$agent_key lssn=${lssn:-0}"
         return 0
     fi
     log_warn "bootstrap_scheduler_agent failed agentKey=$agent_key resp=$resp"

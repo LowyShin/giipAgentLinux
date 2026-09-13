@@ -165,6 +165,22 @@ fi
 check_jq
 
 # ============================================================================
+# Scheduler Run History tracking (giip #2390, csn=47)
+# ============================================================================
+# tSchedulerAgentRun에 이번 크론 실행의 시작/종료를 기록한다(schedulerrunhistory
+# 페이지, lssn 기준 조회). API 호출 실패가 본 실행에 영향을 주지 않도록 완전히
+# 실패관용적이다(lib/scheduler_agent_run.sh 참고) - 파일이 없거나 API가 실패해도
+# 아래 로직은 계속 진행된다. giipAgent3.sh의 기존 핵심 실행 흐름(수집/보고)은
+# 건드리지 않는다.
+if [ -f "${LIB_DIR}/scheduler_agent_run.sh" ]; then
+	. "${LIB_DIR}/scheduler_agent_run.sh"
+	sar_run_start "scheduled"
+	trap 'sar_run_end_trap' EXIT
+else
+	log_message "WARN" "scheduler_agent_run.sh not found at ${LIB_DIR}, skipping scheduler run history tracking"
+fi
+
+# ============================================================================
 # Early Cleanup: Remove old GIIP temporary files from previous executions
 # ============================================================================
 
