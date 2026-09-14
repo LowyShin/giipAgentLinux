@@ -279,56 +279,41 @@ api_post() {
 # 다음 tick에서 안전하게 재시도된다 - 그래서 실패를 치명적으로 취급하지 않고
 # WARN만 남긴 뒤 계속 진행한다.
 #
-# giipApiSk2 디스패처(apiaddrv2)는 text에 나열한 파라미터 이름 순서대로 positional
-# 처리한다(중간 파라미터를 건너뛸 수 없고, SQL NULL 리터럴을 안전하게 끼워 넣을
-# 방법도 없다 - 빈 토큰이 문자열 "NULL"로 치환되어 타입 변환 에러를 유발할 수 있음).
-# 애초에(giip #1638) agentKey/displayName 두 개만 넘긴 것도 이 제약 때문이다.
+# ⚠️ giip #2477: 실제 구현은 lib/scheduler_agent_register.sh 의 sar_reg_upsert() 로
+# 옮겼다(등록 정본 단일화). 이 함수는 기존 호출부 호환을 위한 얇은 위임 래퍼다.
 #
-# giip #2390(csn=47 스케줄러 실행 이력 페이지)에서 lssn/osType/agentType이 필요해져,
-# SP 선언 순서(@agentKey, @displayName, @hostIdentifier, @windowsTaskName,
-# @projectName, @scheduleDesc, @isActive, @lssn, @osType, @agentType, ...)를 그대로
-# 따라 hostIdentifier~isActive까지도 함께 채운다(중간을 건너뛸 수 없으므로). 다섯
-# 값 모두 매 tick 동일한 값을 보낸다(hostIdentifier=hostname은 실제 유효한 값,
-# windowsTaskName/projectName/scheduleDesc는 Linux Box에는 해당 없어 빈 문자열,
-# isActive=1은 SP 기본값과 동일) - 그래서 덮어써도 정보 손실이 없다.
+# 옮긴 이유 두 가지:
+#   1) 등록 로직이 이 파일 안에만 있어서, log_collector.sh 를 source 하지 않는
+#      giipAgent3.sh(= lib/scheduler_agent_run.sh 로 run 이력만 보내는 경로)에서는
+#      tSchedulerAgent 행이 영영 만들어지지 않았다. giipAgentWin 의 giip #2470
+#      (giipAgent3.ps1 ↔ lib/LogCollector.ps1)과 완전히 동일한 구조적 결함이다.
+#   2) 예전 구현은 text=파라미터이름 + jsondata=JSON 형태였는데, giipApiSk2
+#      디스패처는 jsondata 가 비어있지 않으면 원본 JSON 전체를 마지막 파라미터 뒤에
+#      하나 더 자동 추가한다(run.ps1 L394-400, "ISN 161"). 즉 11개 값을 보낸 이
+#      호출은 실제로는 12번째 위치 파라미터 @version VARCHAR(50) 자리에 JSON 이
+#      들어가고 있었다. 새 구현은 값을 SQL 리터럴로 직접 박고 jsondata 를 비운다.
 #
-# 호출 규약은 lib/kvs_standard.sh의 kvs_send()/lib/kvs.sh의 save_execution_log()와
-# 동일: apiaddrv2에 form-encoded text(파라미터 이름만)/token(=sk)/jsondata(실제 값)를
-# POST하고, 응답은 .data[0].RstVal == 200 으로 판정한다. (agent-log-register/ingest가
-# 쓰는 AGENT_API_BASE + x-api-key 방식과는 다른, apiaddrv2 직접 호출 방식이다.)
+# SP(pApiSchedulerAgentUpsertBySK)는 csn+agentKey 기준 idempotent upsert 이므로
+# 이번 tick 의 부트스트랩이 실패해도 다음 tick 에서 안전하게 재시도된다 - 그래서
+# 실패를 치명적으로 취급하지 않고 WARN 만 남긴 뒤 계속 진행한다.
+if [ -f "${SCRIPT_DIR}/scheduler_agent_register.sh" ]; then
+    # shellcheck disable=SC1091
+    . "${SCRIPT_DIR}/scheduler_agent_register.sh"
+fi
+
 bootstrap_scheduler_agent() {
     local agent_key="$1"
-    local display_name="${agent_name:-giipAgentLinux-$(hostname)}"
-    local host_identifier jsondata resp
 
-    host_identifier="$(hostname 2>/dev/null || echo unknown-host)"
+    if ! command -v sar_reg_upsert >/dev/null 2>&1; then
+        log_warn "bootstrap_scheduler_agent failed agentKey=$agent_key reason=lib/scheduler_agent_register.sh not loaded"
+        return 1
+    fi
 
-    jsondata="$(jq -n \
-        --arg agentKey "$agent_key" \
-        --arg displayName "$display_name" \
-        --arg hostIdentifier "$host_identifier" \
-        --arg windowsTaskName "" \
-        --arg projectName "" \
-        --arg scheduleDesc "" \
-        --argjson isActive 1 \
-        --argjson lssn "${lssn:-0}" \
-        --arg osType "Linux" \
-        --arg agentType "giipAgentLinux" \
-        '{agentKey:$agentKey, displayName:$displayName, hostIdentifier:$hostIdentifier,
-          windowsTaskName:$windowsTaskName, projectName:$projectName, scheduleDesc:$scheduleDesc,
-          isActive:$isActive, lssn:$lssn, osType:$osType, agentType:$agentType}')"
-
-    resp="$(curl -sS --max-time 15 --connect-timeout 5 -X POST "${apiaddrv2}" \
-        --data-urlencode "text=SchedulerAgentUpsert agentKey displayName hostIdentifier windowsTaskName projectName scheduleDesc isActive lssn osType agentType" \
-        --data-urlencode "token=${sk}" \
-        --data-urlencode "jsondata=${jsondata}" \
-        2>&1)"
-
-    if echo "$resp" | jq -e '.data[0].RstVal == 200' >/dev/null 2>&1; then
+    if sar_reg_upsert "$agent_key"; then
         log_ok "bootstrap_scheduler_agent OK agentKey=$agent_key lssn=${lssn:-0}"
         return 0
     fi
-    log_warn "bootstrap_scheduler_agent failed agentKey=$agent_key resp=$resp"
+    log_warn "bootstrap_scheduler_agent failed agentKey=$agent_key (see scheduler_agent_register log above)"
     return 1
 }
 
