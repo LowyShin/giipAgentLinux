@@ -220,7 +220,11 @@ QCOUNT_FINAL=$(find "$QSUB" -type f -name '*.json.gz' 2>/dev/null | wc -l | tr -
 assert_eq "flush_retry_queue drains the queue once API is healthy again" "0" "$QCOUNT_FINAL"
 
 echo ""
-echo "=== 6. bootstrap_scheduler_agent (giip #1638) ==="
+echo "=== 6. bootstrap_scheduler_agent (giip #1638, giip #2477 위임 래퍼) ==="
+# giip #2477: 구현은 lib/scheduler_agent_register.sh 의 sar_reg_upsert 로 옮겼고
+# bootstrap_scheduler_agent 는 얇은 래퍼가 됐다. 호출 형태도 바뀌었다 -
+# 값을 text 에 SQL 리터럴로 직접 박고 jsondata 는 **빈 문자열**로 보낸다
+# (디스패처가 jsondata 를 마지막 파라미터 뒤에 한 개 더 자동 추가하는 ISN 161 회피).
 # curl을 shell function으로 override해서 실제 네트워크 호출 없이 검증한다
 # (bootstrap_scheduler_agent는 api_post가 아니라 curl을 직접 호출하므로 api_post
 # mock과는 별도로 mock 필요 - kvs.sh/kvs_standard.sh와 동일한 apiaddrv2 직접 호출 계약).
@@ -244,33 +248,53 @@ lssn="71197"
 BOOTSTRAP_RC=0
 bootstrap_scheduler_agent "test-agent-key-1" || BOOTSTRAP_RC=$?
 assert_eq "bootstrap_scheduler_agent returns 0 when RstVal=200" "0" "$BOOTSTRAP_RC"
-assert_contains "curl called with SchedulerAgentUpsert text param" "$(get_mock_curl_args)" "text=SchedulerAgentUpsert agentKey displayName"
+assert_contains "curl called with SchedulerAgentUpsert text param" "$(get_mock_curl_args)" "text=SchedulerAgentUpsert 'test-agent-key-1'"
 assert_contains "curl called with token=sk" "$(get_mock_curl_args)" "token=${sk}"
-assert_contains "displayName falls back to giipAgentLinux-\$(hostname) when agent_name unset" "$(get_mock_curl_args)" "\"displayName\": \"giipAgentLinux-$(hostname)\""
+assert_contains "displayName falls back to giipAgentLinux-\$(hostname) when agent_name unset" "$(get_mock_curl_args)" "'giipAgentLinux-$(hostname)'"
 assert_contains "success path logs OK" "$(cat "$LOGFILE")" "OK: bootstrap_scheduler_agent OK agentKey=test-agent-key-1"
+
+# -- giip #2477: jsondata 는 반드시 비어 있어야 한다(ISN 161 자동추가 차단) ----
+assert_contains "jsondata is sent empty" "$(get_mock_curl_args)" "jsondata="
+if [[ "$(get_mock_curl_args)" == *"jsondata={"* ]]; then
+    echo "  ❌ FAIL: jsondata must be empty (found a JSON payload - ISN 161 auto-append would fire)"
+    FAIL=$((FAIL + 1))
+else
+    echo "  ✅ PASS: jsondata carries no JSON payload"
+    PASS=$((PASS + 1))
+fi
 
 # -- giip #2390: lssn/osType/agentType (and the intermediate positional
 #    params they require: hostIdentifier/windowsTaskName/projectName/
-#    scheduleDesc/isActive) are sent so schedulerrunhistory?lssn=<N> works --
-assert_contains "text param includes hostIdentifier..agentType in SP-declared order" "$(get_mock_curl_args)" "text=SchedulerAgentUpsert agentKey displayName hostIdentifier windowsTaskName projectName scheduleDesc isActive lssn osType agentType"
-assert_contains "jsondata carries hostIdentifier=hostname" "$(get_mock_curl_args)" "\"hostIdentifier\": \"$(hostname)\""
-assert_contains "jsondata carries lssn from config" "$(get_mock_curl_args)" "\"lssn\": 71197"
-assert_contains "jsondata carries osType=Linux" "$(get_mock_curl_args)" "\"osType\": \"Linux\""
-assert_contains "jsondata carries agentType=giipAgentLinux" "$(get_mock_curl_args)" "\"agentType\": \"giipAgentLinux\""
-assert_contains "jsondata carries isActive=1" "$(get_mock_curl_args)" "\"isActive\": 1"
+#    scheduleDesc/isActive) are sent so schedulerrunhistory?lssn=<N> works.
+#    giip #2477 이후에는 이름이 아니라 SQL 리터럴 값이 SP 선언 순서대로 들어간다. --
+assert_contains "text param carries SQL literals in SP-declared order" "$(get_mock_curl_args)" "text=SchedulerAgentUpsert 'test-agent-key-1' 'giipAgentLinux-$(hostname)' '$(hostname)' '' '' '' '1' '71197' 'Linux' 'giipAgentLinux'"
 
 # -- lssn unset in config -> defaults to 0 (never blocks bootstrap) -----------
 unset lssn
 : > "$LOGFILE"
 bootstrap_scheduler_agent "test-agent-key-1b" >/dev/null
-assert_contains "jsondata defaults lssn to 0 when unset" "$(get_mock_curl_args)" "\"lssn\": 0"
+assert_contains "lssn defaults to 0 when unset" "$(get_mock_curl_args)" "'' '1' '0' 'Linux' 'giipAgentLinux'"
+lssn="71197"
+
+# -- non-numeric lssn must not leak into the INT positional param -------------
+lssn="not-a-number"
+: > "$LOGFILE"
+bootstrap_scheduler_agent "test-agent-key-1c" >/dev/null
+assert_contains "non-numeric lssn falls back to 0" "$(get_mock_curl_args)" "'' '1' '0' 'Linux' 'giipAgentLinux'"
 lssn="71197"
 
 # -- displayName honors agent_name when set -----------------------------------
 agent_name="custom-display-name"
 : > "$LOGFILE"
 bootstrap_scheduler_agent "test-agent-key-2" >/dev/null
-assert_contains "displayName uses agent_name when set" "$(get_mock_curl_args)" "\"displayName\": \"custom-display-name\""
+assert_contains "displayName uses agent_name when set" "$(get_mock_curl_args)" "'test-agent-key-2' 'custom-display-name'"
+unset agent_name
+
+# -- 값에 섞인 작은따옴표는 제거돼야 한다(토큰 경계 보호) ----------------------
+agent_name="it's a name"
+: > "$LOGFILE"
+bootstrap_scheduler_agent "test-agent-key-2b" >/dev/null
+assert_contains "single quotes inside a value are stripped, not escaped" "$(get_mock_curl_args)" "'test-agent-key-2b' 'its a name'"
 unset agent_name
 
 # -- failure path (RstVal != 200) ---------------------------------------------

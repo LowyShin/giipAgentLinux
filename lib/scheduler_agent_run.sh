@@ -28,11 +28,43 @@
 #     같은 캐시 파일 경로(INSTALL_DIR/.giip_logcollector_agentkey)를 공유한다 - 두
 #     스크립트 중 어느 쪽이 먼저 실행되어도 같은 Box에 대해 항상 같은 agentKey로
 #     수렴하게 하기 위함이다(같은 tSchedulerAgent 행을 가리켜야 하므로).
-#   - pApiSchedulerAgentRunStartBySK/RunEndBySK는 giipfaw/giipApiSk2 디스패처가 순수
-#     위치기반이라는 제약(lib/log_collector.sh의 bootstrap_scheduler_agent 주석 참고)
-#     에 걸리지 않는다 - 우리가 생략하는 파라미터(totalIssueCount, processedCount 등
-#     일부, summary)가 전부 SP 선언 순서상 "끝쪽" 옵션 파라미터라 중간을 건너뛸 필요가
-#     없기 때문이다.
+#   - ⚠️ giip #2477 정정: 여기 있던 "giipApiSk2 디스패처 제약에 걸리지 않는다 - 생략
+#     하는 파라미터가 전부 끝쪽 옵션 파라미터라서" 라는 서술은 **틀렸다**. 실제로는
+#     디스패처가 jsondata 가 비어있지 않으면 원본 JSON 전체를 마지막 파라미터 뒤에
+#     하나 더 자동 추가하기 때문에(giipfaw/giipApiSk2/run.ps1 L394-400, "ISN 161"),
+#     생략했던 끝쪽 파라미터 @totalIssueCount INT 자리에 JSON 문자열이 들어갔다.
+#       => 2026-09-13 04:30:02 UTC 부터 5분마다
+#          "Error converting data type nvarchar to int" 폭주(cctrank03, lssn 71174,
+#          8일 312건). giip #2477.
+#     이제 값은 text 에 SQL 리터럴로 직접 박고(sar_reg_sql_literal), jsondata 는 항상
+#     빈 문자열로 보낸다. 디스패처 계약 상세는 lib/scheduler_agent_register.sh 상단
+#     주석. 자매 저장소 giipAgentWin 은 giip #2470 에서 같은 수정을 이미 했다.
+#   - ⚠️ giip #2477: tSchedulerAgent 등록(부트스트랩)은 lib/log_collector.sh 안에만
+#     있고 giipAgent3.sh 는 그 파일을 source 하지 않는다. 그래서 log collector 를
+#     돌리지 않는 호스트에서는 tSchedulerAgent 행이 영영 생기지 않고 RunStart 가
+#     "404|Agent not found" 로 영구히 실패한다(giipAgentWin giip #2470 과 동일 결함).
+#     이제 404 를 받으면 lib/scheduler_agent_register.sh 의 sar_reg_upsert 로
+#     자가등록하고 1회 재시도하며, 그래도 실패하면 실패를 누적 기록하고 백오프에
+#     들어간다(5/10/20/40/60분 상한). 백오프 창 안에서는 API 호출 자체를 건너뛰므로
+#     서버 ErrorLogs 가 더 쌓이지 않지만, 첫 발생 시각과 누적 횟수는 상태파일에
+#     계속 보존되고 창이 끝나면 반드시 다시 시도한다(자가치유).
+
+# giip #2477: 등록/백오프/SQL리터럴 정본을 로드한다. 파일이 없는 설치(부분 배포 등)
+# 에서도 run 이력 기록 자체는 동작해야 하므로, 없으면 최소 폴백만 정의한다.
+_SAR_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${_SAR_LIB_DIR}/scheduler_agent_register.sh" ]; then
+    # shellcheck disable=SC1091
+    . "${_SAR_LIB_DIR}/scheduler_agent_register.sh"
+fi
+if ! command -v sar_reg_sql_literal >/dev/null 2>&1; then
+    # 폴백(정본: lib/scheduler_agent_register.sh). 작은따옴표 제거 + 개행 -> 공백.
+    sar_reg_sql_literal() {
+        local v="${1-}"
+        v="${v//\'/}"
+        v="$(printf '%s' "$v" | tr '\r\n' '  ')"
+        printf "'%s'" "$v"
+    }
+fi
 
 sar_deps_ok() {
     command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1
@@ -85,8 +117,12 @@ sar_resolve_agent_key() {
 
 # apiaddrv2(giipApiSk2)에 SK 인증으로 POST. stdout으로 응답 본문을 그대로 출력한다.
 # 반환값은 curl 자체의 성공/실패(0/!=0)이며, API 레벨 RstVal 판정은 호출부 책임이다.
+#
+# ⚠️ giip #2477: jsondata 인자는 반드시 빈 문자열("")로 넘길 것. 비어있지 않으면
+#    디스패처가 JSON 전체를 마지막 위치 파라미터 뒤에 하나 더 자동 추가한다
+#    (ISN 161). 값은 sp_text 에 SQL 리터럴로 이미 박혀 있어야 한다.
 sar_api_post() {
-    local sp_text="$1" jsondata="$2"
+    local sp_text="$1" jsondata="${2:-}"
     curl -sS --max-time 15 --connect-timeout 5 -X POST "${apiaddrv2}" \
         --data-urlencode "text=${sp_text}" \
         --data-urlencode "token=${sk}" \
@@ -120,24 +156,51 @@ sar_run_start() {
         return 1
     fi
 
+    # giip #2477: 연속 실패 백오프 창 안이면 API 호출 자체를 건너뛴다(로그 폭주 억제).
+    if command -v sar_reg_backoff_active >/dev/null 2>&1 && sar_reg_backoff_active; then
+        return 1
+    fi
+
     SAR_AGENT_KEY="$(sar_resolve_agent_key)"
     SAR_RUN_ID_KEY="$(sar_new_run_id_key)"
 
-    local jsondata resp
-    jsondata="$(jq -n \
-        --arg runIdKey "$SAR_RUN_ID_KEY" \
-        --arg agentKey "$SAR_AGENT_KEY" \
-        --arg executionMode "$execution_mode" \
-        '{runIdKey:$runIdKey, agentKey:$agentKey, executionMode:$executionMode}')"
+    # SP 파라미터 순서: @sk(디스패처가 채움), @runIdKey, @agentKey, @executionMode,
+    # @totalIssueCount=0(끝쪽 옵션이라 생략 - SP 기본값 적용).
+    # ⚠️ 값은 SQL 리터럴로 직접 박고 jsondata 는 비운다(giip #2477).
+    local cmd_text resp rstval
+    cmd_text="SchedulerAgentRunStart $(sar_reg_sql_literal "$SAR_RUN_ID_KEY") $(sar_reg_sql_literal "$SAR_AGENT_KEY") $(sar_reg_sql_literal "$execution_mode")"
 
-    resp="$(sar_api_post "SchedulerAgentRunStart runIdKey agentKey executionMode" "$jsondata")"
+    resp="$(sar_api_post "$cmd_text" "")"
 
     if echo "$resp" | jq -e '.data[0].RstVal == 200' >/dev/null 2>&1; then
         SAR_STARTED=1
         sar_log_info "run start OK runIdKey=$SAR_RUN_ID_KEY agentKey=$SAR_AGENT_KEY mode=$execution_mode"
+        command -v sar_reg_clear_backoff >/dev/null 2>&1 && sar_reg_clear_backoff
         return 0
     fi
+
+    # giip #2477: 404 = tSchedulerAgent 미등록. 자가등록 후 1회만 재시도한다.
+    rstval="$(echo "$resp" | jq -r '.data[0].RstVal // empty' 2>/dev/null)" || rstval=""
+    if [ "$rstval" = "404" ] && command -v sar_reg_upsert >/dev/null 2>&1; then
+        sar_log_warn "run start 404 (Agent not found) - attempting tSchedulerAgent self-registration agentKey=$SAR_AGENT_KEY"
+        if sar_reg_upsert "$SAR_AGENT_KEY"; then
+            resp="$(sar_api_post "$cmd_text" "")"
+            if echo "$resp" | jq -e '.data[0].RstVal == 200' >/dev/null 2>&1; then
+                SAR_STARTED=1
+                sar_log_info "run start OK (after self-registration retry) runIdKey=$SAR_RUN_ID_KEY agentKey=$SAR_AGENT_KEY"
+                command -v sar_reg_clear_backoff >/dev/null 2>&1 && sar_reg_clear_backoff
+                return 0
+            fi
+        fi
+        sar_log_warn "run start still failing after self-registration runIdKey=$SAR_RUN_ID_KEY resp=$resp"
+        command -v sar_reg_add_failure >/dev/null 2>&1 && \
+            sar_reg_add_failure "404|Agent not found (self-register retry failed)"
+        return 1
+    fi
+
     sar_log_warn "run start failed runIdKey=$SAR_RUN_ID_KEY agentKey=$SAR_AGENT_KEY resp=$resp"
+    command -v sar_reg_add_failure >/dev/null 2>&1 && \
+        sar_reg_add_failure "non-200 (RstVal=${rstval:-unknown})"
     return 1
 }
 
@@ -158,19 +221,16 @@ sar_run_end() {
         ''|*[!0-9]*) exit_code=1 ;;  # 방어적 fallback: 숫자가 아니면 jq --argjson 실패 방지
     esac
 
-    local jsondata resp
-    jsondata="$(jq -n \
-        --arg runIdKey "$SAR_RUN_ID_KEY" \
-        --arg agentKey "$SAR_AGENT_KEY" \
-        --arg status "$status" \
-        --argjson processedCount 0 \
-        --argjson skippedCount 0 \
-        --argjson failedCount 0 \
-        --argjson exitCode "$exit_code" \
-        '{runIdKey:$runIdKey, agentKey:$agentKey, status:$status, processedCount:$processedCount,
-          skippedCount:$skippedCount, failedCount:$failedCount, exitCode:$exitCode}')"
+    # SP 파라미터 순서: @sk(디스패처), @runIdKey, @agentKey, @status, @processedCount=0,
+    # @skippedCount=0, @failedCount=0, @exitCode=NULL, @summary=NULL.
+    # processedCount/skippedCount/failedCount 는 아직 추적하지 않는 값이라 SP 기본값과
+    # 동일한 0 을 채워 위치를 맞춘다(중간 파라미터라 생략 불가). summary 는 진짜 끝
+    # 파라미터라 생략해 SP 기본값 NULL 을 유지한다.
+    # ⚠️ 값은 SQL 리터럴로 직접 박고 jsondata 는 비운다(giip #2477).
+    local cmd_text resp
+    cmd_text="SchedulerAgentRunEnd $(sar_reg_sql_literal "$SAR_RUN_ID_KEY") $(sar_reg_sql_literal "$SAR_AGENT_KEY") $(sar_reg_sql_literal "$status") $(sar_reg_sql_literal "0") $(sar_reg_sql_literal "0") $(sar_reg_sql_literal "0") $(sar_reg_sql_literal "$exit_code")"
 
-    resp="$(sar_api_post "SchedulerAgentRunEnd runIdKey agentKey status processedCount skippedCount failedCount exitCode" "$jsondata")"
+    resp="$(sar_api_post "$cmd_text" "")"
 
     if echo "$resp" | jq -e '.data[0].RstVal == 200' >/dev/null 2>&1; then
         sar_log_info "run end OK runIdKey=$SAR_RUN_ID_KEY status=$status exitCode=$exit_code"
