@@ -334,11 +334,10 @@ check_mssql_tools
 if [ "${lssn}" = "0" ]; then
 	log_message "INFO" "Server not registered, registering now..."
 	
-	local tmpFileName="giipTmpScript.sh"
-	local lwAPIURL=$(build_api_url "${apiaddrv2}")
-	
+	tmpFileName="giipTmpScript.sh"
+	lwAPIURL=$(build_api_url "${apiaddrv2}")
+
 	# Build JSON data (matching new API rules: text=parameter names, jsondata=actual values)
-	local jsondata
 	jsondata=$(echo "{\"lssn\":0,\"hostname\":\"${hn}\",\"os\":\"${os}\",\"op\":\"op\"}" | tr -d '\n ')
 	
 	curl -s -X POST "${lwAPIURL}" \

@@ -1,0 +1,7 @@
+# Shell scripts must keep LF line endings regardless of the checkout OS — a
+# CRLF-corrupted .sh breaks bash on Linux (every line errors with
+# "$'\r': command not found", and constructs like `done < <(...)` fail to
+# parse entirely). Bit us running this agent inside a Linux Docker container
+# after checking it out on Windows (core.autocrlf=true) — giip-fde-agent's
+# docker/entrypoint.sh had the exact same class of bug (fixed the same way).
+*.sh text eol=lf
