@@ -39,8 +39,10 @@ queue_get() {
 	local api_url="${apiaddrv2}"
 	
 	# ✅ Follow giipapi_rules.md: text contains parameter names only!
+	# giip #2928: Use jq for proper JSON serialization to prevent malformed JSON on special characters
 	local text="CQEQueueGet lssn hostname os op"
-	local jsondata="{\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"os\":\"${os}\",\"op\":\"op\"}"
+	local jsondata
+	jsondata=$(jq -n --argjson lssn "$lssn" --arg hostname "$hostname" --arg os "$os" --arg op "op" '{lssn: $lssn, hostname: $hostname, os: $os, op: $op}')
 	
 	local temp_response="/tmp/queue_response_$$.json"
 	

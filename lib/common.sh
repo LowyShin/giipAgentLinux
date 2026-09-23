@@ -100,7 +100,16 @@ log_error() {
 	local source="giipAgent"
 	
 	# Build jsondata
-	local jsondata="{\"source\":\"${source}\",\"errorMessage\":\"${error_message}\",\"errorType\":\"${error_type}\",\"stackTrace\":\"${stack_trace}\",\"lssn\":${lssn:-0},\"hostname\":\"${hostname}\",\"severity\":\"error\"}"
+	# giip #2928: Use jq for proper JSON serialization to prevent malformed JSON on special characters
+	local jsondata
+	jsondata=$(jq -n \
+		--arg source "$source" \
+		--arg errorMessage "$error_message" \
+		--arg errorType "$error_type" \
+		--arg stackTrace "$stack_trace" \
+		--arg hostname "$hostname" \
+		--argjson lssn "${lssn:-0}" \
+		'{source: $source, errorMessage: $errorMessage, errorType: $errorType, stackTrace: $stackTrace, lssn: $lssn, hostname: $hostname, severity: "error"}')
 	
 	# Call ErrorLogCreate API
 	local text="ErrorLogCreate source errorMessage"
