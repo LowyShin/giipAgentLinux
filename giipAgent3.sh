@@ -338,7 +338,9 @@ if [ "${lssn}" = "0" ]; then
 	lwAPIURL=$(build_api_url "${apiaddrv2}")
 
 	# Build JSON data (matching new API rules: text=parameter names, jsondata=actual values)
-	jsondata=$(echo "{\"lssn\":0,\"hostname\":\"${hn}\",\"os\":\"${os}\",\"op\":\"op\"}" | tr -d '\n ')
+	# giip #2928: Use jq for proper JSON serialization to prevent malformed JSON on special characters
+	local jsondata
+	jsondata=$(jq -n --arg hostname "$hn" --arg os "$os" --arg op "op" '{lssn: 0, hostname: $hostname, os: $os, op: $op}')
 	
 	curl -s -X POST "${lwAPIURL}" \
 		-d "text=CQEQueueGet&token=${sk}&jsondata=${jsondata}" \
