@@ -20,6 +20,9 @@
 - `run-agent2-with-kvs.sh` - KVS를 사용한 Agent 실행
 - `run-gateway-agent.sh` - Gateway Agent 실행
 
+### 운영 정리 (1회성, CQE 로 실행)
+- `cleanup_nameless_lssn.sh` - lssn=0 자가등록 루프(giip 2928)가 만든 이름 없는 tLSvr 행(hostname/os/heartbeat 모두 NULL)을 LSvrDel 로 soft-delete (giip 2948). 기본 `--action dryrun`(쓰기 호출 없음), `--action apply` 는 롤백 SQL 출력 후 1건씩 삭제·재조회 검증. CQE 런처 본문과 종료코드는 스크립트 헤더 참조. 테스트: `tests/test-cleanup-nameless-lssn.sh`
+
 ### 버전 관리
 - `git-auto-sync.sh` - Git 자동 동기화
 

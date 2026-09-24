@@ -17,6 +17,7 @@
 - `test-giipagent-diagnosis.sh` - Agent 진단 테스트
 
 ### Log Collector 테스트 (giip #1635)
+- `test-cleanup-nameless-lssn.sh` - scripts/cleanup_nameless_lssn.sh 오프라인 검증(curl 스텁): dryrun 무쓰기, 잘못된 이스케이프 파싱(jq/awk), apply 요청 형식·롤백 SQL·실패 가드·시간 예산·fail-closed·CQE 런처 (giip 2948)
 - `test-log-collector-offset-rotation.sh` - lib/log_collector.sh 오프셋 추적, 회전
   감지(inode 변경/truncate), 비밀 마스킹, 재시도 큐(용량 제한+drop-oldest) 단위 테스트.
   네트워크 호출은 로컬에서 mock 처리(api_post override) - 실 서버에 붙지 않는다.
