@@ -10,13 +10,14 @@
 - `test-kvs-logging.sh` - KVS 로깅 테스트
 - `test-kvs-api-direct.sh` - KVS API 직접 테스트
 - `test-kvsput-simple.sh` - KVS PUT 기본 테스트
-- `test-kvsput-remote.ps1` - KVS PUT 원격 테스트
+- `test-kvsput-remote.sh` - KVS PUT 원격 테스트 (scp/ssh 로 원격 서버에서 scripts/test-kvsput.sh 실행)
 
 ### Agent 테스트
 - `test-agent-refactored.sh` - 리팩토링된 Agent 테스트
 - `test-giipagent-diagnosis.sh` - Agent 진단 테스트
 
 ### Log Collector 테스트 (giip #1635)
+- `test-cleanup-nameless-lssn.sh` - scripts/cleanup_nameless_lssn.sh 오프라인 검증(curl 스텁): dryrun 무쓰기, 잘못된 이스케이프 파싱(jq/awk), apply 요청 형식·롤백 SQL·실패 가드·시간 예산·fail-closed·CQE 런처 (giip 2948)
 - `test-log-collector-offset-rotation.sh` - lib/log_collector.sh 오프셋 추적, 회전
   감지(inode 변경/truncate), 비밀 마스킹, 재시도 큐(용량 제한+drop-oldest) 단위 테스트.
   네트워크 호출은 로컬에서 mock 처리(api_post override) - 실 서버에 붙지 않는다.
@@ -39,9 +40,12 @@
 - `test-managed-db-check.sh` - 관리 DB 체크 테스트
 - `test-mysql-performance.sh` - MySQL 성능 테스트
 
+### URL Test API
+- `test-url-test-api.sh` - `/api/giip-proxy` 의 URLTestPut/URLTestGet 호출 검증 (`--token` 필수)
+
 ### 네트워크 & SSH
 - `test-ssh-connection.sh` - SSH 연결 테스트
-- `test-network-collection.ps1` - 네트워크 수집 테스트
+- `test-network-collection.sh` - 네트워크 수집 테스트 (scp/ssh 로 원격 서버에서 scripts/debug-network.sh 실행)
 
 ## 🚀 사용법
 
@@ -49,11 +53,8 @@
 bash tests/test-name.sh
 ```
 
-또는 PowerShell 스크립트:
-
-```powershell
-pwsh tests/test-name.ps1
-```
+이 레포는 Linux 에이전트 전용이라 PowerShell(.ps1) 스크립트를 두지 않는다(giip 2951).
+Windows 에이전트는 giipAgentWin 레포를 쓴다.
 
 ## ⚠️ 주의사항
 
