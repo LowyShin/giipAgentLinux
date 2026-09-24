@@ -16,15 +16,18 @@ fi
 
 # Load configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$(dirname "$SCRIPT_DIR")/giipAgent.cnf"
+# cnf lives in the parent of the repo root (README deploy layout).
+# SCRIPT_DIR=<repo>/scripts -> dirname once = repo root, twice = installation dir (holds giipAgent.cnf).
+CONFIG_FILE="$(dirname "$(dirname "$SCRIPT_DIR")")/giipAgent.cnf"
 if [ ! -f "$CONFIG_FILE" ]; then
-    CONFIG_FILE="${SCRIPT_DIR}/giipAgent.cnf"
+    # Fallback: cnf placed inside the repo root.
+    CONFIG_FILE="$(dirname "$SCRIPT_DIR")/giipAgent.cnf"
 fi
 . "$CONFIG_FILE"
 
 # Variables
 LOG_FILE="/var/log/giip-auto-discover.log"
-DISCOVERY_SCRIPT="${SCRIPT_DIR}/giipscripts/auto-discover-linux.sh"
+DISCOVERY_SCRIPT="${SCRIPT_DIR}/auto-discover-linux.sh"
 AGENT_VERSION="1.72"
 
 # Check if auto-discovery script exists
@@ -43,7 +46,10 @@ chmod +x "$DISCOVERY_SCRIPT"
 
 # Run discovery and capture JSON
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Collecting system information..." >> "$LOG_FILE"
-DISCOVERY_JSON=$("$DISCOVERY_SCRIPT" 2>&1)
+# stderr must NOT be merged into stdout: auto-discover-linux.sh writes progress logs to
+# stderr and pure JSON to stdout. Merging (2>&1) corrupts the JSON payload and makes the
+# AgentAutoRegister API reject it ("JSON text is not properly formatted"). Send stderr to log.
+DISCOVERY_JSON=$("$DISCOVERY_SCRIPT" 2>>"$LOG_FILE")
 
 if [ $? -ne 0 ]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✗ ERROR: Discovery script failed" >> "$LOG_FILE"
@@ -82,11 +88,8 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Temp: $TEMP_JSON" >> "$LOG_FILE"
 # IMPORTANT: Use apiaddrv2 (giipApiSk2) NOT Endpoint (giipApi)
 # Reason: giipApi=session-based(AK), giipApiSk2=SK-based with better JSON parsing
 
-# Build API URL with Function Code if available
+# Build API URL
 API_URL="${apiaddrv2}"
-if [ -n "$apiaddrcode" ]; then
-    API_URL="${API_URL}?code=${apiaddrcode}"
-fi
 
 # Extract hostname from JSON for logging
 HOSTNAME=$(echo "$DISCOVERY_JSON" | grep -o '"hostname":\s*"[^"]*"' | sed 's/"hostname":\s*"//' | sed 's/"$//')
@@ -159,7 +162,7 @@ fi
 
 # Upload network diagnostic data to KVS for debugging
 # 📚 참조: docs/KVSPUT_API_SPECIFICATION.md - KVS JSON 저장 에러 해결
-KVSPUT_SCRIPT="${SCRIPT_DIR}/giipscripts/kvsput.sh"
+KVSPUT_SCRIPT="${SCRIPT_DIR}/kvsput.sh"
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Checking KVS upload conditions:" >> "$LOG_FILE"
 if [ ! -f "$KVSPUT_SCRIPT" ]; then

@@ -1,0 +1,213 @@
+{
+  "timestamp": "2026-05-02 04:44:37",
+  "hostname": "runnervmeorf1",
+  "lssn": 0,
+  "system": {
+    "kernel": "6.17.0-1010-azure",
+    "arch": "x86_64",
+    "os": "Ubuntu 24.04.4 LTS",
+    "uptime_seconds": 5292,
+    "uptime_days": 0,
+    "uptime_hours": 1,
+    "uptime_minutes": 28
+  },
+  "cpu": {
+    "cores": 4,
+    "model": "AMD EPYC 7763 64-Core Processor",
+    "usage_pct": 0.49,
+    "user_pct": 0.25,
+    "nice_pct": 0.00,
+    "system_pct": 0.25,
+    "iowait_pct": 0.00,
+    "steal_pct": 0.00,
+    "idle_pct": 99.51
+  },
+  "memory": {
+    "total_kb": 16373468,
+    "used_kb": 1921768,
+    "free_kb": 10243908,
+    "available_kb": 14451700,
+    "buffers_kb": 79768,
+    "cached_kb": 4513520,
+    "usage_pct": 11.74,
+    "swap": {
+      "total_kb": 3145724,
+      "used_kb": 0,
+      "free_kb": 3145724,
+      "usage_pct": 0.00
+    }
+  },
+  "disk": {
+    "filesystems": [
+      {
+        "mount": "/",
+        "device": "/dev/root",
+        "total_kb": 151263856,
+        "used_kb": 64333460,
+        "avail_kb": 86914012,
+        "use_pct": 43
+      },
+      {
+        "mount": "/sys/firmware/efi/efivars",
+        "device": "efivarfs",
+        "total_kb": 131072,
+        "used_kb": 32,
+        "avail_kb": 131036,
+        "use_pct": 1
+      },
+      {
+        "mount": "/boot",
+        "device": "/dev/sda16",
+        "total_kb": 901520,
+        "used_kb": 65008,
+        "avail_kb": 773384,
+        "use_pct": 8
+      },
+      {
+        "mount": "/boot/efi",
+        "device": "/dev/sda15",
+        "total_kb": 106832,
+        "used_kb": 6250,
+        "avail_kb": 100582,
+        "use_pct": 6
+      }
+    ],
+    "io_per_sec": [
+      {
+        "dev": "sda",
+        "read_kb_per_sec": 0,
+        "write_kb_per_sec": 4
+      }
+    ]
+  },
+  "network": {
+    "interface": "eth0",
+    "rx_bytes_total": 268166950,
+    "tx_bytes_total": 49624553,
+    "rx_mb_total": 255.74,
+    "tx_mb_total": 47.33,
+    "rx_bytes_per_sec": 410,
+    "tx_bytes_per_sec": 10252,
+    "rx_errors": 0,
+    "tx_errors": 0,
+    "rx_dropped": 0,
+    "tx_dropped": 0,
+    "connections": {
+      "established": 14,
+      "time_wait": 0,
+      "listening": 8
+    }
+  },
+  "load_average": {
+    "1min": 0.00,
+    "5min": 0.03,
+    "15min": 0.00,
+    "procs_running": 1,
+    "procs_total": 309
+  },
+  "processes": {
+    "total": 174,
+    "running": 1,
+    "sleeping": 96,
+    "uninterruptible": 0,
+    "zombie": 0,
+    "top_by_cpu": [
+      {
+        "pid": 4932,
+        "user": "runner",
+        "cpu_pct": 0.8,
+        "mem_pct": 0.0,
+        "vsz_kb": 8156,
+        "rss_kb": 3924,
+        "cmd": "bash _test_perfmon.sh"
+      },
+      {
+        "pid": 4068,
+        "user": "runner",
+        "cpu_pct": 0.8,
+        "mem_pct": 2.0,
+        "vsz_kb": 18842476,
+        "rss_kb": 337604,
+        "cmd": "/home/runner/work/_temp/ghcca-node/node/bin/node --enable-source-maps /home/runn..."
+      },
+      {
+        "pid": 4017,
+        "user": "root",
+        "cpu_pct": 0.4,
+        "mem_pct": 0.6,
+        "vsz_kb": 1315232,
+        "rss_kb": 113984,
+        "cmd": "padawan-fw run su runner -p -c /home/runner/work/_temp/runtime-logs/command.sh -..."
+      },
+      {
+        "pid": 3533,
+        "user": "runner",
+        "cpu_pct": 0.4,
+        "mem_pct": 0.8,
+        "vsz_kb": 275214512,
+        "rss_kb": 133512,
+        "cmd": "/home/runner/actions-runner/cached/2.334.0/bin/Runner.Worker spawnclient 142 145"
+      },
+      {
+        "pid": 3518,
+        "user": "runner",
+        "cpu_pct": 0.1,
+        "mem_pct": 0.7,
+        "vsz_kb": 274345588,
+        "rss_kb": 115256,
+        "cmd": "/home/runner/actions-runner/cached/2.334.0/bin/Runner.Listener run"
+      }
+    ],
+    "top_by_mem": [
+      {
+        "pid": 4068,
+        "user": "runner",
+        "cpu_pct": 0.8,
+        "mem_pct": 2.0,
+        "vsz_kb": 18842476,
+        "rss_kb": 337604,
+        "cmd": "/home/runner/work/_temp/ghcca-node/node/bin/node --enable-source-maps /home/runn..."
+      },
+      {
+        "pid": 3566,
+        "user": "runner",
+        "cpu_pct": 0.1,
+        "mem_pct": 1.0,
+        "vsz_kb": 18630072,
+        "rss_kb": 179068,
+        "cmd": "/home/runner/work/_temp/ghcca-node/node/bin/node /home/runner/work/_temp/copilot..."
+      },
+      {
+        "pid": 3533,
+        "user": "runner",
+        "cpu_pct": 0.4,
+        "mem_pct": 0.8,
+        "vsz_kb": 275214512,
+        "rss_kb": 133512,
+        "cmd": "/home/runner/actions-runner/cached/2.334.0/bin/Runner.Worker spawnclient 142 145"
+      },
+      {
+        "pid": 3518,
+        "user": "runner",
+        "cpu_pct": 0.1,
+        "mem_pct": 0.7,
+        "vsz_kb": 274345588,
+        "rss_kb": 115256,
+        "cmd": "/home/runner/actions-runner/cached/2.334.0/bin/Runner.Listener run"
+      },
+      {
+        "pid": 4017,
+        "user": "root",
+        "cpu_pct": 0.4,
+        "mem_pct": 0.6,
+        "vsz_kb": 1315232,
+        "rss_kb": 113984,
+        "cmd": "padawan-fw run su runner -p -c /home/runner/work/_temp/runtime-logs/command.sh -..."
+      }
+    ]
+  },
+  "file_descriptors": {
+    "used": 2114,
+    "max": 9223372036854775807
+  }
+}

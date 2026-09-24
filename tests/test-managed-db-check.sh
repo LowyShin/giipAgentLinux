@@ -35,12 +35,11 @@ export LogFileName="log/test-managed-db-check_$(date +%Y%m%d).log"
 mkdir -p log
 
 # Validate required variables
-if [ -z "$lssn" ] || [ -z "$sk" ] || [ -z "$apiaddrv2" ] || [ -z "$apiaddrcode" ]; then
+if [ -z "$lssn" ] || [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
     echo "❌ Missing required config variables:"
     echo "   lssn: ${lssn:-NOT SET}"
     echo "   sk: ${sk:-NOT SET}"
     echo "   apiaddrv2: ${apiaddrv2:-NOT SET}"
-    echo "   apiaddrcode: ${apiaddrcode:-NOT SET}"
     exit 1
 fi
 
@@ -77,7 +76,7 @@ local jsondata="{\"lssn\":${lssn}}"
 wget -O "$db_list_file" --quiet \
     --post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
     --header="Content-Type: application/x-www-form-urlencoded" \
-    "${apiaddrv2}?code=${apiaddrcode}" \
+    "${apiaddrv2}" \
     --no-check-certificate 2>&1
 
 if [ ! -f "$db_list_file" ] || [ ! -s "$db_list_file" ]; then

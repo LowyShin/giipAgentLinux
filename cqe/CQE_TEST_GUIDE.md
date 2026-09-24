@@ -130,7 +130,7 @@ fi
 queue_file="/tmp/debug_queue_$$.sh"
 
 # curl 직접 호출
-curl -v -X POST "${apiaddrv2}?code=${apiaddrcode}" \
+curl -v -X POST "${apiaddrv2}" \
     -d "text=CQEQueueGet&token=${sk}&jsondata=..." \
     -o "${queue_file}" 2>&1 | tee /tmp/curl_debug.log
 
@@ -286,7 +286,7 @@ https://giipasp.azurewebsites.net/api/cqe/cqequeueget03.asp?sk=xxx&lssn=71240&hn
 wget -O "$output_file" \
     --post-data="text=CQEQueueGet ${lssn} ${hostname} ${os} op&token=${sk}" \
     --header="Content-Type: application/x-www-form-urlencoded" \
-    "${apiaddrv2}?code=${apiaddrcode}"
+    "${apiaddrv2}"
 
 # 예시
 https://giipfaw.azurewebsites.net/api/giipApiSk2?code=xxx

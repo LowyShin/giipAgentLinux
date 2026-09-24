@@ -71,7 +71,7 @@ display_target_servers() {
 	if command -v jq &> /dev/null; then
 		# Extract and display servers using jq
 		local temp_servers="/tmp/servers_to_display_$$.jsonl"
-		jq -c '.data[]? // .[]? // .' "$json_file" 2>/dev/null > "$temp_servers"
+		jq -c '.data[]?' "$json_file" 2>/dev/null > "$temp_servers"
 		
 		while IFS= read -r server_json; do
 			[ -z "$server_json" ] && continue

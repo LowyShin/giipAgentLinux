@@ -10,7 +10,6 @@
 get_gateway_servers() {
 	local temp_file="/tmp/gateway_servers_$$.json"
 	local api_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 	
 	# 🔴 [로깅 포인트 #5.4] Gateway 서버 목록 조회 시작
 	log_message "INFO" "[5.4] Gateway 서버 목록 조회 시작"
@@ -55,7 +54,6 @@ get_gateway_servers() {
 get_db_queries() {
 	local temp_file="/tmp/gateway_db_queries_$$.json"
 	local api_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 	
 	local text="GatewayDBQueryList lssn"
 	local jsondata="{\"lssn\":${lssn}}"
@@ -79,7 +77,6 @@ get_db_queries() {
 get_managed_databases() {
 	local temp_file="/tmp/managed_databases_$$.json"
 	local api_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 	
 	local text="GatewayManagedDatabaseList lssn"
 	local jsondata="{\"lssn\":${lssn}}"

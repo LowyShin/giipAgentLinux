@@ -77,7 +77,7 @@ echo "[$logdt] Gateway Heartbeat Started (v${sv}) - Gateway LSSN: $gateway_lssn"
 
 # Function: Get managed server list from DB via API
 get_managed_servers() {
-    local api_url="${apiaddrv2}?code=${apiaddrcode}"
+    local api_url="${apiaddrv2}"
     local response_file="${tmpDir}/managed_servers.json"
     
     echo "[$logdt] Fetching managed server list from API..." >> $LogFileName
@@ -203,7 +203,7 @@ update_server_info() {
     local hostname=$2
     local json_data=$3
     
-    local api_url="${apiaddrv2}?code=${apiaddrcode}"
+    local api_url="${apiaddrv2}"
     local response_file="${tmpDir}/update_response_${lssn}.json"
     
     # Prepare JSON payload

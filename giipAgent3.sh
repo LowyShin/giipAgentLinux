@@ -45,8 +45,15 @@ while IFS= read -r other_pid; do
         elapsed_seconds=$(ps -o etimes= -p "$other_pid" 2>/dev/null | tr -d ' ')
         
         if [ -n "$elapsed_seconds" ] && [ "$elapsed_seconds" -gt 300 ]; then
-            echo "⚠️  [$(date)] Killing hung process (PID=$other_pid, runtime=${elapsed_seconds}s > 5min)"
-            kill -9 "$other_pid" 2>/dev/null
+            echo "⚠️  [$(date)] Cleaning up hung process (PID=$other_pid, runtime=${elapsed_seconds}s > 5min)"
+            # Try safer kill first (SIGTERM)
+            kill -15 "$other_pid" 2>/dev/null
+            sleep 1
+            # Check if still running, then force kill
+            if kill -0 "$other_pid" 2>/dev/null; then
+                 echo "⚠️  [$(date)] Force killing process (PID=$other_pid)"
+                 kill -9 "$other_pid" 2>/dev/null
+            fi
         fi
     fi
 done < <(pgrep -f "bash $SCRIPT_ABS_PATH" | grep -v "^$CURRENT_PID$")
@@ -136,13 +143,41 @@ else
 fi
 
 # ============================================================================
+# Log Cleanup (Maintenance)
+# ============================================================================
+# Automatically clean up logs older than 7 days
+if [ -f "${SCRIPT_DIR}/scripts/log_cleanup.sh" ]; then
+    bash "${SCRIPT_DIR}/scripts/log_cleanup.sh" 7 >> /dev/null 2>&1
+fi
+
+# ============================================================================
 # Load Configuration
 # ============================================================================
 
-load_config "../giipAgent.cnf"
+CONFIG_FILE="${SCRIPT_DIR}/../giipAgent.cnf"
+load_config "$CONFIG_FILE"
 if [ $? -ne 0 ]; then
 	echo "❌ Failed to load configuration"
 	exit 1
+fi
+
+# Ensure mandatory tools are installed (Added 2026-04-30)
+check_jq
+
+# ============================================================================
+# Scheduler Run History tracking (giip #2390, csn=47)
+# ============================================================================
+# tSchedulerAgentRun에 이번 크론 실행의 시작/종료를 기록한다(schedulerrunhistory
+# 페이지, lssn 기준 조회). API 호출 실패가 본 실행에 영향을 주지 않도록 완전히
+# 실패관용적이다(lib/scheduler_agent_run.sh 참고) - 파일이 없거나 API가 실패해도
+# 아래 로직은 계속 진행된다. giipAgent3.sh의 기존 핵심 실행 흐름(수집/보고)은
+# 건드리지 않는다.
+if [ -f "${LIB_DIR}/scheduler_agent_run.sh" ]; then
+	. "${LIB_DIR}/scheduler_agent_run.sh"
+	sar_run_start "scheduled"
+	trap 'sar_run_end_trap' EXIT
+else
+	log_message "WARN" "scheduler_agent_run.sh not found at ${LIB_DIR}, skipping scheduler run history tracking"
 fi
 
 # ============================================================================
@@ -168,7 +203,7 @@ hn=$(hostname)
 # Fetch server config from DB
 echo "🔍 Fetching server configuration from DB..."
 config_tmpfile="giipTmpConfig.json"
-api_url=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
+api_url=$(build_api_url "${apiaddrv2}")
 
 # ✅ giipapi 규칙: text에는 파라미터명만, jsondata에 실제 값
 config_text="LSvrGetConfig lssn hostname"
@@ -253,6 +288,13 @@ fi
 # Setup log directory
 init_log_dir "$SCRIPT_DIR"
 
+# Initialize session history tracking (Added 2026-04-30)
+# This file collects all execution events for the current run
+SESSION_HISTORY_FILE="/tmp/giip_history_${lssn:-0}_$$.jsonl"
+export SESSION_HISTORY_FILE
+rm -f "$SESSION_HISTORY_FILE" # Ensure fresh start
+log_message "INFO" "Session history tracking initialized: $SESSION_HISTORY_FILE"
+
 # Log startup
 logdt=$(date '+%Y%m%d%H%M%S')
 log_message "INFO" "========================================"
@@ -289,27 +331,27 @@ check_mssql_tools
 # Handle Server Registration (LSSN=0)
 # ============================================================================
 
-if [ "${lssn}" = "0" ]; then
+# 발급 lssn 은 persist_lssn()(lib/common.sh)이 cnf 에 기록한다(inode 유지, bind mount 대응).
+# cnf 가 읽기전용이면 giipAgent.lssn 사이드카에 기록하고 load_config 가 그것을 읽는다.
+# 등록에 실패하면 lssn=0 상태로 net3d/gateway/normal 모드에 진입하지 않고 종료한다 —
+# 진입하면 normal 모드의 CQEQueueGet(lssn=0)이 tLSvr 행을 또 만든다 (giip 2928 후속).
+if [ -z "${lssn}" ] || [ "${lssn}" = "0" ]; then
 	log_message "INFO" "Server not registered, registering now..."
 	
-	local tmpFileName="giipTmpScript.sh"
-	local lwAPIURL=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
+	if [ -f "${LIB_DIR}/lssn_register.sh" ]; then
+		. "${LIB_DIR}/lssn_register.sh"
+	else
+		log_message "ERROR" "lssn_register.sh not found in ${LIB_DIR}; cannot register server"
+		exit 1
+	fi
 	
-	# Build JSON data (matching new API rules: text=parameter names, jsondata=actual values)
-	local jsondata
-	jsondata=$(echo "{\"lssn\":0,\"hostname\":\"${hn}\",\"os\":\"${os}\",\"op\":\"op\"}" | tr -d '\n ')
-	
-	curl -s -X POST "${lwAPIURL}" \
-		-d "text=CQEQueueGet&token=${sk}&jsondata=${jsondata}" \
-		-H "Content-Type: application/x-www-form-urlencoded" \
-		--insecure -o $tmpFileName 2>&1
-	
-	lssn=$(cat ${tmpFileName})
-	cnfdmp=$(cat ../giipAgent.cnf | sed -e "s|lssn=\"0\"|lssn=\"${lssn}\"|g")
-	echo "${cnfdmp}" > ../giipAgent.cnf
-	rm -f $tmpFileName
-	
-	log_message "INFO" "Server registered with LSSN: ${lssn}"
+	if register_server "${CONFIG_FILE}" "${hn}" "${os}"; then
+		export lssn
+		log_message "INFO" "Server registered with LSSN: ${lssn}"
+	else
+		log_message "ERROR" "Server registration failed; exiting without running collection modes (lssn=0)"
+		exit 1
+	fi
 fi
 
 # ============================================================================
@@ -400,6 +442,33 @@ fi
 
 # Record execution shutdown log
 save_execution_log "shutdown" "{\"mode\":\"$([ "$gateway_mode" = "1" ] && echo "gateway+normal" || echo "normal")\",\"status\":\"normal_exit\"}"
+
+# ============================================================================
+# Final Session History Upload (Added 2026-04-30)
+# ============================================================================
+if [ -f "$SESSION_HISTORY_FILE" ] && [ -s "$SESSION_HISTORY_FILE" ]; then
+    log_message "INFO" "Uploading session execution history to KVS..."
+    
+    # Convert JSONL to JSON Array using jq
+    # Wrap entries in a root object for KVS
+    HISTORY_JSON=$(jq -s '.' "$SESSION_HISTORY_FILE")
+    
+    if [ $? -eq 0 ] && [ -n "$HISTORY_JSON" ]; then
+        # kFactor: giip_execution_history
+        kvs_put "lssn" "${lssn}" "giip_execution_history" "$HISTORY_JSON"
+        
+        if [ $? -eq 0 ]; then
+            log_message "INFO" "✅ Session history successfully uploaded to KVS"
+        else
+            log_message "WARN" "⚠️ Failed to upload session history to KVS"
+        fi
+    else
+        log_message "ERROR" "❌ Failed to format session history JSON"
+    fi
+    
+    # Clean up
+    rm -f "$SESSION_HISTORY_FILE"
+fi
 
 log_message "INFO" "GIIP Agent V${sv} completed"
 exit 0

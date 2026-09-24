@@ -19,7 +19,13 @@ collect_net3d_mysql() {
         return 1
     fi
 
-    local query="SELECT host, user, db, command, time, info FROM information_schema.processlist WHERE command != 'Sleep' AND user NOT IN ('system user', 'event_scheduler')"
+    # giip-issue #1027 fix: previously filtered "command != 'Sleep'" which excludes
+    # every idle-but-connected client (the vast majority of pooled app connections),
+    # so the topology almost never showed a DB's actually-connected clients.
+    # Now we return ALL real client connections (Sleep included) so "connected
+    # clients" match the feature's intent, and exclude only this monitoring
+    # connection itself (CONNECTION_ID()) and internal/system accounts.
+    local query="SELECT id, host, user, db, command, time, info FROM information_schema.processlist WHERE id != CONNECTION_ID() AND user NOT IN ('system user', 'event_scheduler') AND host IS NOT NULL AND host != ''"
 
     # Execute query (TSV output)
     local result
@@ -32,7 +38,7 @@ collect_net3d_mysql() {
 
     # Parse with Python
     echo "$result" | python3 -c '
-import sys, json
+import sys, json, hashlib, datetime
 
 sessions = []
 for line in sys.stdin:
@@ -40,27 +46,34 @@ for line in sys.stdin:
     if not line: continue
     
     parts = line.split("\t")
-    # Expected: host, user, db, command, time, info
-    # MySQL output can vary if fields are empty/NULL, simple split might be fragile for "info"
-    # But mysql -sN ensures tabs.
+    # Expected: id, host, user, db, command, time, info
     
-    if len(parts) >= 5:
-        host_str = parts[0] # e.g. 192.168.1.5:12345
+    if len(parts) >= 6:
+        host_str = parts[1] # e.g. 192.168.1.5:12345
         client_ip = host_str.split(":")[0] if ":" in host_str else host_str
         
-        # Skip local/internal if needed, but Net3D filters mostly on frontend.
-        # However, keeping data clean is good.
+        info_sql = parts[6] if len(parts) > 6 else ""
+        qhash = "0x" + hashlib.md5(info_sql.encode("utf-8")).hexdigest() if info_sql else ""
         
-        info_sql = parts[5] if len(parts) > 5 else ""
-        
+        # Calculate start time
+        try:
+            time_val = int(parts[5]) if parts[5].isdigit() else 0
+            start_time = (datetime.datetime.now() - datetime.timedelta(seconds=time_val)).strftime("%Y-%m-%d %H:%M:%S")
+        except:
+            start_time = None
+
+        command = parts[4]
         sessions.append({
             "client_net_address": client_ip,
-            "login_name": parts[1],
-            "program_name": parts[3], # MySQL Command (Query, Execute, etc)
-            "db_name": parts[2],
-            "status": "active",
-            "cpu_load": int(parts[4]) if parts[4].isdigit() else 0,
-            "last_sql": info_sql
+            "login_name": parts[2],
+            "program_name": command, # MySQL Command (Query, Execute, Sleep, etc)
+            "db_name": parts[3],
+            "status": "sleeping" if command == "Sleep" else "running",
+            "cpu_load": int(parts[5]) if parts[5].isdigit() else 0,
+            "last_sql": info_sql,
+            "query_hash": qhash,
+            "query_id": parts[0],
+            "query_start_time": start_time
         })
 
 print(json.dumps(sessions, ensure_ascii=False))
@@ -82,7 +95,11 @@ collect_net3d_postgresql() {
         return 1
     fi
 
-    local query="SELECT client_addr, application_name, usename, datname, state, query, EXTRACT(EPOCH FROM (now() - query_start))::int FROM pg_stat_activity WHERE state = 'active' AND client_addr IS NOT NULL"
+    # giip-issue #1027 fix: previously filtered "state = 'active'" which excludes
+    # every idle-but-connected client (idle/idle-in-transaction), so genuinely
+    # connected clients almost never showed up. Now include all real client
+    # connections and exclude only this monitoring backend itself.
+    local query="SELECT pid, client_addr, application_name, usename, datname, state, query, query_start::text, EXTRACT(EPOCH FROM (now() - query_start))::int FROM pg_stat_activity WHERE client_addr IS NOT NULL AND pid != pg_backend_pid()"
 
     # Execute query (CSV/Aligned? -tA is best for pipe)
     # -t: tuples only (no header/footer)
@@ -97,7 +114,7 @@ collect_net3d_postgresql() {
     fi
 
     echo "$result" | python3 -c '
-import sys, json
+import sys, json, hashlib
 
 sessions = []
 for line in sys.stdin:
@@ -105,15 +122,22 @@ for line in sys.stdin:
     if not line: continue
     
     parts = line.split("\t")
-    if len(parts) >= 7:
+    # Expected: pid, client_addr, application_name, usename, datname, state, query, query_start, cpu_load
+    if len(parts) >= 9:
+        sql = parts[6]
+        qhash = "0x" + hashlib.md5(sql.encode("utf-8")).hexdigest() if sql else ""
+        
         sessions.append({
-            "client_net_address": parts[0],
-            "program_name": parts[1],
-            "login_name": parts[2],
-            "db_name": parts[3],
-            "status": parts[4],
-            "last_sql": parts[5],
-            "cpu_load": int(parts[6]) if parts[6].isdigit() else 0
+            "client_net_address": parts[1],
+            "program_name": parts[2],
+            "login_name": parts[3],
+            "db_name": parts[4],
+            "status": parts[5],
+            "last_sql": sql,
+            "cpu_load": int(parts[8]) if parts[8].isdigit() else 0,
+            "query_hash": qhash,
+            "query_id": parts[0],
+            "query_start_time": parts[7]
         })
 
 print(json.dumps(sessions, ensure_ascii=False))
@@ -135,22 +159,42 @@ collect_net3d_mssql() {
         return 1
     fi
 
-    # Enhanced query to capture Running Queries OR Open Transactions
+    # giip-issue #1027 fix (root cause, verified live against giipdb-server.database.windows.net):
+    # 1) "s.client_net_address" does NOT exist on sys.dm_exec_sessions (that column only
+    #    exists on sys.dm_exec_connections). Every run of this query has always failed with
+    #    SQL error 207 "Invalid column name 'client_net_address'", so sqlcmd returned nothing
+    #    and this function always fell through to echo "[]" -> kvs_put was skipped -> tKVS
+    #    NEVER received a single kType='database'/kFactor='db_connections' row, ever
+    #    (confirmed empirically: 0 rows in tKVS history for that kType/kFactor pair, while
+    #    sibling db_perf_diag/status_log writes via the exact same kvs_put path succeeded).
+    #    Fix: JOIN sys.dm_exec_connections and read client_net_address from there.
+    # 2) The WHERE clause only kept sessions with status='running' OR an open transaction —
+    #    a razor-thin snapshot window that misses ordinary idle-but-connected pooled clients,
+    #    which is what "이 DB에 연결된 클라이언트" (clients connected to this DB) actually means.
+    #    Fix: return every real user connection (idle included), and use
+    #    sys.dm_exec_connections.most_recent_sql_handle as a fallback so idle sessions still
+    #    show their last executed query text, and exclude this monitoring session itself plus
+    #    connections with no real client address (e.g. "<named pipe>" service connections).
     # Columns: client_net_address, program_name, login_name, status, cpu_time, sql_text, is_open_tran, duration, tran_state
-    local query="SET NOCOUNT ON; 
-    SELECT 
-        ISNULL(s.client_net_address, '') AS client_net_address,
+    local query="SET NOCOUNT ON;
+    SELECT
+        ISNULL(c.client_net_address, '') AS client_net_address,
         ISNULL(s.program_name, '') AS program_name,
         ISNULL(s.login_name, '') AS login_name,
         s.status,
         ISNULL(r.cpu_time, 0) AS cpu_time,
-        ISNULL(REPLACE(REPLACE(t.text, CHAR(13), ' '), CHAR(10), ' '), '') AS sql_text,
+        ISNULL(REPLACE(REPLACE(SUBSTRING(t.text, 1, 1000), CHAR(13), ' '), CHAR(10), ' '), '') AS sql_text,
         CASE WHEN trans.session_id IS NOT NULL THEN 1 ELSE 0 END as is_open_tran,
         ISNULL(DATEDIFF(MINUTE, trans.transaction_begin_time, GETDATE()), 0) as tran_duration,
-        ISNULL(trans.transaction_state_desc, '') as tran_state
+        ISNULL(trans.transaction_state_desc, '') as tran_state,
+        CONVERT(NVARCHAR(64), r.query_hash, 1) as query_hash,
+        CONVERT(NVARCHAR(130), COALESCE(r.sql_handle, c.most_recent_sql_handle), 1) as sql_handle,
+        ISNULL(CONVERT(NVARCHAR(30), r.start_time, 120), '') as query_start_time,
+        s.session_id as query_id
     FROM sys.dm_exec_sessions s
+    LEFT JOIN sys.dm_exec_connections c ON s.session_id = c.session_id
     LEFT JOIN sys.dm_exec_requests r ON s.session_id = r.session_id
-    OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t
+    OUTER APPLY sys.dm_exec_sql_text(COALESCE(r.sql_handle, c.most_recent_sql_handle)) t
     LEFT JOIN (
         SELECT
             st.session_id,
@@ -169,9 +213,10 @@ collect_net3d_mssql() {
         FROM sys.dm_tran_active_transactions t
         INNER JOIN sys.dm_tran_session_transactions st ON t.transaction_id = st.transaction_id
     ) trans ON s.session_id = trans.session_id
-    WHERE 
-        s.is_user_process = 1 
-        AND (s.status = 'running' OR trans.session_id IS NOT NULL)"
+    WHERE
+        s.is_user_process = 1
+        AND s.session_id <> @@SPID
+        AND ISNULL(c.client_net_address, '') NOT IN ('', '<named pipe>')"
     
     # Execute with sqlcmd
     # -W: remove trailing spaces
@@ -194,7 +239,7 @@ for line in sys.stdin:
     if not line or "rows affected" in line: continue
     
     parts = line.split("\t")
-    # Expected 9 columns
+    # Expected characters
     if len(parts) >= 1: 
         # Safe extraction with defaults
         def get(idx, default=""):
@@ -209,7 +254,11 @@ for line in sys.stdin:
             "last_sql": get(5),
             "is_open_tran": (get(6) == "1"),
             "tran_duration": int(get(7)) if get(7).isdigit() else 0,
-            "tran_state": get(8)
+            "tran_state": get(8),
+            "query_hash": get(9),
+            "sql_handle": get(10),
+            "query_start_time": get(11),
+            "query_id": get(12)
         })
 
 print(json.dumps(sessions, ensure_ascii=False))
@@ -241,3 +290,99 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             ;;
     esac
 fi
+
+# ============================================================================
+# Collect User List and Upload (User Request Handler)
+# ============================================================================
+collect_net3d_user_list() {
+    local mdb_id="$1"
+    local db_type="$2"
+    local host="$3"
+    local port="$4"
+    local user="$5"
+    local password="$6"
+    local database="$7"
+    local lssn="$8"  # Gateway LSSN
+
+    log_message "INFO" "[Net3D-UserList] Collecting users for DB: $db_name (Type: $db_type, ID: $mdb_id)"
+
+    local user_list_json="[]"
+
+    if [ "$db_type" == "MySQL" ] || [ "$db_type" == "MariaDB" ]; then
+        if command -v mysql &>/dev/null; then
+            local query="SELECT User, Host, authentication_string FROM mysql.user" 
+            # Note: authentication_string might differ by version (Password in 5.6)
+            # Use a safer query if unsure, or just format simply.
+            
+            # Simple query for safety across versions
+            query="SELECT User, Host FROM mysql.user"
+
+            local result=$(MYSQL_PWD="$password" timeout 5 mysql -h"$host" -P"$port" -u"$user" -sN -e "$query" 2>/dev/null)
+            if [ -n "$result" ]; then
+                 user_list_json=$(echo "$result" | python3 -c '
+import sys, json
+users = []
+for line in sys.stdin:
+    parts = line.strip().split("\t")
+    if len(parts) >= 2:
+        users.append({"name": parts[0] + "@" + parts[1], "type": "SQL User", "status": "ENABLED", "roles": [], "grants": []})
+print(json.dumps(users))
+')
+            fi
+        fi
+    elif [ "$db_type" == "MSSQL" ]; then
+        if command -v sqlcmd &>/dev/null; then
+             local query="SET NOCOUNT ON; SELECT name, type_desc, is_disabled FROM sys.server_principals WHERE type IN ('S', 'U', 'G')"
+             local result=$(timeout 5 sqlcmd -S "$host,$port" -U "$user" -P "$password" -W -s $'\t' -h -1 -Q "$query" 2>/dev/null)
+             if [ -n "$result" ]; then
+                 user_list_json=$(echo "$result" | python3 -c '
+import sys, json
+users = []
+for line in sys.stdin:
+    parts = line.strip().split("\t")
+    if len(parts) >= 3:
+        status = "DISABLED" if parts[2] == "1" else "ENABLED"
+        users.append({"name": parts[0], "type": parts[1], "status": status, "roles": [], "grants": []})
+print(json.dumps(users))
+')
+             fi
+        fi
+    fi
+
+    if [ "$user_list_json" == "[]" ] || [ -z "$user_list_json" ]; then
+        log_message "WARN" "[Net3D-UserList] No users found or collection failed."
+        # Even if empty, we might want to upload to clear the flag?
+        # Yes, upload empty list to clear the request.
+        user_list_json="[]"
+    fi
+
+    # Upload using Net3dUserListPut
+    # MANDATE: Protect API (Sk2/Sk3) integrity with robust JSON formatting.
+    log_message "INFO" "[Net3D-UserList] Uploading user list..."
+    
+    local text="Net3dUserListPut mdb_id lssn user_list"
+    
+    # Use jq to build a robust JSON object, avoiding manual string concatenation
+    local jsondata=$(jq -n \
+        --arg mdb_id "$mdb_id" \
+        --arg lssn "$lssn" \
+        --argjson user_list "$user_list_json" \
+        '{mdb_id: ($mdb_id|tonumber), lssn: ($lssn|tonumber), user_list: $user_list}')
+    
+    # URL encode
+    local encoded_text=$(printf '%s' "$text" | jq -sRr '@uri')
+    local encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri')
+    local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
+
+    wget -O /dev/null --quiet \
+        --post-data="text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
+        --header="Content-Type: application/x-www-form-urlencoded" \
+        "${apiaddrv2}" \
+        --no-check-certificate
+    
+    if [ $? -eq 0 ]; then
+        log_message "INFO" "[Net3D-UserList] Upload success."
+    else
+        log_message "ERROR" "[Net3D-UserList] Upload failed."
+    fi
+}

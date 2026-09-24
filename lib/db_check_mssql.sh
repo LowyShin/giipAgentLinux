@@ -47,7 +47,28 @@ perform_check_mssql() {
 			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   🕸️ Collecting MSSQL Net3D sessions..." >> $LogFileName
 			local net3d_json=$(collect_net3d_mssql "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
 			[[ -n "$net3d_json" && "$net3d_json" != "[]" ]] && kvs_put "database" "$mdb_id" "db_connections" "$net3d_json"
-			
+
+			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   📊 Collecting MSSQL performance diagnostics (Query Store + Azure)..." >> $LogFileName
+			local qs_diag_json=$(collect_mssql_perf_diag "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
+			local az_diag_json=$(collect_azure_sql_metrics "$db_host" "$db_database")
+			local perf_diag_json=""
+			if command -v jq >/dev/null 2>&1; then
+				perf_diag_json=$(jq -n --argjson qs "$qs_diag_json" --argjson az "$az_diag_json" '{query_store:$qs, azure:$az}' 2>/dev/null | python3 "${SCRIPT_DIR}/build_perf_diagnosis.py" 2>/dev/null)
+
+				# Additive-only: fold the real (ring-buffer) CPU% into the existing 4-field
+				# performance_json blob under a NEW key. Does not remove/rename user_connections,
+				# total_batch_requests, page_life_expectancy, buffer_cache_hit_ratio — only extends
+				# them so convert_to_mdb_stats.py can finally report real CPU instead of hardcoded 0
+				# (giip-issue #921). This blob still only feeds pApiMdbStatsUpdatebySK via
+				# MdbStatsUpdate — it is NOT the same channel as db_perf_diag_json above.
+				local real_cpu=$(echo "$qs_diag_json" | jq -r '.real_cpu_percent // empty' 2>/dev/null)
+				if [ -n "$real_cpu" ] && [ "$real_cpu" != "null" ]; then
+					local merged=$(echo "$performance_json" | jq --argjson cpu "$real_cpu" '. + {real_cpu_percent: $cpu}' 2>/dev/null)
+					[[ -n "$merged" && "$merged" == "{"* ]] && performance_json="$merged"
+				fi
+			fi
+			[[ -n "$perf_diag_json" && "$perf_diag_json" == "{"* ]] && kvs_put "database" "$mdb_id" "db_perf_diag" "$perf_diag_json"
+
 		elif [ $mssql_exit -eq 124 ]; then
 			check_status="error"
 			check_message="Connection timeout (5s)"

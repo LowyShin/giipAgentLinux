@@ -16,6 +16,11 @@
 - `test-agent-refactored.sh` - 리팩토링된 Agent 테스트
 - `test-giipagent-diagnosis.sh` - Agent 진단 테스트
 
+### Log Collector 테스트 (giip #1635)
+- `test-log-collector-offset-rotation.sh` - lib/log_collector.sh 오프셋 추적, 회전
+  감지(inode 변경/truncate), 비밀 마스킹, 재시도 큐(용량 제한+drop-oldest) 단위 테스트.
+  네트워크 호출은 로컬에서 mock 처리(api_post override) - 실 서버에 붙지 않는다.
+
 ### Gateway 테스트
 - `test-gateway.sh` - Gateway 기본 테스트
 - `test-gateway-discovery.sh` - Gateway 발견 테스트
@@ -23,6 +28,11 @@
 
 ### CQE 테스트
 - `test-cqe-queue.sh` - CQE 큐 테스트
+
+### lssn=0 자동등록 테스트
+- `test-lssn0-registration.sh` - 네트워크 없이(curl stub) lssn=0 자동등록을 검증:
+  cnf 의 lssn 줄 갱신(따옴표/공백/CRLF 변형), inode 유지, 읽기전용 cnf → 사이드카
+  `giipAgent.lssn` + load_config 반영, lssn=0 queue_get 차단, 잘못된 응답 시 cnf 불변.
 
 ### 데이터베이스 테스트
 - `test-managed-db-api.sh` - 관리 DB API 테스트

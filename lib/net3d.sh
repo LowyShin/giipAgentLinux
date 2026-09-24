@@ -74,6 +74,69 @@ collect_net3d_data() {
     local net_json="{}"
     local source_cmd=""
     
+    # 🔍 [NEW] ENRICHMENT: Local Database Session Check (MSSQL, MySQL, PostgreSQL)
+    local sql_session_map="{}"
+    sql_session_map=$($python_cmd -c "
+import sys, json, subprocess, hashlib
+
+def get_mssql_sessions():
+    sessions = {}
+    try:
+        import pyodbc
+        # Try local connection with Trusted_Connection (requires Kerberos/Domain on Linux, but kept for parity)
+        conn_str = 'DRIVER={ODBC Driver 17 for SQL Server};SERVER=localhost;DATABASE=master;Trusted_Connection=yes;Connection Timeout=3;'
+        conn = pyodbc.connect(conn_str)
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT c.client_net_address, c.client_tcp_port, CONVERT(NVARCHAR(64), r.query_hash, 1) as query_hash,
+                   CONVERT(NVARCHAR(130), r.sql_handle, 1) as sql_handle, c.local_tcp_port
+            FROM sys.dm_exec_connections c JOIN sys.dm_exec_requests r ON c.session_id = r.session_id
+        ''')
+        for row in cursor.fetchall():
+            key = f'{row.client_net_address.strip()}:{row.client_tcp_port}'
+            sessions[key] = {'hash': row.query_hash, 'sql_handle': row.sql_handle, 'localPort': int(row.local_tcp_port)}
+        conn.close()
+    except: pass
+    return sessions
+
+def get_mysql_sessions():
+    sessions = {}
+    try:
+        # Requires mysql client and appropriate permissions (e.g. via /root/.my.cnf)
+        cmd = ['mysql', '-sN', '-e', 'SELECT host, info FROM information_schema.processlist WHERE command != \"Sleep\" AND host IS NOT NULL']
+        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=3).decode('utf-8')
+        for line in output.splitlines():
+            if '\t' in line:
+                host_str, sql = line.split('\t', 1)
+                if ':' in host_str:
+                    ip, port = host_str.rsplit(':', 1)
+                    qhash = '0x' + hashlib.md5(sql.encode('utf-8')).hexdigest() if sql else ''
+                    sessions[f'{ip}:{port}'] = {'hash': qhash, 'localPort': 3306}
+    except: pass
+    return sessions
+
+def get_pg_sessions():
+    sessions = {}
+    try:
+        # Requires psql client and appropriate permissions
+        cmd = ['psql', '-tA', '-F', '\t', '-c', \"SELECT client_addr, client_port, query FROM pg_stat_activity WHERE state = 'active' AND client_addr IS NOT NULL\"]
+        output = subprocess.check_output(cmd, stderr=subprocess.STDOUT, timeout=3).decode('utf-8')
+        for line in output.splitlines():
+            parts = line.split('\t')
+            if len(parts) >= 3:
+                ip, port, sql = parts[0], parts[1], parts[2]
+                qhash = '0x' + hashlib.md5(sql.encode('utf-8')).hexdigest() if sql else ''
+                sessions[f'{ip}:{port}'] = {'hash': qhash, 'localPort': 5432}
+    except: pass
+    return sessions
+
+all_sessions = {}
+all_sessions.update(get_mssql_sessions())
+all_sessions.update(get_mysql_sessions())
+all_sessions.update(get_pg_sessions())
+print(json.dumps(all_sessions))
+" 2>/dev/null)
+
     # Try ss first (faster, modern)
     if command -v ss >/dev/null 2>&1; then
         source_cmd="ss"
@@ -105,30 +168,47 @@ collect_net3d_data() {
             return 1
         fi
     fi
-    
-    # 3. Validation & Count Logging
-    local json_len=${#net_json}
-    if [ "$json_len" -lt 10 ] || [[ "$net_json" == *"\"error\":"* ]]; then
-        log_message "WARN" "[Net3D] Collected data is invalid or contains error: ${net_json:0:100}..."
-        return 1
-    fi
-    
-    # Extract connection count for logging (using grep/sed purely for counting)
-    local conn_count=$(echo "$net_json" | grep -o "\"local_ip\"" | wc -l)
-    log_message "INFO" "[Net3D] Collected ${conn_count} connections using ${source_cmd}"
-    
-    # 4. Upload to KVS
-    # kFactor matches spec requirements: "netstat"
-    # Data is stored as raw JSON in kValue
-    # We include 'lssn' in the JSON body just in case the backend/frontend expects it inside
+
+    # 3. Upload Network Data to KVS (netstat factor)
     if kvs_put "lssn" "${lssn}" "netstat" "$net_json"; then
-        log_message "INFO" "[Net3D] Successfully uploaded netstat data (${json_len} bytes)"
-        
-        # Update state file only on success
+        log_message "INFO" "[Net3D] Successfully uploaded netstat data"
         echo "$(date +%s)" > "${NET3D_STATE_FILE}_${lssn}"
     else
         log_message "ERROR" "[Net3D] Failed to upload netstat data"
         return 1
+    fi
+
+    # 4. Upload DB Connection Data to KVS (db_connections factor)
+    # [NEW] Separation of concerns: DB data goes to its own factor as per global standards
+    if [ "$sql_session_map" != "{}" ]; then
+        local db_json=""
+        db_json=$($python_cmd -c "
+import sys, json
+try:
+    session_map = json.loads(sys.argv[1])
+    db_conns = []
+    for key, s in session_map.items():
+        ip, port = key.rsplit(':', 1)
+        db_conns.append({
+            'client_net_address': ip,
+            'remote_port': int(port),
+            'local_port': s.get('localPort'),
+            'query_hash': s.get('hash', ''),
+            'sql_handle': s.get('sql_handle', ''),
+            'status': 'active'
+        })
+    print(json.dumps(db_conns))
+except Exception as e:
+    print('[]')
+" "$sql_session_map")
+
+        if [ "$db_json" != "[]" ]; then
+            if kvs_put "lssn" "${lssn}" "db_connections" "$db_json"; then
+                log_message "INFO" "[Net3D] Successfully uploaded db_connections data"
+            else
+                log_message "ERROR" "[Net3D] Failed to upload db_connections data"
+            fi
+        fi
     fi
     
     # 5. Upload Server IP Information (if module available)

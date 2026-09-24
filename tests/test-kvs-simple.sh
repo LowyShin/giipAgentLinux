@@ -29,7 +29,7 @@ echo "$post_data" | grep -oP 'jsondata=\K.*' | python3 -c "import sys, json; fro
 
 # Try API call
 echo -e "\n=== API Call ===" 
-kvs_url="${apiaddrv2}?code=${apiaddrcode}"
+kvs_url="${apiaddrv2}"
 wget -O /tmp/test_response.txt \
     --post-data="$post_data" \
     --header="Content-Type: application/x-www-form-urlencoded" \

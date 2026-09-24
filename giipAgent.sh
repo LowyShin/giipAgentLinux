@@ -868,8 +868,8 @@ echo $lwDownloadURL
 if [ "${lssn}" = "0" ];then
 	curl -o $tmpFileName "$lwDownloadURL"
 	lssn=`cat ${tmpFileName}`
-	cnfdmp=`cat ./giipAgent.cnf | sed -e "s|lssn=\"0\"|lssn=\"${lssn}\"|g"`
-	echo "${cnfdmp}" >giipAgent.cnf
+	cnfdmp=`cat ../giipAgent.cnf | sed -e "s|lssn=\"0\"|lssn=\"${lssn}\"|g"`
+	echo "${cnfdmp}" >../giipAgent.cnf
 	rm -f $tmpFileName
 	lwDownloadURL=`echo "${apiaddr}/api/cqe/cqequeueget03.asp?sk=$sk&lssn=$lssn&hn=${hn}&os=$os&df=os&sv=${sv}" | sed -e "s/ /\%20/g"`
 fi

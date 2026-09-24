@@ -11,6 +11,10 @@ source "${SCRIPT_DIR}/dpa_postgresql.sh"
 source "${SCRIPT_DIR}/net3d_db.sh"
 source "${SCRIPT_DIR}/http_health_check.sh"
 
+# Load performance diagnostics modules (giip-issue #921: Query Store + Azure Monitor)
+source "${SCRIPT_DIR}/db_perf_diag_mssql.sh"
+source "${SCRIPT_DIR}/azure_sql_metrics.sh"
+
 # Load DB check modules (provide perform_check_* functions)
 source "${SCRIPT_DIR}/db_check_mysql.sh"
 source "${SCRIPT_DIR}/db_check_mssql.sh"
@@ -20,7 +24,7 @@ source "${SCRIPT_DIR}/db_check_mongodb.sh"
 source "${SCRIPT_DIR}/db_check_http.sh"
 
 # Function: Check managed databases and update health status
-# Requires: lssn, sk, apiaddrv2, apiaddrcode (from config)
+# Requires: lssn, sk, apiaddrv2 (from config)
 # Returns: 0 on success, 1 on error
 check_managed_databases() {
 	echo "[Gateway] 🔍 Checking managed databases..." >&2
@@ -34,13 +38,13 @@ check_managed_databases() {
 	echo "[Gateway-DB-API]   text: $text" >&2
 	echo "[Gateway-DB-API]   token: ${sk:0:20}..." >&2
 	echo "[Gateway-DB-API]   jsondata: $jsondata" >&2
-	echo "[Gateway-DB-API]   endpoint: ${apiaddrv2}?code=${apiaddrcode:0:20}..." >&2
+	echo "[Gateway-DB-API]   endpoint: ${apiaddrv2}..." >&2
 	
 	# Fetch managed database list from API
 	wget -O "$temp_file" --quiet \
 		--post-data="text=${text}&token=${sk}&jsondata=${jsondata}" \
 		--header="Content-Type: application/x-www-form-urlencoded" \
-		"${apiaddrv2}?code=${apiaddrcode}" \
+		"${apiaddrv2}" \
 		--no-check-certificate 2>&1
 	
 	# DEBUG: API 응답 확인
@@ -124,8 +128,17 @@ check_managed_databases() {
 		[ $? -ne 0 ] && continue
 		
 		IFS=$'\t' read -r mdb_id db_type db_name db_host db_port db_user db_password db_database \
-			http_enabled http_url http_method http_timeout http_expected <<< "$fields"
+			http_enabled http_url http_method http_timeout http_expected req_user_list <<< "$fields"
 		
+		# Handle User List Request
+		if [ "$req_user_list" == "1" ]; then
+			if declare -f collect_net3d_user_list >/dev/null; then
+				collect_net3d_user_list "$mdb_id" "$db_type" "$db_host" "$db_port" "$db_user" "$db_password" "$db_database" "$lssn"
+			else
+				echo "[Gateway] ⚠️  collect_net3d_user_list not found" >&2
+			fi
+		fi
+
 		echo "[Gateway]   Checking: $db_name ($db_type)" >&2
 		
 		# Call appropriate check function based on db_type
@@ -172,7 +185,7 @@ check_managed_databases() {
 		local stats_json=$(cat "$check_results_file" | python3 "${SCRIPT_DIR}/convert_to_mdb_stats.py")
 		
 		if [ -n "$stats_json" ] && [ "$stats_json" != "[]" ]; then
-			local text="MdbStatsUpdate jsondata"
+			local text="MdbStatsUpdate 'jsondata'"
 			
 			# URL encode using jq (match kvs.sh method)
 			local encoded_jsondata=$(printf '%s' "$stats_json" | jq -sRr '@uri')
@@ -180,7 +193,7 @@ check_managed_databases() {
 			local api_response=$(wget -O - --quiet \
 				--post-data="text=${text}&token=${sk}&jsondata=${encoded_jsondata}" \
 				--header="Content-Type: application/x-www-form-urlencoded" \
-				"${apiaddrv2}?code=${apiaddrcode}" \
+				"${apiaddrv2}" \
 				--no-check-certificate 2>&1)
 			
 			if echo "$api_response" | grep -q '"RstVal":"200"'; then

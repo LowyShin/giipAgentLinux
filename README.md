@@ -4,6 +4,11 @@
 
 **Version**: 3.0 (Modular Architecture)
 
+> [!WARNING]
+> **Use `giipAgent3.sh` instead of `giipAgent.sh`!**
+> `giipAgent.sh` is a legacy single-file version (v1.x) and is **deprecated**. 
+> All new features (Gateway Mode, Auto-Discovery, Process List, etc.) are implemented in `giipAgent3.sh` and its `lib/` modules.
+
 ## 🌟 개념
 
 GIIP Agent는 서버 모니터링 및 원격 관리 시스템입니다.
@@ -58,6 +63,22 @@ sudo ./admin/giipcronreg.sh
 
 **⚠️ 중요:** `giipAgent.cnf`는 **giipAgentLinux 레포지토리의 부모 디렉토리**에 위치해야 합니다!
 
+#### lssn 자동 등록 (`lssn="0"`)
+
+`lssn` 을 모르면 `lssn="0"` 그대로 두고 실행하면 됩니다(`lssn=0`, `lssn='0'` 도 동일).
+
+- `giipAgent3.sh` 첫 실행 시 서버를 자동 등록하고, 발급된 lssn 을 `giipAgent.cnf` 의
+  `lssn=` 줄에 기록합니다. 다음 실행부터는 그 lssn 을 사용하므로 재등록되지 않습니다.
+- 기록은 파일을 교체(rename)하지 않고 **내용만 덮어써** inode 를 유지합니다. 따라서 Docker 에서
+  `-v /host/giipAgent.cnf:/path/giipAgent.cnf` 처럼 **cnf 를 단일 파일로 bind mount 해도 동작**합니다.
+- cnf 가 **읽기전용**(`:ro` mount 등)이면 같은 디렉토리의 **`giipAgent.lssn`** 사이드카 파일에 lssn 을
+  기록하고, 이후 실행은 cnf 의 lssn 이 0 이면 사이드카 값을 사용합니다. 이때 로그에 ERROR 로
+  "cnf 에 `lssn="<번호>"` 를 넣어 달라"는 안내가 남습니다 — 가능하면 cnf 에 옮겨 적으세요.
+  (cnf 에 0 이 아닌 lssn 이 있으면 항상 cnf 가 우선합니다.)
+- 등록에 실패하면(API 오류, 응답에 lssn 없음) 응답 앞부분을 로그에 남기고 **수집 모드를 실행하지 않고
+  종료(exit 1)** 합니다. 다음 cron 주기에 다시 등록을 시도합니다.
+- 컨테이너를 새로 만들 때마다 lssn 을 유지하려면 cnf(또는 cnf 가 있는 디렉토리)를 볼륨으로 유지하세요.
+
 **설정 파일 위치 구조:**
 ```
 /path/to/installation/              ← 설치 위치 (어디든 가능)
@@ -81,7 +102,9 @@ cd /path/to/installation
 cat giipAgent.cnf | grep -E "sk=|lssn=|apiaddrv2="
 
 # Cron 등록 확인
-crontab -l | grep giip
+# ⚠️ 설치는 `sudo ./admin/giipcronreg.sh`로 실행하므로 크론은 root 계정에 등록됩니다.
+#    일반 사용자 `crontab -l`은 "no crontab for <user>"가 뜰 수 있으니 sudo로 확인하세요.
+sudo crontab -l | grep giip
 ```
 
 ### 3. 배포 모드 선택
@@ -140,6 +163,7 @@ graph LR
 ```
 
 ### 🆕 핵심 문서
+- **[유지보수 주의사항](MAINTENANCE_PRECAUTIONS.md)** - ⭐ 개발 및 유지보수 시 필수 준수 사항
 - **[설정 파일 위치 가이드](../giipdb/docs/GIIP_CONFIG_FILE_LOCATION.md)** - ⭐ giipAgent.cnf 위치 명확화
 - **[CQE 명세서](docs/CQE_SPECIFICATION.md)** - 원격 명령 실행 시스템
 - **[giipAgent3.sh 명세서](docs/GIIPAGENT3_SPECIFICATION.md)** - 실행 조건, 동작 흐름
@@ -167,6 +191,7 @@ graph LR
 - **[제거 가이드](docs/UNINSTALLATION.md)** - 설치 제거
 
 ### 🔗 외부 문서
+- [GIIP Dev Agent (Multi-Agent Framework)](https://github.com/LowyShin/giip-dev-agent) - 🤖 자율 멀티 에이전트 프레임워크 (신규!)
 - [API 엔드포인트 비교](../giipfaw/docs/API_ENDPOINTS_COMPARISON.md) - giipApi vs giipApiSk vs giipApiSk2
 - [Agent 설치 가이드](../giipdb/docs/AGENT_INSTALLATION_GUIDE.md) - 전체 설치 프로세스
 - [테스트 서버 설정](../giipdb/docs/TEST_SERVER_INSTALLATION.md) - 테스트 환경
@@ -206,7 +231,6 @@ sk="your-secret-key-here"
 lssn="0"
 giipagentdelay="60"
 apiaddrv2="https://giipfaw.azurewebsites.net/api/giipApiSk2"
-apiaddrcode="YOUR_FUNCTION_CODE"
 EOF
 chmod 644 giipAgent.cnf
 ```

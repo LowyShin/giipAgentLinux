@@ -110,6 +110,14 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 
+# lssn=0 가드: 미등록 서버로 normal 모드를 돌리면 queue_get → CQEQueueGet(lssn=0) 이
+# tLSvr 에 새 행을 만든다. 등록은 giipAgent3.sh 가 담당하며, 등록 결과는 cnf 또는
+# 사이드카(giipAgent.lssn)에 남아 load_config 가 읽는다.
+if ! [[ "${lssn}" =~ ^[0-9]+$ ]] || [ "${lssn}" -eq 0 ]; then
+	echo "[normal_mode.sh] ⚠️  WARN: lssn='${lssn}' is not registered; skipping normal mode (run giipAgent3.sh to self-register)" >&2
+	exit 0
+fi
+
 # ============================================================================
 # Version and Metadata
 # ============================================================================
@@ -199,6 +207,12 @@ if [ -f "${LIB_DIR}/mssql.sh" ]; then
 	collect_mssql_data "${lssn}"
 fi
 
+# Load System Info module (Process List)
+if [ -f "${LIB_DIR}/sys_info.sh" ]; then
+	. "${LIB_DIR}/sys_info.sh"
+	collect_process_list "${lssn}"
+fi
+
 # ============================================================================
 # Load Normal Mode Functions
 # ============================================================================
@@ -218,6 +232,13 @@ log_message "INFO" "Executing health check and performance monitor..."
 HEALTH_CHECK_SCRIPT="${SCRIPT_DIR}/scripts/check_system_load.sh"
 if [ -f "$HEALTH_CHECK_SCRIPT" ]; then
     bash "$HEALTH_CHECK_SCRIPT" >> "${SCRIPT_DIR}/log/health_check.log" 2>&1 || log_message "WARN" "Health check failed"
+fi
+
+# Execute Enhanced Metrics Collection (Added 2026-05-13)
+ENHANCED_METRICS_SCRIPT="${SCRIPT_DIR}/scripts/collect_enhanced_metrics.sh"
+if [ -f "$ENHANCED_METRICS_SCRIPT" ]; then
+    log_message "INFO" "Executing enhanced metrics collection..."
+    bash "$ENHANCED_METRICS_SCRIPT" >> "${SCRIPT_DIR}/log/enhanced_metrics.log" 2>&1 || log_message "WARN" "Enhanced metrics collection failed"
 fi
 
 # ============================================================================

@@ -1,7 +1,7 @@
 #!/bin/bash
 # giipAgent KVS Logging Library
-# Version: 2.00
-# Date: 2025-01-10
+# Version: 2.01
+# Date: 2026-02-06
 # Purpose: KVS (Key-Value Store) logging functions for execution tracking
 # Rule: Follow giipapi_rules.md - text contains parameter names only, jsondata contains actual values
 
@@ -56,6 +56,78 @@
 # KVS Execution Logging Functions
 # ============================================================================
 
+# ============================================================================
+# Safe URL Encoding with Validation (Added 2026-02-06)
+# ============================================================================
+# Purpose: Validate input BEFORE passing to jq to prevent hangs
+# If validation fails, log error and use fallback encoding
+#
+# Validation checks:
+# 1. Input size (max 500KB to prevent memory issues)
+# 2. Null bytes (can break jq parsing)
+# 3. Empty input handling
+
+# Error log file for encoding failures
+KVS_ERROR_LOG="${SCRIPT_DIR:-/tmp}/log/kvs_encoding_errors.log"
+# Ensure log directory exists (silent fail if not possible)
+mkdir -p "$(dirname "$KVS_ERROR_LOG")" 2>/dev/null
+
+# Function: Safe URL encode with validation
+# Usage: safe_url_encode "string_to_encode" "field_name"
+# Returns: URL-encoded string via stdout, exit code 0 on success, 1 on validation failure
+safe_url_encode() {
+	local input="$1"
+	local field_name="${2:-unknown}"
+	local max_size=512000  # 500KB limit
+	local input_size=${#input}
+	
+	# === VALIDATION 1: Size check ===
+	if [ "$input_size" -gt "$max_size" ]; then
+		local error_msg="[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Input too large for '$field_name': ${input_size} bytes (max: ${max_size})"
+		echo "$error_msg" >> "$KVS_ERROR_LOG" 2>/dev/null
+		echo "$error_msg" >&2
+		# Return truncated data with marker
+		printf '%s' "${input:0:$max_size}[TRUNCATED:${input_size}bytes]" | jq -sRr '@uri' 2>/dev/null || echo "${input:0:100}..."
+		return 1
+	fi
+	
+	# Strip null bytes from input (bash vars can't hold null bytes, but strip for safety)
+	input=$(printf '%s' "$input" | tr -d '\0')
+	
+	# === VALIDATION 3: Empty input ===
+	if [ -z "$input" ]; then
+		echo ""
+		return 0
+	fi
+	
+	# === ENCODING: Use jq with timeout protection ===
+	local encoded
+	local jq_exit=0
+	if command -v timeout >/dev/null 2>&1; then
+		encoded=$(printf '%s' "$input" | timeout 5 jq -sRr '@uri' 2>/dev/null)
+		jq_exit=$?
+	else
+		encoded=$(printf '%s' "$input" | jq -sRr '@uri' 2>/dev/null)
+		jq_exit=$?
+	fi
+	
+	# Check if jq succeeded (capture exit code immediately to avoid race condition)
+	if [ $jq_exit -ne 0 ] || [ -z "$encoded" ]; then
+		local error_msg="[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: jq encoding failed for '$field_name' (size: ${input_size}, exit: ${jq_exit}). Using fallback."
+		echo "$error_msg" >> "$KVS_ERROR_LOG" 2>/dev/null
+		echo "$error_msg" >&2
+		# Fallback: simple percent encoding for common special chars
+		# NOTE: Incomplete encoding, handles common URL-unsafe chars only
+		encoded=$(printf '%s' "$input" | sed 's/%/%25/g; s/ /%20/g; s/"/%22/g; s/#/%23/g; s/&/%26/g; s/+/%2B/g; s/=/%3D/g; s/?/%3F/g; s/\\/%5C/g')
+	fi
+	
+	printf '%s' "$encoded"
+	return 0
+}
+
+export -f safe_url_encode
+
+
 # Function: Save execution log to KVS (giipagent factor)
 # Usage: save_execution_log "event_type" "{\"details\":\"json\"}" OR "event_type" "any text value"
 # Event types: startup, queue_check, script_execution, error, shutdown, gateway_init, heartbeat
@@ -86,12 +158,16 @@ save_execution_log() {
 	# details_json이 JSON이면 JSON으로, 텍스트면 텍스트로 그대로 저장됨
 	local kvalue="{\"event_type\":\"${event_type}\",\"timestamp\":\"${timestamp}\",\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"mode\":\"${mode}\",\"version\":\"${sv}\",\"details\":${details_json}}"
 	
+	# Append to local session history file if variable is set (Added 2026-04-30)
+	if [ -n "$SESSION_HISTORY_FILE" ]; then
+		echo "$kvalue" >> "$SESSION_HISTORY_FILE"
+	fi
+	
 	# Minimal log for debugging if needed
 	# echo "[KVS-Debug] event_type='${event_type}'" >&2
 	
 	# Build API URL
 	local kvs_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && kvs_url="${kvs_url}?code=${apiaddrcode}"
 	
 	# ✅ Follow giipapi_rules.md: text contains parameter names only!
 	local text="KVSPut kType kKey kFactor"
@@ -102,10 +178,10 @@ save_execution_log() {
 	# echo "[KVS-Debug] jsondata='${jsondata}'" >&2
 	
 	# Build POST data with proper URL encoding for each parameter
-	# wget --post-data does NOT automatically encode values, so we must encode jsondata
-	local encoded_text=$(printf '%s' "$text" | jq -sRr '@uri')
-	local encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri')
-	local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
+	# Using safe_url_encode to validate input before jq (Added 2026-02-06)
+	local encoded_text=$(safe_url_encode "$text" "text")
+	local encoded_token=$(safe_url_encode "$sk" "token")
+	local encoded_jsondata=$(safe_url_encode "$jsondata" "jsondata")
 	
 	local post_data="text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}"
 	
@@ -161,11 +237,11 @@ save_execution_log() {
 	local api_response=$(cat "$response_file" 2>/dev/null)
 	
 	# Parse RstVal from response
-	local rst_val=$(echo "$api_response" | jq -r '.data[0].RstVal // .RstVal // "unknown"' 2>/dev/null)
+	local rst_val=$(echo "$api_response" | head -c 2000 | jq -r '.data[0].RstVal // .RstVal // "unknown"' 2>/dev/null)
 	
 	# If jq fails or RstVal not found, try grep
 	if [ -z "$rst_val" ] || [ "$rst_val" = "unknown" ] || [ "$rst_val" = "null" ]; then
-		rst_val=$(echo "$api_response" | grep -o '"RstVal"\s*:\s*"[^"]*"' 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
+		rst_val=$(echo "$api_response" | grep -oE '"RstVal"[[:space:]]*:[[:space:]]*([0-9]+|"[^"]*")' 2>/dev/null | head -1 | grep -oE '([0-9]+|"[^"]*")$' | tr -d '"')
 	fi
 	
 	# Check if API call was successful (RstVal = 200)
@@ -266,7 +342,6 @@ kvs_put() {
 	
 	# Build API URL
 	local kvs_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && kvs_url="${kvs_url}?code=${apiaddrcode}"
 	
 	# ✅ Follow giipapi_rules.md
 	local text="KVSPut kType kKey kFactor"
@@ -274,10 +349,10 @@ kvs_put() {
 	# No escaping - data embedded directly to preserve exact format
 	local jsondata="{\"kType\":\"${ktype}\",\"kKey\":\"${kkey}\",\"kFactor\":\"${kfactor}\",\"kValue\":${kvalue_json}}"
 	
-	# URL-encode all POST parameters (wget --post-data does NOT auto-encode)
-	local encoded_text=$(printf '%s' "$text" | jq -sRr '@uri')
-	local encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri')
-	local encoded_jsondata=$(printf '%s' "$jsondata" | jq -sRr '@uri')
+	# URL-encode all POST parameters with validation (Added 2026-02-06)
+	local encoded_text=$(safe_url_encode "$text" "text")
+	local encoded_token=$(safe_url_encode "$sk" "token")
+	local encoded_jsondata=$(safe_url_encode "$jsondata" "jsondata")
 	
 	# Call API with response capture for debugging
 	# Use specific naming pattern for easier cleanup: kvs_put_response_<timestamp>
@@ -312,11 +387,11 @@ kvs_put() {
 	local api_response=$(cat "$response_file" 2>/dev/null)
 	
 	# Parse RstVal from response
-	local rst_val=$(echo "$api_response" | jq -r '.data[0].RstVal // .RstVal // "unknown"' 2>/dev/null)
+	local rst_val=$(echo "$api_response" | head -c 2000 | jq -r '.data[0].RstVal // .RstVal // "unknown"' 2>/dev/null)
 	
 	# If jq fails or RstVal not found, try grep
 	if [ -z "$rst_val" ] || [ "$rst_val" = "unknown" ] || [ "$rst_val" = "null" ]; then
-		rst_val=$(echo "$api_response" | grep -o '"RstVal"\s*:\s*"[^"]*"' 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
+		rst_val=$(echo "$api_response" | grep -oE '"RstVal"[[:space:]]*:[[:space:]]*([0-9]+|"[^"]*")' 2>/dev/null | head -1 | grep -oE '([0-9]+|"[^"]*")$' | tr -d '"')
 	fi
 	
 	# Check if API call was successful (RstVal = 200)

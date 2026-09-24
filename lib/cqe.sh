@@ -29,6 +29,17 @@ queue_get() {
 		return 1
 	fi
 	
+	# lssn=0 가드: pApiCQEQueueGetbySK 는 lssn=0 이면 서버 등록(pLSvrInfoInputSimplebySK)을
+	# 수행해 tLSvr 에 행을 INSERT 한다. 큐 조회 경로에서 lssn=0 으로 호출하면 매 실행
+	# 행이 늘어나므로 거부한다. 등록은 giipAgent3.sh → lib/lssn_register.sh 만 담당한다.
+	if ! [[ "$lssn" =~ ^[0-9]+$ ]] || [ "$lssn" -eq 0 ]; then
+		echo "[queue_get] ⚠️  WARN: refusing CQEQueueGet with lssn='${lssn}' (unregistered server; would create a new tLSvr row)" >&2
+		if command -v log_message >/dev/null 2>&1; then
+			log_message "WARN" "queue_get skipped: lssn='${lssn}' is not a registered lssn"
+		fi
+		return 1
+	fi
+	
 	# Validate required global variables
 	if [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
 		echo "[queue_get] ⚠️  Missing required variables (sk, apiaddrv2)" >&2
@@ -37,11 +48,12 @@ queue_get() {
 	
 	# Build API URL
 	local api_url="${apiaddrv2}"
-	[ -n "$apiaddrcode" ] && api_url="${api_url}?code=${apiaddrcode}"
 	
 	# ✅ Follow giipapi_rules.md: text contains parameter names only!
+	# giip #2928: Use jq for proper JSON serialization to prevent malformed JSON on special characters
 	local text="CQEQueueGet lssn hostname os op"
-	local jsondata="{\"lssn\":${lssn},\"hostname\":\"${hostname}\",\"os\":\"${os}\",\"op\":\"op\"}"
+	local jsondata
+	jsondata=$(jq -n --argjson lssn "$lssn" --arg hostname "$hostname" --arg os "$os" --arg op "op" '{lssn: $lssn, hostname: $hostname, os: $os, op: $op}')
 	
 	local temp_response="/tmp/queue_response_$$.json"
 	
@@ -62,17 +74,26 @@ queue_get() {
 	fi
 	
 	# Call CQEQueueGet API with URL-encoded parameters
+	# giip #1209: lssn 71174(cctrank03) observed hanging with no log output after the
+	# DEBUG line above, for multiple consecutive cron cycles (cron.log, 07:45~09:45).
+	# This curl call previously had no timeout, so an unresponsive/slow API could make
+	# it block indefinitely, matching that symptom exactly. --connect-timeout/--max-time
+	# values match the existing convention in lib/mssql.sh.
 	curl -s -X POST "$api_url" \
 		-d "text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
 		-H "Content-Type: application/x-www-form-urlencoded" \
-		--insecure -o "$temp_response" 2>&1
-	
+		--insecure --connect-timeout 10 --max-time 30 -o "$temp_response" 2>&1
+
 	local curl_exit_code=$?
-	
+
 	# Check if response file was created and has content
 	if [ ! -s "$temp_response" ]; then
 		rm -f "$temp_response"
-		echo "[queue_get] ❌ API call failed or no response (curl exit code: $curl_exit_code)" >&2
+		if [ "$curl_exit_code" -eq 28 ]; then
+			echo "[queue_get] ❌ API call timed out (curl exit code: 28, connect-timeout=10s/max-time=30s)" >&2
+		else
+			echo "[queue_get] ❌ API call failed or no response (curl exit code: $curl_exit_code)" >&2
+		fi
 		
 		# Log to ErrorLogs DB
 		if command -v log_error >/dev/null 2>&1; then
@@ -119,14 +140,21 @@ queue_get() {
 		return 1
 	fi
 	
-	# Extract script from JSON response
-	# Try multiple methods to ensure robust parsing
-	
-	# Method 1: Using jq (most reliable)
+	# Extract script and type from JSON response
 	if command -v jq >/dev/null 2>&1; then
 		local script=$(jq -r '.data[0].ms_body // .ms_body // empty' "$temp_response" 2>/dev/null)
+		local script_type=$(jq -r '.data[0].script_type // .script_type // "sh"' "$temp_response" 2>/dev/null)
+		# giip-967: capture mslsn/mssn too so execute_script() can tag the
+		# resulting KVS script_execution log with which CQE schedule this was
+		local resp_mslsn=$(jq -r '.data[0].mslsn // .mslsn // empty' "$temp_response" 2>/dev/null)
+		local resp_mssn=$(jq -r '.data[0].mssn // .mssn // empty' "$temp_response" 2>/dev/null)
 		if [ -n "$script" ] && [ "$script" != "null" ]; then
 			echo "$script" > "$output_file"
+			# Save script type to a sidecar file or return it
+			echo "$script_type" > "${output_file}.type"
+			# giip-967: sidecar files for mslsn/mssn (mirrors .type pattern above)
+			[ -n "$resp_mslsn" ] && [ "$resp_mslsn" != "null" ] && echo "$resp_mslsn" > "${output_file}.mslsn"
+			[ -n "$resp_mssn" ] && [ "$resp_mssn" != "null" ] && echo "$resp_mssn" > "${output_file}.mssn"
 			rm -f "$temp_response"
 			return 0
 		fi

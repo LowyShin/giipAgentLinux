@@ -92,13 +92,6 @@ else
   exit 3
 fi
 
-# Add function code if available (apiaddrcode > FunctionCode, prefer v2)
-if [[ -n "${KVS_CONFIG[apiaddrcode]}" ]]; then
-  ENDPOINT+="?code=${KVS_CONFIG[apiaddrcode]}"
-elif [[ -n "${KVS_CONFIG[FunctionCode]}" ]]; then
-  ENDPOINT+="?code=${KVS_CONFIG[FunctionCode]}"
-fi
-
 # UserToken (sk for SK-based auth)
 if [[ -z "${KVS_CONFIG[UserToken]}" && -z "${KVS_CONFIG[sk]}" ]]; then
   echo "[ERROR] Missing config: UserToken or sk" >&2
@@ -197,14 +190,26 @@ if [ $rc -ne 0 ]; then
   exit $rc
 fi
 
-# Check response status (simplified)
-if echo "$resp" | jq -e '.data[0].RstVal == 200' >/dev/null 2>&1; then
-  echo "[SUCCESS] KVS uploaded successfully" >&2
-elif echo "$resp" | jq -e '.data[0].RstVal' >/dev/null 2>&1; then
-  RSTVAL=$(echo "$resp" | jq -r '.data[0].RstVal')
-  RSTMSG=$(echo "$resp" | jq -r '.data[0].RstMsg')
-  echo "[ERROR] KVS upload failed: RstVal=$RSTVAL, Msg=$RSTMSG" >&2
-  exit 1
+# Check response status (simplified).
+# Endpoints have been observed to return RstVal either nested under data[0]
+# (e.g. AgentAutoRegister-wrapped calls) or at the JSON root (plain KVSPut).
+# Try data[0] first, then fall back to root before giving up.
+RSTVAL_PATH=""
+if echo "$resp" | jq -e '.data[0].RstVal' >/dev/null 2>&1; then
+  RSTVAL_PATH='.data[0]'
+elif echo "$resp" | jq -e '.RstVal' >/dev/null 2>&1; then
+  RSTVAL_PATH='.'
+fi
+
+if [ -n "$RSTVAL_PATH" ]; then
+  RSTVAL=$(echo "$resp" | jq -r "${RSTVAL_PATH}.RstVal")
+  RSTMSG=$(echo "$resp" | jq -r "${RSTVAL_PATH}.RstMsg")
+  if [ "$RSTVAL" = "200" ]; then
+    echo "[SUCCESS] KVS uploaded successfully" >&2
+  else
+    echo "[ERROR] KVS upload failed: RstVal=$RSTVAL, Msg=$RSTMSG" >&2
+    exit 1
+  fi
 else
   echo "[ERROR] Unexpected response format" >&2
   echo "$resp" >&2

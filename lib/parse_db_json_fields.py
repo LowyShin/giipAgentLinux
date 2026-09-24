@@ -23,7 +23,8 @@ try:
         obj.get('http_check_url', ''),
         obj.get('http_check_method', 'GET'),
         str(obj.get('http_check_timeout', 10)),
-        obj.get('http_check_expected_code', '200')
+        obj.get('http_check_expected_code', '200'),
+        str(obj.get('req_user_list', 0))
     ]
     
     print('\t'.join(fields))
