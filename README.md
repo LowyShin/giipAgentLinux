@@ -63,6 +63,22 @@ sudo ./admin/giipcronreg.sh
 
 **⚠️ 중요:** `giipAgent.cnf`는 **giipAgentLinux 레포지토리의 부모 디렉토리**에 위치해야 합니다!
 
+#### lssn 자동 등록 (`lssn="0"`)
+
+`lssn` 을 모르면 `lssn="0"` 그대로 두고 실행하면 됩니다(`lssn=0`, `lssn='0'` 도 동일).
+
+- `giipAgent3.sh` 첫 실행 시 서버를 자동 등록하고, 발급된 lssn 을 `giipAgent.cnf` 의
+  `lssn=` 줄에 기록합니다. 다음 실행부터는 그 lssn 을 사용하므로 재등록되지 않습니다.
+- 기록은 파일을 교체(rename)하지 않고 **내용만 덮어써** inode 를 유지합니다. 따라서 Docker 에서
+  `-v /host/giipAgent.cnf:/path/giipAgent.cnf` 처럼 **cnf 를 단일 파일로 bind mount 해도 동작**합니다.
+- cnf 가 **읽기전용**(`:ro` mount 등)이면 같은 디렉토리의 **`giipAgent.lssn`** 사이드카 파일에 lssn 을
+  기록하고, 이후 실행은 cnf 의 lssn 이 0 이면 사이드카 값을 사용합니다. 이때 로그에 ERROR 로
+  "cnf 에 `lssn="<번호>"` 를 넣어 달라"는 안내가 남습니다 — 가능하면 cnf 에 옮겨 적으세요.
+  (cnf 에 0 이 아닌 lssn 이 있으면 항상 cnf 가 우선합니다.)
+- 등록에 실패하면(API 오류, 응답에 lssn 없음) 응답 앞부분을 로그에 남기고 **수집 모드를 실행하지 않고
+  종료(exit 1)** 합니다. 다음 cron 주기에 다시 등록을 시도합니다.
+- 컨테이너를 새로 만들 때마다 lssn 을 유지하려면 cnf(또는 cnf 가 있는 디렉토리)를 볼륨으로 유지하세요.
+
 **설정 파일 위치 구조:**
 ```
 /path/to/installation/              ← 설치 위치 (어디든 가능)

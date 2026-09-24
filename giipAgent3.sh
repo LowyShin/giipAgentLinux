@@ -331,41 +331,27 @@ check_mssql_tools
 # Handle Server Registration (LSSN=0)
 # ============================================================================
 
-if [ "${lssn}" = "0" ]; then
+# 발급 lssn 은 persist_lssn()(lib/common.sh)이 cnf 에 기록한다(inode 유지, bind mount 대응).
+# cnf 가 읽기전용이면 giipAgent.lssn 사이드카에 기록하고 load_config 가 그것을 읽는다.
+# 등록에 실패하면 lssn=0 상태로 net3d/gateway/normal 모드에 진입하지 않고 종료한다 —
+# 진입하면 normal 모드의 CQEQueueGet(lssn=0)이 tLSvr 행을 또 만든다 (giip 2928 후속).
+if [ -z "${lssn}" ] || [ "${lssn}" = "0" ]; then
 	log_message "INFO" "Server not registered, registering now..."
 	
-	tmpFileName="giipTmpScript.sh"
-	lwAPIURL=$(build_api_url "${apiaddrv2}")
-
-	# Build JSON data (matching new API rules: text=parameter names, jsondata=actual values)
-	# giip #2928: Use jq for proper JSON serialization to prevent malformed JSON on special characters
-	local jsondata
-	jsondata=$(jq -n --arg hostname "$hn" --arg os "$os" --arg op "op" '{lssn: 0, hostname: $hostname, os: $os, op: $op}')
-	
-	curl -s -X POST "${lwAPIURL}" \
-		-d "text=CQEQueueGet&token=${sk}&jsondata=${jsondata}" \
-		-H "Content-Type: application/x-www-form-urlencoded" \
-		--insecure -o $tmpFileName 2>&1
-	
-	lssn=$(cat ${tmpFileName})
-	
-	# SAFER CONFIG UPDATE: Use sed -i for atomic/safe edit instead of overwriting whole file
-	# Check if lssn is valid number before updating
-	if [[ "$lssn" =~ ^[0-9]+$ ]] && [ "$lssn" -ne 0 ]; then
-		# Use specific sed pattern to only replace the lssn="0" part
-		sed -i "s|lssn=\"0\"|lssn=\"${lssn}\"|g" "${CONFIG_FILE}"
-		if [ $? -eq 0 ]; then
-			log_message "INFO" "Successfully updated configuration with LSSN: ${lssn}"
-		else
-			log_message "ERROR" "Failed to update configuration file!"
-		fi
+	if [ -f "${LIB_DIR}/lssn_register.sh" ]; then
+		. "${LIB_DIR}/lssn_register.sh"
 	else
-		log_message "ERROR" "Invalid LSSN received from API: ${lssn}"
+		log_message "ERROR" "lssn_register.sh not found in ${LIB_DIR}; cannot register server"
+		exit 1
 	fi
-
-	rm -f $tmpFileName
 	
-	log_message "INFO" "Server registered with LSSN: ${lssn}"
+	if register_server "${CONFIG_FILE}" "${hn}" "${os}"; then
+		export lssn
+		log_message "INFO" "Server registered with LSSN: ${lssn}"
+	else
+		log_message "ERROR" "Server registration failed; exiting without running collection modes (lssn=0)"
+		exit 1
+	fi
 fi
 
 # ============================================================================

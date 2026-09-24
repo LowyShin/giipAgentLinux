@@ -110,6 +110,14 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 
+# lssn=0 가드: 미등록 서버로 normal 모드를 돌리면 queue_get → CQEQueueGet(lssn=0) 이
+# tLSvr 에 새 행을 만든다. 등록은 giipAgent3.sh 가 담당하며, 등록 결과는 cnf 또는
+# 사이드카(giipAgent.lssn)에 남아 load_config 가 읽는다.
+if ! [[ "${lssn}" =~ ^[0-9]+$ ]] || [ "${lssn}" -eq 0 ]; then
+	echo "[normal_mode.sh] ⚠️  WARN: lssn='${lssn}' is not registered; skipping normal mode (run giipAgent3.sh to self-register)" >&2
+	exit 0
+fi
+
 # ============================================================================
 # Version and Metadata
 # ============================================================================
