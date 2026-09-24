@@ -46,11 +46,13 @@ perform_check_mysql() {
 				performance_json="$perf_data"
 			fi
 			
-			# Collect slow queries if available
-			local slow_queries_json=$(timeout 5s mysql -h "$db_host" -P "$db_port" -u "$db_user" -D "$db_database" -e "SELECT query, exec_count, avg_time FROM mysql.slow_log LIMIT 10;" 2>/dev/null | tail -n +2 || echo "")
-			if [ -n "$slow_queries_json" ]; then
-				save_dpa_data "$db_name" "$slow_queries_json"
-			fi
+			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   🔍 Collecting MySQL DPA data..." >> $LogFileName
+			slow_queries_json=$(collect_mysql_dpa "$db_host" "$db_port" "$db_user" "$db_password" "$db_database" 50)
+			save_dpa_data "$db_name" "$slow_queries_json"
+			
+			echo "[$(date '+%Y%m%d%H%M%S')] [Gateway]   🕸️ Collecting MySQL Net3D sessions..." >> $LogFileName
+			local net3d_json=$(collect_net3d_mysql "$db_host" "$db_port" "$db_user" "$db_password" "$db_database")
+			[[ -n "$net3d_json" && "$net3d_json" != "[]" ]] && kvs_put "database" "$mdb_id" "db_connections" "$net3d_json"
 		elif [ $mysql_exit_code -eq 124 ]; then
 			check_status="timeout"
 			check_message="Connection timeout (${timeout_seconds}s)"

@@ -113,7 +113,6 @@ load_config() {
     
     # v2 API 우선 사용
     APIADDRV2=$(grep -E "^apiaddrv2=" "$CNFFILE" 2>/dev/null | cut -d'"' -f2)
-    APIADDRCODE=$(grep -E "^apiaddrcode=" "$CNFFILE" 2>/dev/null | cut -d'"' -f2)
     
     # v1 API (fallback)
     APIADDR=$(grep -E "^apiaddr=" "$CNFFILE" 2>/dev/null | cut -d'"' -f2)
@@ -124,12 +123,10 @@ load_config() {
     # 기본값 설정
     if [ -n "$APIADDRV2" ]; then
         APIADDR="$APIADDRV2"
-        APICODE="$APIADDRCODE"
         API_VERSION="v2"
         log "✓ Using API v2: $APIADDR"
     else
         APIADDR=${APIADDR:-https://giipasp.azurewebsites.net}
-        APICODE=""
         API_VERSION="v1"
         log "⚠️  Using API v1 (legacy): $APIADDR"
     fi
@@ -138,6 +135,14 @@ load_config() {
     
     if [ -z "$SK" ] || [ -z "$LSSN" ]; then
         log_error "Invalid config: sk or lssn not found"
+        exit 1
+    fi
+    
+    # lssn=0 가드: CQEQueueGet 은 lssn=0 이면 서버를 새로 등록(tLSvr INSERT)한다.
+    # 이 데몬이 루프에서 lssn=0 으로 호출하면 행이 계속 늘어나므로 거부한다.
+    # 등록은 giipAgent3.sh(lib/lssn_register.sh)로 먼저 수행할 것.
+    if ! [[ "$LSSN" =~ ^[0-9]+$ ]] || [ "$LSSN" -eq 0 ]; then
+        log_error "lssn='$LSSN' is not registered. Run giipAgent3.sh once to self-register (or set lssn in $CNFFILE)."
         exit 1
     fi
     
@@ -217,8 +222,8 @@ fetch_queue() {
     log "DEBUG: json_data=$json_data"
     
     if [ "$API_VERSION" = "v2" ]; then
-        # v2 API: POST with code parameter
-        response=$(curl -sS -X POST "$url?code=$APICODE" \
+        # v2 API: POST
+        response=$(curl -sS -X POST "$url" \
             -H 'Content-Type: application/x-www-form-urlencoded' \
             --data-urlencode 'text=CQEQueueGet' \
             --data-urlencode "sk=$SK" \

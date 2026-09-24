@@ -29,7 +29,7 @@ temp_file="/tmp/test_managed_db_$$.json"
 wget -O "$temp_file" \
     --post-data="text=GatewayManagedDatabaseList lssn&token=${sk}&jsondata={\"lssn\":${lssn}}" \
     --header="Content-Type: application/x-www-form-urlencoded" \
-    "${apiaddrv2}?code=${apiaddrcode}" \
+    "${apiaddrv2}" \
     --no-check-certificate -q 2>&1
 
 if [ -f "$temp_file" ]; then

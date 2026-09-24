@@ -20,7 +20,6 @@
 #   {{LSSN}} - Server LSSN
 #   {{APIADDR}} - API v1 Address
 #   {{APIADDRV2}} - API v2 Address
-#   {{APIADDRCODE}} - Function Code
 #
 
 set -e
@@ -93,7 +92,6 @@ lssn={{LSSN}}
 # API Endpoints
 apiaddr="{{APIADDR}}"
 apiaddrv2="{{APIADDRV2}}"
-apiaddrcode="{{APIADDRCODE}}"
 
 # Gateway Settings
 giipagentdelay="300"

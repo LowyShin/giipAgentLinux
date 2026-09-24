@@ -91,9 +91,6 @@ echo ""
 
 # New API test (POST request)
 new_url="${apiaddrv2}"
-if [ -n "$apiaddrcode" ]; then
-    new_url="${new_url}?code=${apiaddrcode}"
-fi
 
 new_output="/tmp/test_cqe_new_$$.txt"
 new_text="CQEQueueGet ${lssn} ${hn} ${os} op"

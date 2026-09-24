@@ -6,29 +6,13 @@
 #   MS SQL Server의 세션, 부하, 느린 쿼리 정보를 수집하여 KVS에 업로드
 #   Windows의 dpa-put-mssql.ps1과 동일한 기능을 Linux에서 제공
 #
-# Version: 1.0.0
+# Version: 1.1.0
 # Author: GIIP Team
-# Last Updated: 2025-10-29
+# Last Updated: 2026-03-13
 #
 # Usage:
 #   bash dpa-put-mssql.sh
 #   bash dpa-put-mssql.sh -h sqlserver.example.com -u user -p password -d database
-#
-# Cron Example:
-#   */5 * * * * /home/giip/giipAgentLinux/giipscripts/dpa-put-mssql.sh >> /var/log/giip/dpa_put_mssql.log 2>&1
-#
-# Requirements:
-#   - sqlcmd (Microsoft SQL Server command-line tool)
-#   - jq (for JSON processing)
-#   - curl (for API calls)
-#
-# Install sqlcmd:
-#   Ubuntu/Debian:
-#     curl https://packages.microsoft.com/keys/microsoft.asc | sudo apt-key add -
-#     curl https://packages.microsoft.com/config/ubuntu/20.04/prod.list | sudo tee /etc/apt/sources.list.d/msprod.list
-#     sudo apt-get update
-#     sudo apt-get install mssql-tools unixodbc-dev
-#     echo 'export PATH="$PATH:/opt/mssql-tools/bin"' >> ~/.bashrc
 #===============================================================================
 
 set -e
@@ -49,7 +33,7 @@ MSSQL_PASSWORD=""
 MSSQL_DATABASE=""
 K_TYPE="lssn"
 K_KEY=""
-K_FACTOR="sqlnetinv"
+K_FACTOR="db_connections"
 KVS_ENDPOINT=""
 USER_TOKEN=""
 FUNCTION_CODE=""
@@ -100,10 +84,8 @@ load_config() {
             MSSQLPassword) MSSQL_PASSWORD="$value" ;;
             MSSQLDatabase) MSSQL_DATABASE="$value" ;;
             Endpoint) KVS_ENDPOINT="$value" ;;
-            FunctionCode) FUNCTION_CODE="$value" ;;
             UserToken) USER_TOKEN="$value" ;;
             apiaddrv2) KVS_ENDPOINT="$value" ;;
-            apiaddrcode) FUNCTION_CODE="$value" ;;
             sk) USER_TOKEN="$value" ;;
             lssn) K_KEY="$value" ;;
             KType) K_TYPE="$value" ;;
@@ -228,12 +210,14 @@ SELECT
     ISNULL(r.logical_reads, 0) as logical_reads,
     CONVERT(varchar, r.start_time, 120) as start_time,
     ISNULL(r.command, 'unknown') as command,
-    ISNULL(t.text, '') as query_text
+    ISNULL(t.text, '') as query_text,
+    CONVERT(VARCHAR(64), r.query_hash, 1) as query_hash,
+    CONVERT(VARCHAR(130), r.sql_handle, 1) as sql_handle,
+    CONVERT(VARCHAR(130), r.plan_handle, 1) as plan_handle
 FROM sys.dm_exec_requests r
 JOIN sys.dm_exec_sessions s ON r.session_id = s.session_id
 CROSS APPLY sys.dm_exec_sql_text(r.sql_handle) t
 WHERE s.is_user_process = 1
-  AND r.cpu_time > 50000
 ORDER BY r.cpu_time DESC;
 ")
 
@@ -250,7 +234,7 @@ ROW_COUNT=$(echo "$QUERY_DATA" | wc -l)
 log "[DIAG] Query rows fetched: $ROW_COUNT"
 
 if [ $ROW_COUNT -eq 0 ]; then
-    log "No slow queries detected (>50 seconds)"
+    log "No active queries detected"
     exit 0
 fi
 
@@ -265,7 +249,7 @@ COLLECTED_AT=$(date -u '+%Y-%m-%dT%H:%M:%S')
 # 호스트별 그룹화 및 JSON 생성
 JSON_HOSTS="[]"
 
-while IFS=$'\t' read -r host_name login_name status cpu_time reads writes logical_reads start_time command query_text; do
+while IFS=$'\t' read -r host_name login_name status cpu_time reads writes logical_reads start_time command query_text query_hash sql_handle plan_handle; do
     # 빈 값 필터링
     if [ -z "$host_name" ]; then
         continue
@@ -282,6 +266,9 @@ while IFS=$'\t' read -r host_name login_name status cpu_time reads writes logica
         --arg start_time "$start_time" \
         --arg command "$command" \
         --arg query_text "$query_text" \
+        --arg query_hash "$query_hash" \
+        --arg sql_handle "$sql_handle" \
+        --arg plan_handle "$plan_handle" \
         '{
             login_name: $login_name,
             status: $status,
@@ -291,7 +278,10 @@ while IFS=$'\t' read -r host_name login_name status cpu_time reads writes logica
             logical_reads: $logical_reads,
             start_time: $start_time,
             command: $command,
-            query_text: $query_text
+            query_text: $query_text,
+            query_hash: $query_hash,
+            sql_handle: $sql_handle,
+            plan_handle: $plan_handle
         }')
     
     # 호스트 찾기 또는 추가
@@ -360,9 +350,6 @@ POST_DATA+="&jsondata=$(printf '%s' "$KVSP_JSON" | jq -sRr @uri)"
 
 # API 호출
 ENDPOINT_URL="$KVS_ENDPOINT"
-if [ -n "$FUNCTION_CODE" ]; then
-    ENDPOINT_URL="${ENDPOINT_URL}?code=${FUNCTION_CODE}"
-fi
 
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$ENDPOINT_URL" \
     -H "Content-Type: application/x-www-form-urlencoded" \

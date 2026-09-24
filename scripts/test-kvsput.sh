@@ -43,14 +43,6 @@ else
     echo "⚠ WARNING: apiaddrv2 not found in config"
 fi
 
-if grep -q "^apiaddrcode=" "$CONFIG_FILE"; then
-    CODE=$(grep "^apiaddrcode=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'")
-    CODE_PREVIEW="${CODE:0:20}..."
-    echo "✓ apiaddrcode: $CODE_PREVIEW"
-else
-    echo "⚠ WARNING: apiaddrcode not found in config"
-fi
-
 if grep -q "^sk=" "$CONFIG_FILE"; then
     SK=$(grep "^sk=" "$CONFIG_FILE" | cut -d= -f2 | tr -d '"' | tr -d "'")
     SK_PREVIEW="${SK:0:15}..."
@@ -148,7 +140,7 @@ else
     echo ""
     echo "Troubleshooting:"
     echo "1. Check config file:"
-    echo "   cat $CONFIG_FILE | grep -E 'apiaddrv2|apiaddrcode|sk'"
+    echo "   cat $CONFIG_FILE | grep -E 'apiaddrv2|sk'"
     echo ""
     echo "2. Test network connectivity:"
     echo "   curl -I https://giipfaw.azurewebsites.net"

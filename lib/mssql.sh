@@ -54,7 +54,7 @@ collect_mssql_data() {
     fi
     
     # 3. Fetch Registered Databases from API
-    local api_url=$(build_api_url "${apiaddrv2}" "${apiaddrcode}")
+    local api_url=$(build_api_url "${apiaddrv2}")
     local mdb_list_file="/tmp/giip_mssql_list_${lssn}.json"
     local mdb_targets_file="/tmp/giip_mssql_targets_${lssn}.txt"
     
@@ -163,7 +163,9 @@ except Exception as e:
                         r.logical_reads,
                         r.start_time,
                         r.command,
-                        t.text as query_text
+                        t.text as query_text,
+                        CONVERT(VARCHAR(64), r.query_hash, 1) as query_hash,
+                        CONVERT(VARCHAR(130), r.sql_handle, 1) as sql_handle
                     FROM sys.dm_exec_requests r
                     JOIN sys.dm_exec_sessions s2 ON r.session_id = s2.session_id
                     OUTER APPLY sys.dm_exec_sql_text(r.sql_handle) t

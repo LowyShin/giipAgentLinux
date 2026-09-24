@@ -7,7 +7,6 @@ source "${SCRIPT_DIR}/../giipAgent.cnf"
 
 echo "=== KVS API Test ===" 
 echo "API: $apiaddrv2"
-echo "Code: ${apiaddrcode:0:20}..."
 echo "SK: ${sk:0:20}..."
 echo "LSSN: $lssn"
 echo ""
@@ -38,7 +37,7 @@ echo "jsondata: $jsondata"
 echo ""
 
 # Build URL
-url="${apiaddrv2}?code=${apiaddrcode}"
+url="${apiaddrv2}"
 
 echo "=== Sending Request ===" 
 curl -v -X POST "$url" \
