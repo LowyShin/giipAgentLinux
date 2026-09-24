@@ -463,15 +463,27 @@ _save_server_info() {
 EOF
 )
     
-    # API 호출 시뮬레이션 (실제로는 KVS에 저장 또는 API 호출)
-    # echo "[Discovery] 📊 Server info: hostname=$hostname, os=$os, cores=$cpu_cores, mem=${memory_gb}GB, disk=${disk_gb}GB" >&2
-    
-    _log_to_kvs "SERVER_INFO_API_CALL" "$lssn" "RUNNING" "Calling server info API with: $api_json"
-    
-    # TODO: 실제 API 호출 또는 KVS 저장
-    # _api_call "ServerInfoUpdate" "$api_json"
-    
-    _log_to_kvs "SERVER_INFO_API_CALL" "$lssn" "SUCCESS" "Server info API call completed (TODO: actual implementation)"
+    _log_to_kvs "SERVER_INFO_API_CALL" "$lssn" "RUNNING" "Calling LSvrServerInfoUpdate API"
+
+    # Build API URL and call the SP (giip #2987)
+    local api_url="${apiaddrv2}"
+    local text="LSvrServerInfoUpdate"
+    local encoded_text=$(printf '%s' "$text" | jq -sRr '@uri' 2>/dev/null || echo "$text")
+    local encoded_token=$(printf '%s' "$sk" | jq -sRr '@uri' 2>/dev/null || echo "$sk")
+    local encoded_jsondata=$(printf '%s' "$api_json" | jq -sRr '@uri' 2>/dev/null || echo "$api_json")
+
+    local api_response
+    api_response=$(curl -s -X POST "$api_url" \
+        -d "text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        --insecure --connect-timeout 10 --max-time 30 2>&1)
+    local curl_exit=$?
+
+    if [ $curl_exit -eq 0 ] && echo "$api_response" | grep -q '"RstVal"'; then
+        _log_to_kvs "SERVER_INFO_API_CALL" "$lssn" "SUCCESS" "API call succeeded: $api_response"
+    else
+        _log_to_kvs "SERVER_INFO_API_CALL" "$lssn" "ERROR" "API call failed (curl=$curl_exit): $api_response"
+    fi
     
     return 0
 }
