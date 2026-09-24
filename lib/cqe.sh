@@ -29,6 +29,17 @@ queue_get() {
 		return 1
 	fi
 	
+	# lssn=0 가드: pApiCQEQueueGetbySK 는 lssn=0 이면 서버 등록(pLSvrInfoInputSimplebySK)을
+	# 수행해 tLSvr 에 행을 INSERT 한다. 큐 조회 경로에서 lssn=0 으로 호출하면 매 실행
+	# 행이 늘어나므로 거부한다. 등록은 giipAgent3.sh → lib/lssn_register.sh 만 담당한다.
+	if ! [[ "$lssn" =~ ^[0-9]+$ ]] || [ "$lssn" -eq 0 ]; then
+		echo "[queue_get] ⚠️  WARN: refusing CQEQueueGet with lssn='${lssn}' (unregistered server; would create a new tLSvr row)" >&2
+		if command -v log_message >/dev/null 2>&1; then
+			log_message "WARN" "queue_get skipped: lssn='${lssn}' is not a registered lssn"
+		fi
+		return 1
+	fi
+	
 	# Validate required global variables
 	if [ -z "$sk" ] || [ -z "$apiaddrv2" ]; then
 		echo "[queue_get] ⚠️  Missing required variables (sk, apiaddrv2)" >&2

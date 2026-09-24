@@ -17,6 +17,10 @@
 sk="<your secret key>"
 
 # If you have lssn, put below.
+# lssn="0" (or 0 / '0') = auto-register on first run of giipAgent3.sh:
+#   the issued lssn is written back into this file (in place, inode kept, so a
+#   Docker single-file bind mount works). If this file is read-only, the lssn is
+#   written to giipAgent.lssn in the same directory and used from there.
 lssn="0"
 
 # Agent execution interval (seconds)

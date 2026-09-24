@@ -29,6 +29,11 @@
 ### CQE 테스트
 - `test-cqe-queue.sh` - CQE 큐 테스트
 
+### lssn=0 자동등록 테스트
+- `test-lssn0-registration.sh` - 네트워크 없이(curl stub) lssn=0 자동등록을 검증:
+  cnf 의 lssn 줄 갱신(따옴표/공백/CRLF 변형), inode 유지, 읽기전용 cnf → 사이드카
+  `giipAgent.lssn` + load_config 반영, lssn=0 queue_get 차단, 잘못된 응답 시 cnf 불변.
+
 ### 데이터베이스 테스트
 - `test-managed-db-api.sh` - 관리 DB API 테스트
 - `test-managed-db-check.sh` - 관리 DB 체크 테스트

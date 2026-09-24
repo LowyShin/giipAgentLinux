@@ -138,6 +138,14 @@ load_config() {
         exit 1
     fi
     
+    # lssn=0 가드: CQEQueueGet 은 lssn=0 이면 서버를 새로 등록(tLSvr INSERT)한다.
+    # 이 데몬이 루프에서 lssn=0 으로 호출하면 행이 계속 늘어나므로 거부한다.
+    # 등록은 giipAgent3.sh(lib/lssn_register.sh)로 먼저 수행할 것.
+    if ! [[ "$LSSN" =~ ^[0-9]+$ ]] || [ "$LSSN" -eq 0 ]; then
+        log_error "lssn='$LSSN' is not registered. Run giipAgent3.sh once to self-register (or set lssn in $CNFFILE)."
+        exit 1
+    fi
+    
     log "✓ Config loaded: lssn=$LSSN, api=$APIADDR (${API_VERSION}), delay=${DELAY}s"
 }
 

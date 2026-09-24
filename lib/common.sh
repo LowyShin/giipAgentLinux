@@ -22,6 +22,24 @@ load_config() {
 	# Source configuration
 	. "$config_file"
 	
+	# lssn 정규화: CRLF 로 저장된 cnf 를 source 하면 값 끝에 \r 이 붙어
+	# [ "$lssn" = "0" ] 비교가 실패한다. 앞뒤 공백/CR 을 제거한다.
+	lssn="${lssn//$'\r'/}"
+	lssn="${lssn//[[:space:]]/}"
+	
+	# lssn 사이드카 (giipAgent.lssn): cnf 가 읽기전용(예: Docker :ro bind mount)이라
+	# 자동등록으로 발급된 lssn 을 cnf 에 쓰지 못했을 때 persist_lssn() 이 cnf 옆에 남긴다.
+	# cnf 의 lssn 이 0/빈값이고 사이드카에 양의 정수가 있으면 그것을 쓴다 — 이게 없으면
+	# 매 실행마다 재등록되어 tLSvr 행이 계속 늘어난다.
+	if [ -z "${lssn}" ] || [ "${lssn}" = "0" ]; then
+		local sidecar_lssn
+		sidecar_lssn=$(read_lssn_sidecar "$config_file")
+		if [ -n "$sidecar_lssn" ]; then
+			lssn="$sidecar_lssn"
+			echo "[load_config] ℹ️  cnf lssn is 0/empty; using lssn=${lssn} from sidecar $(lssn_sidecar_path "$config_file")" >&2
+		fi
+	fi
+	
 	# Set defaults if not defined
 	if [ "${giipagentdelay}" = "" ]; then
 		giipagentdelay="60"
@@ -53,6 +71,119 @@ load_config() {
 	export gateway_mode
 	
 	return 0
+}
+
+# ============================================================================
+# LSSN Persistence Functions (lssn=0 자동등록 결과 저장)
+# ============================================================================
+# 배경: lssn=0 으로 설치하면 첫 실행 시 CQEQueueGet 이 tLSvr 에 서버를 등록하고
+# 새 lssn 을 돌려준다. 그 값을 cnf 에 저장하지 못하면 다음 실행에서 또 등록되어
+# tLSvr 행이 무한히 늘어난다. 기존 `sed -i` 방식은
+#   - Docker 단일파일 bind mount 에서 rename 이 EBUSY 로 실패하고
+#   - 정확히 lssn="0" 만 매칭(lssn=0, lssn='0', CRLF 미매칭)하며
+#   - 아무것도 안 바뀌어도 exit 0 이라 성공으로 오인 로그를 남겼다.
+# 아래 함수들은 임시파일에 새 내용을 만든 뒤 `cat tmp > cnf` 로 덮어써 inode 를
+# 유지(bind mount 에서도 동작)하고, 다시 읽어 검증한다.
+
+# Function: Path of the lssn sidecar file (same directory as the cnf)
+# Usage: lssn_sidecar_path "$config_file"
+lssn_sidecar_path() {
+	local config_file="$1"
+	echo "$(dirname "$config_file")/giipAgent.lssn"
+}
+
+# Function: Read lssn value from a cnf file without sourcing it
+# Accepts lssn=N, lssn="N", lssn='N', surrounding spaces, CRLF. Last match wins
+# (same as shell source semantics).
+# Usage: read_lssn_from_file "$config_file"   → echoes value (may be empty)
+read_lssn_from_file() {
+	local config_file="$1"
+	[ -f "$config_file" ] || return 1
+	grep -E '^[[:space:]]*lssn[[:space:]]*=' "$config_file" 2>/dev/null | tail -1 \
+		| tr -d '\r' \
+		| sed -e 's/^[[:space:]]*lssn[[:space:]]*=[[:space:]]*//' -e 's/[[:space:]]#.*$//' -e 's/[[:space:]]*$//' \
+		| tr -d "\"'"
+}
+
+# Function: Read a positive integer lssn from the sidecar (empty if absent/invalid)
+# Usage: read_lssn_sidecar "$config_file"
+read_lssn_sidecar() {
+	local sidecar
+	sidecar=$(lssn_sidecar_path "$1")
+	[ -f "$sidecar" ] || return 0
+	local v
+	v=$(head -1 "$sidecar" 2>/dev/null | tr -d "\r[:space:]\"'")
+	if [[ "$v" =~ ^[0-9]+$ ]] && [ "$v" -gt 0 ]; then
+		echo "$v"
+	fi
+}
+
+# Function: Overwrite a file's content in place (keeps inode; works on single-file
+# bind mounts where rename-based `sed -i` fails with EBUSY).
+# Separate function so tests can stub it to simulate a read-only cnf.
+# Usage: write_file_inplace "$src_tmp" "$dest"
+write_file_inplace() {
+	cat "$1" > "$2" 2>/dev/null
+}
+
+# Function: Persist a newly issued lssn
+# Usage: persist_lssn "$config_file" "$new_lssn"
+# Returns: 0 = cnf updated and verified
+#          2 = cnf not writable, lssn written to sidecar (giipAgent.lssn) instead
+#          1 = failed (invalid lssn, or neither cnf nor sidecar could be written)
+persist_lssn() {
+	local config_file="$1"
+	local new_lssn="$2"
+	
+	if ! [[ "$new_lssn" =~ ^[0-9]+$ ]] || [ "$new_lssn" -le 0 ]; then
+		log_message "ERROR" "persist_lssn: refusing invalid lssn '${new_lssn}'"
+		return 1
+	fi
+	if [ ! -f "$config_file" ]; then
+		log_message "ERROR" "persist_lssn: config file not found: ${config_file}"
+		return 1
+	fi
+	
+	local tmp_new tmp_bak
+	tmp_new=$(mktemp "${TMPDIR:-/tmp}/giipAgent_cnf_new.XXXXXX") || return 1
+	tmp_bak=$(mktemp "${TMPDIR:-/tmp}/giipAgent_cnf_bak.XXXXXX") || { rm -f "$tmp_new"; return 1; }
+	cp "$config_file" "$tmp_bak" 2>/dev/null
+	
+	# 모든 lssn= 줄을 lssn="N" 으로 치환 (따옴표/공백 무관, 줄 끝 CR 은 보존).
+	# lssn= 줄이 없으면 끝에 추가한다.
+	awk -v v="$new_lssn" '
+		{
+			line = $0; cr = ""
+			if (sub(/\r$/, "", line)) cr = "\r"
+			if (line ~ /^[[:space:]]*lssn[[:space:]]*=/) { print "lssn=\"" v "\"" cr; done = 1; next }
+			print $0
+		}
+		END { if (!done) print "lssn=\"" v "\"" }
+	' "$config_file" > "$tmp_new"
+	
+	local rc=1
+	if [ -s "$tmp_new" ] && write_file_inplace "$tmp_new" "$config_file" \
+		&& [ "$(read_lssn_from_file "$config_file")" = "$new_lssn" ]; then
+		log_message "INFO" "Configuration updated with LSSN: ${new_lssn} (${config_file})"
+		rc=0
+	else
+		# 부분 기록 등으로 원본이 바뀌었으면 백업으로 복구 시도 (sk 등 다른 설정 보호)
+		if [ -s "$tmp_bak" ] && ! cmp -s "$tmp_bak" "$config_file"; then
+			write_file_inplace "$tmp_bak" "$config_file"
+		fi
+		local sidecar
+		sidecar=$(lssn_sidecar_path "$config_file")
+		if printf '%s\n' "$new_lssn" > "$sidecar" 2>/dev/null && [ "$(read_lssn_sidecar "$config_file")" = "$new_lssn" ]; then
+			log_message "ERROR" "Cannot write ${config_file} (read-only?). LSSN ${new_lssn} saved to sidecar ${sidecar}. Please set lssn=\"${new_lssn}\" in the cnf."
+			rc=2
+		else
+			log_message "ERROR" "Cannot write ${config_file} nor sidecar ${sidecar}. Please set lssn=\"${new_lssn}\" in the cnf manually."
+			rc=1
+		fi
+	fi
+	
+	rm -f "$tmp_new" "$tmp_bak"
+	return $rc
 }
 
 # ============================================================================

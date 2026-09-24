@@ -9,6 +9,21 @@
     *   `scripts/` 내 스크립트에서 참조 시: `../../giipAgent.cnf`
     *   루트 스크립트(`giipAgent3.sh` 등)에서 참조 시: `../giipAgent.cnf`
 *   **환경 변수 우선순위**: `agent_env.json` 파일이 존재하는 경우 이를 우선적으로 참조하며, 이 역시 운영 환경에서는 상위 디렉토리에 위치할 수 있습니다.
+*   **lssn=0 자동등록 사양 (2026-09-24)**:
+    *   등록은 `giipAgent3.sh` → `lib/lssn_register.sh` `register_server()` **한 곳에서만** 한다.
+        `text=CQEQueueGet lssn hostname os op` + jq 로 만든 `jsondata`(`lssn:0`)를 `curl --data-urlencode` 로 보낸다.
+        `text` 에 파라미터명이 없으면 giipApiSk2 가 값을 SP 에 넘기지 않아 `@lsSn=0, @hostname=NULL` 로 실행된다.
+    *   응답은 giipApiSk2 JSON(`{"data":[{"RstVal":"201","lssn":N,...}]}`)이다. `RstVal` 200(기존 hostname) /
+        201(신규) 이고 `lssn` 이 양의 정수일 때만 성공. plain-text 로 `cat` 해서 읽지 말 것(v2 ASP 시절 방식).
+    *   저장은 `lib/common.sh` `persist_lssn()`: `^[[:space:]]*lssn[[:space:]]*=` 줄을 따옴표/공백/CRLF 무관하게
+        치환 → 임시파일 → `cat tmp > cnf`(inode 유지) → 재독 검증. **`sed -i`/`mv` 로 cnf 를 교체하지 말 것**
+        (Docker 단일파일 bind mount 에서 EBUSY, 그리고 `sed` 는 미매칭이어도 exit 0).
+    *   cnf 쓰기 불가 시 같은 디렉토리 `giipAgent.lssn` 사이드카에 기록하고, `load_config()` 는 cnf lssn 이
+        0/빈값이면 사이드카의 양의 정수를 쓴다(cnf 값이 있으면 cnf 우선).
+    *   등록 실패 시 `giipAgent3.sh` 는 exit 1 — lssn=0 으로 net3d/gateway/normal 모드에 들어가지 않는다.
+    *   **CQEQueueGet 을 lssn=0 으로 호출하면 SP 가 tLSvr 에 행을 INSERT 한다.** 그래서 `lib/cqe.sh queue_get()`,
+        `scripts/normal_mode.sh`, `cqe/giipCQE.sh` 는 자기 lssn 이 0/비정수면 호출하지 않는다. 새 호출 지점도 같은 가드를 둘 것.
+    *   회귀 테스트: `bash tests/test-lssn0-registration.sh` (네트워크 불필요).
 
 ## 2. 운영 환경 호환성 (CentOS 7.x 대응)
 
@@ -35,5 +50,5 @@
 *   **임시 파일 정리**: `/tmp` 등에 생성하는 임시 파일은 작업 완료 후 반드시 삭제하거나, `cleanup_all_temp_files` 함수를 호출하여 정리하십시오.
 
 ---
-**마지막 업데이트**: 2026-05-13
+**마지막 업데이트**: 2026-09-24
 **준수 대상**: 모든 유지보수 개발자 및 AI 어시스턴트
