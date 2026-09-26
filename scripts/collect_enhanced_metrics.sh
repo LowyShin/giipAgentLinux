@@ -187,14 +187,29 @@ END { printf "]" }
 ')
 
 # Upload to KVS
+# giip #3079 (csn 70418 실측, giipAgentWin CollectEnhancedMetrics.ps1과 동일 클래스
+# 버그): kvs_put의 종료 코드를 확인하지 않고 무조건 "uploaded" 성공 메시지를 남기고
+# 있었다. kvs_put()은 이미 실패 시 0이 아닌 값을 반환하고 자체적으로 [KVS-Put] 오류를
+# stderr에 남긴다(lib/kvs.sh) - 그 반환값을 실제로 확인한다. kvs_put() 자체는 수정하지
+# 않는다(lib/kvs.sh 상단 "DO NOT MODIFY" 규칙).
 if [ -n "$lssn" ] && [ -n "$sk" ] && [ -n "$apiaddrv2" ]; then
-    kvs_put "lssn" "$lssn" "cpu_usage_detail" "$CPU_JSON"
-    kvs_put "lssn" "$lssn" "mem_usage_detail" "$MEM_JSON"
-    kvs_put "lssn" "$lssn" "disk_usage_partition" "$DISK_JSON"
-    kvs_put "lssn" "$lssn" "io_statistics" "$IO_JSON"
-    kvs_put "lssn" "$lssn" "network_traffic" "$NET_JSON"
-    kvs_put "lssn" "$lssn" "top_processes" "$TOP_PROCS_JSON"
-    echo "✅ Enhanced metrics uploaded to KVS."
+    upload_failed=0
+    kvs_put "lssn" "$lssn" "cpu_usage_detail" "$CPU_JSON" || upload_failed=1
+    kvs_put "lssn" "$lssn" "mem_usage_detail" "$MEM_JSON" || upload_failed=1
+    kvs_put "lssn" "$lssn" "disk_usage_partition" "$DISK_JSON" || upload_failed=1
+    kvs_put "lssn" "$lssn" "io_statistics" "$IO_JSON" || upload_failed=1
+    kvs_put "lssn" "$lssn" "network_traffic" "$NET_JSON" || upload_failed=1
+    kvs_put "lssn" "$lssn" "top_processes" "$TOP_PROCS_JSON" || upload_failed=1
+
+    if [ "$upload_failed" -eq 0 ]; then
+        echo "✅ Enhanced metrics uploaded to KVS."
+    else
+        echo "❌ One or more enhanced metrics factors failed to upload to KVS (see [KVS-Put] errors above)." >&2
+        if command -v log_error >/dev/null 2>&1; then
+            log_error "collect_enhanced_metrics.sh: one or more kvs_put factors failed" "ApiError" "lssn=$lssn"
+        fi
+        exit 1
+    fi
 else
     echo "⚠️  Missing required variables for KVS upload."
     exit 1
