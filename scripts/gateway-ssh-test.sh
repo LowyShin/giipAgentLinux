@@ -100,8 +100,10 @@ fi
 echo "[gateway-ssh-test.sh] 🟢 [5.1] SSH 테스트 시작: lssn=${lssn}" >&2
 log_message "INFO" "Starting SSH tests on remote servers"
 
+kvs_upload_failed=0
+
 # KVS logging: startup
-kvs_put "lssn" "${lssn}" "gateway_ssh_test_startup" "{\"action\":\"ssh_test_start\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"status\":\"started\"}"
+kvs_put "lssn" "${lssn}" "gateway_ssh_test_startup" "{\"action\":\"ssh_test_start\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\",\"status\":\"started\"}" || kvs_upload_failed=1
 
 # Call gateway/ssh_test.sh with bash for independent execution
 # Note: ssh_test.sh will auto-detect gateway_servers_*.json from /tmp/
@@ -111,7 +113,7 @@ if bash "${GATEWAY_DIR}/ssh_test.sh"; then
 	log_message "INFO" "SSH tests completed successfully"
 	
 	# KVS logging: success
-	kvs_put "lssn" "${lssn}" "gateway_ssh_test_success" "{\"action\":\"ssh_test_complete\",\"status\":\"success\",\"exit_code\":0}"
+	kvs_put "lssn" "${lssn}" "gateway_ssh_test_success" "{\"action\":\"ssh_test_complete\",\"status\":\"success\",\"exit_code\":0}" || kvs_upload_failed=1
 	
 	exit 0
 else
@@ -121,7 +123,7 @@ else
 	log_message "WARN" "SSH test script exited with code: $ssh_test_exit_code"
 	
 	# KVS logging: warning (not failure - we continue)
-	kvs_put "lssn" "${lssn}" "gateway_ssh_test_warning" "{\"action\":\"ssh_test_warning\",\"status\":\"warning\",\"exit_code\":${ssh_test_exit_code}}"
+	kvs_put "lssn" "${lssn}" "gateway_ssh_test_warning" "{\"action\":\"ssh_test_warning\",\"status\":\"warning\",\"exit_code\":${ssh_test_exit_code}}" || kvs_upload_failed=1
 	
 	# Don't fail - continue anyway (as per original design)
 	exit 0

@@ -145,8 +145,10 @@ LOAD_JSON="{
   }
 }"
 
+kvs_upload_failed=0
+
 echo "📤 Saving system load to KVS..."
-kvs_put "lssn" "$lssn" "load_overview" "$LOAD_JSON"
+kvs_put "lssn" "$lssn" "load_overview" "$LOAD_JSON" || kvs_upload_failed=1
 
 # ============================================================================
 # 2. Top CPU Processes
@@ -166,7 +168,7 @@ TOP_CPU_JSON="{
 }"
 
 echo "📤 Saving top CPU processes to KVS..."
-kvs_put "lssn" "$lssn" "top_cpu" "$TOP_CPU_JSON"
+kvs_put "lssn" "$lssn" "top_cpu" "$TOP_CPU_JSON" || kvs_upload_failed=1
 
 # ============================================================================
 # 3. Top Memory Processes
@@ -186,7 +188,7 @@ TOP_MEM_JSON="{
 }"
 
 echo "📤 Saving top memory processes to KVS..."
-kvs_put "lssn" "$lssn" "top_memory" "$TOP_MEM_JSON"
+kvs_put "lssn" "$lssn" "top_memory" "$TOP_MEM_JSON" || kvs_upload_failed=1
 
 # ============================================================================
 # 4. Memory Status
@@ -227,7 +229,7 @@ MEMORY_JSON="{
 }"
 
 echo "📤 Saving memory status to KVS..."
-kvs_put "lssn" "$lssn" "memory_status" "$MEMORY_JSON"
+kvs_put "lssn" "$lssn" "memory_status" "$MEMORY_JSON" || kvs_upload_failed=1
 
 # ============================================================================
 # 5. Disk Usage
@@ -254,7 +256,7 @@ DISK_JSON="{
 }"
 
 echo "📤 Saving disk usage to KVS..."
-kvs_put "lssn" "$lssn" "disk_usage" "$DISK_JSON"
+kvs_put "lssn" "$lssn" "disk_usage" "$DISK_JSON" || kvs_upload_failed=1
 
 # ============================================================================
 # 6. Network Connections
@@ -296,7 +298,7 @@ NETWORK_JSON="{
 }"
 
 echo "📤 Saving network status to KVS..."
-kvs_put "lssn" "$lssn" "network_status" "$NETWORK_JSON"
+kvs_put "lssn" "$lssn" "network_status" "$NETWORK_JSON" || kvs_upload_failed=1
 
 # ============================================================================
 # 7. Process Information
@@ -321,7 +323,7 @@ PROCESS_JSON="{
 }"
 
 echo "📤 Saving process information to KVS..."
-kvs_put "lssn" "$lssn" "process_info" "$PROCESS_JSON"
+kvs_put "lssn" "$lssn" "process_info" "$PROCESS_JSON" || kvs_upload_failed=1
 
 # ============================================================================
 # 8. Health Summary
@@ -390,7 +392,7 @@ SUMMARY_JSON="{
 }"
 
 echo "📤 Saving health summary to KVS..."
-kvs_put "lssn" "$lssn" "health_summary" "$SUMMARY_JSON"
+kvs_put "lssn" "$lssn" "health_summary" "$SUMMARY_JSON" || kvs_upload_failed=1
 
 # ============================================================================
 # 9. Crontab List
@@ -436,5 +438,10 @@ echo ""
 echo "🏥 Health Score: $HEALTH_SCORE/100 ($HEALTH_STATUS)"
 echo "========================================="
 echo ""
+
+if [ "${kvs_upload_failed:-0}" -ne 0 ]; then
+    echo "ERROR: One or more KVS uploads failed (see [KVS-Put] errors above)" >&2
+    exit 1
+fi
 
 exit 0
