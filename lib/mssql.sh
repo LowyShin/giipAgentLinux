@@ -194,8 +194,14 @@ except Exception as e:
             local hostname=$(hostname)
             local payload="{\"collected_at\":\"$timestamp\",\"collector_host\":\"$hostname\",\"sql_server\":\"${db_host}\",\"hosts\":$json_output}"
             
-            kvs_put "lssn" "${lssn}" "sqlnetinv" "$payload" >/dev/null 2>&1
-            echo "[MSSQL] ✅ Data collected and uploaded for ${db_host}" >&2
+            # giip #3081: kvs_put 반환값을 확인하지 않고 무조건 "✅ ... uploaded" 를
+            # 찍던 패턴(giip 3079 과 동일 클래스 버그) 교정 - 업로드 성공 여부를 정직하게 가른다.
+            if kvs_put "lssn" "${lssn}" "sqlnetinv" "$payload" >/dev/null 2>&1; then
+                echo "[MSSQL] ✅ Data collected and uploaded for ${db_host}" >&2
+            else
+                echo "[MSSQL] ❌ Data collected but KVS upload failed for ${db_host}" >&2
+                log_message "WARN" "[MSSQL] kvs_put failed for ${db_host} (sqlnetinv)"
+            fi
             
             # --- User List Collection Trigger ---
             if [ "$user_list_req" == "1" ]; then

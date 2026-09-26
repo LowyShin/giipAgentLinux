@@ -41,15 +41,24 @@ else
 fi
 
 # Store to KVS
+# giip #3081: kvs_put 반환값을 확인하지 않아 업로드 실패에도 아래 "✅ completed" 가
+# 무조건 찍히던 패턴(giip 3079 과 동일 클래스 버그) 교정.
+kvs_upload_failed=0
 if [ "$(type -t kvs_put)" = "function" ]; then
-    kvs_put "lssn" "$TARGET_LSSN" "crontab_list" "$CRONTAB_JSON"
+    kvs_put "lssn" "$TARGET_LSSN" "crontab_list" "$CRONTAB_JSON" || kvs_upload_failed=1
 elif [ "$(type -t kvs_put_quiet)" = "function" ]; then
-    kvs_put_quiet "lssn" "$TARGET_LSSN" "crontab_list" "$CRONTAB_JSON"
+    kvs_put_quiet "lssn" "$TARGET_LSSN" "crontab_list" "$CRONTAB_JSON" || kvs_upload_failed=1
 else
     # Fallback to manual curl if library is not loaded (safety first)
     # Using existing config values if they are in shell env
     echo "📤 KVS functions not loaded. Using fallback manual upload..."
     # (Note: Standard agents should have kvs.sh loaded)
+    kvs_upload_failed=1
 fi
 
-echo "✅ Crontab collection completed."
+if [ "$kvs_upload_failed" -eq 0 ]; then
+    echo "✅ Crontab collection completed."
+else
+    echo "❌ Crontab collection completed but KVS upload failed." >&2
+    exit 1
+fi

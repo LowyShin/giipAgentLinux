@@ -780,22 +780,29 @@ _auto_discover_step6_extract() {
 	fi
 	
 	# Store complete result
+	# giip #3081: kvs_put 반환값을 확인하지 않고 무조건 "PASS" 를 남기던 패턴
+	# (giip 3079 과 동일 클래스 버그) 교정 - 하나라도 실패하면 PASS 로 위장하지 않는다.
 	local result_kvalue="/tmp/kvs_kValue_auto_discover_result_$$.json"
 	echo "$auto_discover_json" > "$result_kvalue"
-	kvs_put "lssn" "${lssn}" "auto_discover_result" "$auto_discover_json" >/dev/null 2>&1
-	
+	local kvs_failed=0
+	kvs_put "lssn" "${lssn}" "auto_discover_result" "$auto_discover_json" >/dev/null 2>&1 || kvs_failed=1
+
 	# Extract and store networks
 	local networks_data=$(echo "$auto_discover_json" | jq '.network // empty' 2>/dev/null)
 	if [ -n "$networks_data" ]; then
-		kvs_put "lssn" "${lssn}" "auto_discover_networks" "$networks_data" >/dev/null 2>&1
+		kvs_put "lssn" "${lssn}" "auto_discover_networks" "$networks_data" >/dev/null 2>&1 || kvs_failed=1
 	fi
-	
+
 	# Extract and store services
 	local services_data=$(echo "$auto_discover_json" | jq '.services // empty' 2>/dev/null)
 	if [ -n "$services_data" ]; then
-		kvs_put "lssn" "${lssn}" "auto_discover_services" "$services_data" >/dev/null 2>&1
+		kvs_put "lssn" "${lssn}" "auto_discover_services" "$services_data" >/dev/null 2>&1 || kvs_failed=1
 	fi
-	
+
+	if [ "$kvs_failed" -ne 0 ]; then
+		log_auto_discover_error "STEP-6" "KVS_PUT_FAILED" "One or more component uploads failed" "{}"
+		return 1
+	fi
 	log_auto_discover_validation "STEP-6" "components_extracted" "PASS" "{}"
 	return 0
 }
@@ -807,8 +814,12 @@ _auto_discover_step7_complete() {
 	log_auto_discover_step "STEP-7" "Store Complete Marker" "auto_discover_step_7_complete" "{\"status\":\"completed\"}"
 	
 	local complete_data="{\"status\":\"completed\",\"timestamp\":\"$(date '+%Y-%m-%d %H:%M:%S')\"}"
-	kvs_put "lssn" "${lssn}" "auto_discover_complete" "$complete_data" >/dev/null 2>&1
-	
+	# giip #3081: complete 마커 업로드 실패를 무시하고 return 0 하던 패턴 교정.
+	if ! kvs_put "lssn" "${lssn}" "auto_discover_complete" "$complete_data" >/dev/null 2>&1; then
+		log_auto_discover_error "STEP-7" "KVS_PUT_FAILED" "Failed to store complete marker" "{}"
+		return 1
+	fi
+
 	return 0
 }
 
