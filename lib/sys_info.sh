@@ -29,5 +29,5 @@ collect_process_list() {
 	# kvs_put wrapper: kvs_put "sys_info" "process_list_${lssn}" "linux_ps" "\"${ps_output}\""
 	
 	log_message "INFO" "Collecting process list for LSSN ${lssn}..."
-	kvs_put "${kvs_type}" "${kvs_key}" "${kvs_factor}" "\"${ps_output}\""
+	kvs_put "${kvs_type}" "${kvs_key}" "${kvs_factor}" "\"${ps_output}\"" || echo "[sys_info.sh] WARNING: kvs_put failed for process_list" >&2
 }

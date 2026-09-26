@@ -214,10 +214,12 @@ curl -s -X POST "${api_url}" \
 	-H "Content-Type: application/x-www-form-urlencoded" \
 	--insecure -o "$config_tmpfile" 2>&1
 
+kvs_put_failed=0
+
 if [ -f "$config_tmpfile" ]; then
 	# Log API response to KVS for debugging
 	api_response=$(cat "$config_tmpfile")
-	kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_response" "{\"api_url\":\"${api_url}\",\"response\":${api_response}}"
+	kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_response" "{\"api_url\":\"${api_url}\",\"response\":${api_response}}" || kvs_put_failed=1
 	
 	# Extract is_gateway value from JSON response
 	# giipapisk response format: {"data":[{"is_gateway":true,"RstVal":"200",...}],...}
@@ -269,16 +271,21 @@ if [ -f "$config_tmpfile" ]; then
 		# 🔴 [로깅 포인트 #5.2] 설정 로드 완료
 		echo "[giipAgent3.sh] 🟢 [5.2] 설정 로드 완료: lssn=${lssn}, hostname=${hn}, is_gateway=${gateway_mode}"
 		
-		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"source\":\"db_api\"}"
+		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"source\":\"db_api\"}" || kvs_put_failed=1
 	else
 		echo "⚠️  Failed to parse is_gateway from DB, using default: gateway_mode=${gateway_mode}"
-		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_parse_failed" "{\"response\":${api_response},\"debug\":\"all_methods_failed\"}"
+		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_parse_failed" "{\"response\":${api_response},\"debug\":\"all_methods_failed\"}" || kvs_put_failed=1
 	fi
 	
 	rm -f "$config_tmpfile"
 else
 	echo "⚠️  Failed to fetch server config from DB, using default: gateway_mode=${gateway_mode}"
-	kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_failed" "{\"api_url\":\"${api_url}\",\"error\":\"API call failed or no response file\"}"
+	kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_failed" "{\"api_url\":\"${api_url}\",\"error\":\"API call failed or no response file\"}" || kvs_put_failed=1
+fi
+
+if [ "${kvs_put_failed:-0}" -ne 0 ]; then
+	 echo "[giipAgent3.sh] WARNING: One or more KVS uploads failed (see [KVS-Put] errors above)" >&2
+	 command -v log_error >/dev/null 2>&1 && log_error "giipAgent3.sh: kvs_put failed" "ApiError" "lssn=${lssn}, stage=config_fetch"
 fi
 
 # ============================================================================

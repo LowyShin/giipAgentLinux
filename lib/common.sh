@@ -574,7 +574,7 @@ log_auto_discover_error() {
 	# KVS logging to error_log kfactor
 	if [ -n "${lssn}" ] && [ -n "${sk}" ] && [ -n "${apiaddrv2}" ]; then
 		local error_data="{\"step\":\"${step_num}\",\"type\":\"${error_type}\",\"message\":\"${error_msg}\",\"timestamp\":\"${timestamp}\",\"context\":${context_json}}"
-		kvs_put "lssn" "${lssn}" "auto_discover_error_log" "${error_data}" 2>&1
+		kvs_put "lssn" "${lssn}" "auto_discover_error_log" "${error_data}" >/dev/null 2>&1 || true
 	fi
 }
 

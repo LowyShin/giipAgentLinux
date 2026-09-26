@@ -66,7 +66,13 @@ if [ "$ALERT_TRIGGERED" -eq 1 ]; then
         --arg msg "$ALERT_MSG" \
         '{lssn: $lssn, timestamp: $ts, cpu_usage: $cpu, mem_usage: $mem, load_avg: $load, total_procs: $proc, jq_count: $jq_c, curl_count: $curl_c, alert: $msg}')
     
-    kvs_put "lssn" "$lssn" "agent_performance_alert" "$JSON_DATA"
+kvs_upload_failed=0
+
+    kvs_put "lssn" "$lssn" "agent_performance_alert" "$JSON_DATA" || kvs_upload_failed=1
+fi
+
+if [ "${kvs_upload_failed:-0}" -ne 0 ]; then
+    echo "WARNING: kvs_put failed for agent_performance_alert" >&2
 fi
 
 exit 0

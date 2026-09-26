@@ -263,9 +263,11 @@ if [ "$ALERTS_FOUND" = true ]; then
             \"log_file\":\"$LOG_FILE\"
         }"
         
+        kvs_upload_failed=0
+
         log_message ""
         log_message "📤 Saving to KVS (kFactor: process_flood_check)..."
-        kvs_put "lssn" "$lssn" "process_flood_check" "$FLOOD_JSON"
+        kvs_put "lssn" "$lssn" "process_flood_check" "$FLOOD_JSON" || kvs_upload_failed=1
     fi
 else
     log_message "✅ Status: OK - No process flooding detected"
@@ -275,6 +277,10 @@ log_message ""
 log_message "📄 Full log: $LOG_FILE"
 log_message "========================================="
 log_message ""
+
+if [ "${kvs_upload_failed:-0}" -ne 0 ]; then
+    echo "WARNING: kvs_put failed for process_flood_check" >&2
+fi
 
 # Exit with appropriate code
 if [ "$CRITICAL_FOUND" = true ]; then

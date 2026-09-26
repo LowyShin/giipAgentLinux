@@ -91,8 +91,10 @@ if [ $? -eq 0 ] && [ -f "$gateway_servers_file" ]; then
 	echo "[gateway-fetch-servers.sh] 🟢 [4.2] 리모트 서버 목록 조회 성공: file=${gateway_servers_file}" >&2
 	log_message "INFO" "Remote server list saved to: $gateway_servers_file"
 	
-	# KVS logging
-	kvs_put "lssn" "${lssn}" "gateway_fetch_servers_success" "{\"file\":\"${gateway_servers_file}\",\"status\":\"success\"}"
+kvs_upload_failed=0
+
+# KVS logging
+	kvs_put "lssn" "${lssn}" "gateway_fetch_servers_success" "{\"file\":\"${gateway_servers_file}\",\"status\":\"success\"}" || kvs_upload_failed=1
 	
 	# Output the file path to stdout
 	echo "$gateway_servers_file"
@@ -102,8 +104,8 @@ else
 	echo "[gateway-fetch-servers.sh] ❌ [4.3] 리모트 서버 목록 조회 실패: lssn=${lssn}, error='API call failed'" >&2
 	log_message "ERROR" "Failed to fetch remote server list from API"
 	
-	# KVS logging
-	kvs_put "lssn" "${lssn}" "gateway_fetch_servers_failed" "{\"error\":\"API call failed\",\"status\":\"failure\"}"
+# KVS logging
+	kvs_put "lssn" "${lssn}" "gateway_fetch_servers_failed" "{\"error\":\"API call failed\",\"status\":\"failure\"}" || kvs_upload_failed=1
 	
 	exit 1
 fi
