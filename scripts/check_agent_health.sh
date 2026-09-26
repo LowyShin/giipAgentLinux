@@ -70,15 +70,27 @@ EOF
 )
 
 # 4. Report to KVS
+# giip #3079: kvs_put의 종료 코드를 확인하지 않아, KVS 업로드가 실패해도 아래
+# "completed" 메시지가 무조건 찍혔다(giipAgentWin checkAgentHealth.ps1과 동일 클래스
+# 버그, csn 70418 실측). kvs_put() 자체는 수정하지 않는다(lib/kvs.sh 상단 "DO NOT
+# MODIFY" 규칙) - 반환값만 호출부에서 확인한다.
+kvs_upload_failed=0
 if [ "$(type -t kvs_put)" = "function" ]; then
     # Always report metrics to the new standardized factor
-    kvs_put "lssn" "$TARGET_LSSN" "performance_metrics" "$METRICS_JSON"
-    
+    kvs_put "lssn" "$TARGET_LSSN" "performance_metrics" "$METRICS_JSON" || kvs_upload_failed=1
+
     # Trigger alert factor if abnormal
     if [ "$STATUS" != "NORMAL" ]; then
         echo "⚠️  Triggering Performance Alert: $STATUS (Total Processes: $TOTAL_PROC_COUNT)"
-        kvs_put "lssn" "$TARGET_LSSN" "agent_performance_alert" "$METRICS_JSON"
+        kvs_put "lssn" "$TARGET_LSSN" "agent_performance_alert" "$METRICS_JSON" || kvs_upload_failed=1
     fi
 fi
 
-echo "✅ Performance monitoring completed with status: $STATUS"
+if [ "$kvs_upload_failed" -eq 0 ]; then
+    echo "✅ Performance monitoring completed with status: $STATUS"
+else
+    echo "❌ Performance monitoring ran (status: $STATUS) but one or more KVS uploads failed (see [KVS-Put] errors above)." >&2
+    if command -v log_error >/dev/null 2>&1; then
+        log_error "check_agent_health.sh: kvs_put failed" "ApiError" "lssn=$TARGET_LSSN, status=$STATUS"
+    fi
+fi
