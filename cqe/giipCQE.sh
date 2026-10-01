@@ -452,7 +452,9 @@ cleanup() {
     rm -rf "$TMPDIR" 2>/dev/null || true
 }
 
-trap cleanup EXIT
+# NOTE: sar_run_end_trap is chained into EXIT trap after sar_run_start in main():
+#   trap 'sar_run_end_trap; cleanup' EXIT
+# cleanup() is called by that chained trap.
 
 # ========================================
 # 메인 루프
@@ -464,7 +466,19 @@ main() {
     
     # 설정 로드
     load_config
-    
+
+    # ========================================
+    # Scheduler Run History tracking (giip #2390, csn=47)
+    # ========================================
+    # tSchedulerAgentRun에 크론 실행 시작/종료 이력을 기록한다.
+    # giipAgent3.sh:175-181과 동일한 패턴.
+    LIB_DIR="${SCRIPT_DIR}/../lib"
+    if [ -f "${LIB_DIR}/scheduler_agent_run.sh" ]; then
+        . "${LIB_DIR}/scheduler_agent_run.sh"
+        sar_run_start "scheduled-cqe"
+        trap 'sar_run_end_trap; cleanup' EXIT
+    fi
+
     # 시스템 정보
     get_system_info
     log "System: $HOSTNAME ($OS)"
