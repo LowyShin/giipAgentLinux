@@ -55,12 +55,16 @@ collect_server_ips() {
     fi
     
     log_message "INFO" "[ServerInfo] Collecting IP information for LSSN=$lssn"
-    
+
+    # giip #3559: NAT 뒤의 호스트는 로컬 인터페이스 열거만으로는 공인 IP 를 알 수 없다.
+    # 공인 IP 를 한 번만 조회해 아래 두 수집 경로의 결과 JSON 에 public_ip 필드로 실어 보낸다.
+    local public_ip=$(collect_public_ip)
+
     # Try 'ip addr' first (modern, preferred)
     if command -v ip >/dev/null 2>&1; then
-        _collect_ips_with_ip "$lssn" "$python_cmd"
+        _collect_ips_with_ip "$lssn" "$python_cmd" "$public_ip"
     elif command -v ifconfig >/dev/null 2>&1; then
-        _collect_ips_with_ifconfig "$lssn" "$python_cmd"
+        _collect_ips_with_ifconfig "$lssn" "$python_cmd" "$public_ip"
     else
         log_message "ERROR" "[ServerInfo] Neither 'ip' nor 'ifconfig' found"
         echo "{\"error\": \"No network tools available\"}"
@@ -69,12 +73,54 @@ collect_server_ips() {
 }
 
 # ============================================================================
+# Public IP Collection (giip #3559)
+# ============================================================================
+# NAT 뒤의 호스트는 로컬 인터페이스 열거만으로 공인 IP 를 알 수 없다. 공인 IP 는
+# "외부에서 본 주소"이므로 외부 반사 서비스로 조회한다. 수집 우선순위:
+#   1) GIIP_PUBLIC_IP 설정값 — 수동 지정(네트워크 의존 없음, 오프라인·프라이버시 환경·고정 IP).
+#   2) 외부 반사 서비스 폴백 체인(각 5초 타임아웃). 첫 유효 IPv4 를 채택.
+#   3) 전부 실패하면 빈 문자열을 반환한다 — 호출부가 public_ip 를 null 로 기록하고
+#      조용히 넘어간다(공인 IP 미확인이 수집 전체를 중단시키지 않게 한다).
+# Returns: 공인 IPv4 문자열(실패 시 빈 문자열). stdout 으로만 값을 낸다.
+collect_public_ip() {
+    # 1) 수동 지정값 우선 — 네트워크 호출 없이 바로 사용
+    if [[ -n "${GIIP_PUBLIC_IP:-}" ]]; then
+        echo "${GIIP_PUBLIC_IP}"
+        return 0
+    fi
+
+    if ! command -v curl >/dev/null 2>&1; then
+        log_message "WARN" "[ServerInfo] curl not found; public IP lookup skipped"
+        echo ""
+        return 0
+    fi
+
+    # 2) 외부 반사 서비스 폴백 체인
+    local providers=("https://api.ipify.org" "https://ifconfig.me/ip" "https://icanhazip.com")
+    local url ip
+    for url in "${providers[@]}"; do
+        ip=$(curl -fsS --max-time 5 "$url" 2>/dev/null | tr -d '[:space:]')
+        if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            log_message "INFO" "[ServerInfo] Public IP resolved via ${url}"
+            echo "$ip"
+            return 0
+        fi
+    done
+
+    # 3) 전부 실패 — 조용히 null 처리
+    log_message "WARN" "[ServerInfo] Public IP lookup failed on all providers"
+    echo ""
+    return 0
+}
+
+# ============================================================================
 # Helper: Collect using 'ip addr' command
 # ============================================================================
 _collect_ips_with_ip() {
     local lssn="$1"
     local python_cmd="$2"
-    
+    local public_ip="$3"
+
     LC_ALL=en_US.UTF-8 ip addr show 2>/dev/null | $python_cmd -c "
 import sys, json, re
 
@@ -133,6 +179,7 @@ result = {
     'hostname': '$(hostname)',
     'timestamp': '$(date +%s)',
     'interfaces': interfaces,
+    'public_ip': '$public_ip' or None,
     'source': 'ip'
 }
 
@@ -146,7 +193,8 @@ print(json.dumps(result))
 _collect_ips_with_ifconfig() {
     local lssn="$1"
     local python_cmd="$2"
-    
+    local public_ip="$3"
+
     LC_ALL=en_US.UTF-8 ifconfig 2>/dev/null | $python_cmd -c "
 import sys, json, re
 
@@ -206,6 +254,7 @@ result = {
     'hostname': '$(hostname)',
     'timestamp': '$(date +%s)',
     'interfaces': interfaces,
+    'public_ip': '$public_ip' or None,
     'source': 'ifconfig'
 }
 
@@ -215,3 +264,4 @@ print(json.dumps(result))
 
 # Export function for external use
 export -f collect_server_ips
+export -f collect_public_ip
