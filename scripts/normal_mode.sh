@@ -255,8 +255,8 @@ NORMAL_MODE_EXIT_CODE=$?
 # Shutdown
 # ============================================================================
 
-# Record execution shutdown log
-save_execution_log "shutdown" "{\"mode\":\"normal\",\"status\":\"normal_exit\",\"exit_code\":${NORMAL_MODE_EXIT_CODE}}"
+# shutdown 은 run_normal_mode()(lib/normal.sh) 가 이미 startup 과 짝으로 1회 기록한다.
+# 여기서 또 쓰면 중복이므로 제거 — giip 72773 항목3 (1실행 shutdown 3중 기록 버그 수정).
 
 log_message "INFO" "GIIP Agent Normal Mode V${sv} completed with exit code: ${NORMAL_MODE_EXIT_CODE}"
 

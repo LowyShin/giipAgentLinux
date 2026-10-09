@@ -217,9 +217,9 @@ curl -s -X POST "${api_url}" \
 kvs_put_failed=0
 
 if [ -f "$config_tmpfile" ]; then
-	# Log API response to KVS for debugging
+	# Read API response (local-only; not written to KVS to cut per-run write noise — giip 72773 항목3)
+	# 이전엔 매 실행마다 kFactor=api_lsvrgetconfig_response 로 tKVS 에 되썼으나 모니터링이 아닌 중복이라 제거.
 	api_response=$(cat "$config_tmpfile")
-	kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_response" "{\"api_url\":\"${api_url}\",\"response\":${api_response}}" || kvs_put_failed=1
 	
 	# Extract is_gateway value from JSON response
 	# giipapisk response format: {"data":[{"is_gateway":true,"RstVal":"200",...}],...}
@@ -268,10 +268,9 @@ if [ -f "$config_tmpfile" ]; then
 		gateway_mode="$is_gateway_from_db"
 		echo "✅ DB config loaded: is_gateway=${gateway_mode}"
 		
-		# 🔴 [로깅 포인트 #5.2] 설정 로드 완료
+		# 🔴 [로깅 포인트 #5.2] 설정 로드 완료 (local-only; KVS 되쓰기 제거 — giip 72773 항목3)
+		# 이전엔 매 실행마다 kFactor=api_lsvrgetconfig_success 로 tKVS 에 중복 기록했으나 제거.
 		echo "[giipAgent3.sh] 🟢 [5.2] 설정 로드 완료: lssn=${lssn}, hostname=${hn}, is_gateway=${gateway_mode}"
-		
-		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"source\":\"db_api\"}" || kvs_put_failed=1
 	else
 		echo "⚠️  Failed to parse is_gateway from DB, using default: gateway_mode=${gateway_mode}"
 		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_parse_failed" "{\"response\":${api_response},\"debug\":\"all_methods_failed\"}" || kvs_put_failed=1
@@ -447,33 +446,18 @@ fi
 # Shutdown Log and Completion
 # ============================================================================
 
-# Record execution shutdown log
-save_execution_log "shutdown" "{\"mode\":\"$([ "$gateway_mode" = "1" ] && echo "gateway+normal" || echo "normal")\",\"status\":\"normal_exit\"}"
+# Shutdown lifecycle 는 하위 스크립트(scripts/gateway_mode.sh / lib/normal.sh:run_normal_mode)가 이미
+# 자기 shutdown 을 1회 기록한다. 여기서 또 쓰면 한 실행에 shutdown 이 중복 기록되므로 제거 — giip 72773 항목3.
+# (이전: save_execution_log "shutdown" ... 가 normal.sh·normal_mode.sh 와 합쳐 1실행 3중 기록)
 
 # ============================================================================
-# Final Session History Upload (Added 2026-04-30)
+# Session History Cleanup (Added 2026-04-30; KVS upload removed giip 72773 항목3)
 # ============================================================================
-if [ -f "$SESSION_HISTORY_FILE" ] && [ -s "$SESSION_HISTORY_FILE" ]; then
-    log_message "INFO" "Uploading session execution history to KVS..."
-    
-    # Convert JSONL to JSON Array using jq
-    # Wrap entries in a root object for KVS
-    HISTORY_JSON=$(jq -s '.' "$SESSION_HISTORY_FILE")
-    
-    if [ $? -eq 0 ] && [ -n "$HISTORY_JSON" ]; then
-        # kFactor: giip_execution_history
-        kvs_put "lssn" "${lssn}" "giip_execution_history" "$HISTORY_JSON"
-        
-        if [ $? -eq 0 ]; then
-            log_message "INFO" "✅ Session history successfully uploaded to KVS"
-        else
-            log_message "WARN" "⚠️ Failed to upload session history to KVS"
-        fi
-    else
-        log_message "ERROR" "❌ Failed to format session history JSON"
-    fi
-    
-    # Clean up
+# kFactor=giip_execution_history 로의 재업로드는 제거한다. 이 blob 은 이번 실행 동안
+# save_execution_log 가 이미 kFactor=giipagent 로 1건씩 쓴 startup/queue_check/
+# script_execution/shutdown 이벤트를 합쳐 한 번 더 쓰는 중복이었다(수명주기 이력은
+# giipagent 이벤트에 그대로 남는다). 로컬 세션 파일만 정리한다.
+if [ -f "$SESSION_HISTORY_FILE" ]; then
     rm -f "$SESSION_HISTORY_FILE"
 fi
 
