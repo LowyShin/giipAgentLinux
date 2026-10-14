@@ -74,7 +74,10 @@ register_server() {
 	fi
 
 	local api_url jsondata resp
-	api_url=$(build_api_url "${apiaddrv2}")
+	# giipApiSk2 는 jsondata 의 문자열 값을 다시 JSON 으로 파싱해 hostname/os 가 들어가면
+	# 400 "Malformed JSON in query parameter" 로 거부한다(실측). gateway_queue.sh 와 같이
+	# 이 호출만 giipApiSk4(파라미터 진짜 바인딩)로 URL 을 치환한다.
+	api_url=$(build_api_url "${apiaddrv2/giipApiSk2/giipApiSk4}")
 	jsondata=$(build_register_jsondata "$hostname" "$os")
 	resp=$(mktemp "${TMPDIR:-/tmp}/giip_register_resp.XXXXXX") || return 1
 

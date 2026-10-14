@@ -391,8 +391,11 @@ detect_os() {
 		local ostype=`head -n 1 /etc/issue | awk '{print $1}'`
 		if [ "${ostype}" = "Ubuntu" ]; then
 			os=`lsb_release -d | sed 's/^ *\| *$//' | sed -e "s/Description\://g"`
-		else
+		elif [ -f /etc/redhat-release ]; then
 			os=`cat /etc/redhat-release`
+		elif [ -f /etc/os-release ]; then
+			# Debian 등 redhat-release 가 없는 배포판: 빈 os 로 queue_get 이 거부되지 않도록
+			os=`. /etc/os-release && echo "${PRETTY_NAME:-$NAME}"`
 		fi
 	fi
 	
