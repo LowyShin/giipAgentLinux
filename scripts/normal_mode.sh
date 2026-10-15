@@ -241,6 +241,13 @@ if [ -f "$ENHANCED_METRICS_SCRIPT" ]; then
     bash "$ENHANCED_METRICS_SCRIPT" >> "${SCRIPT_DIR}/log/enhanced_metrics.log" 2>&1 || log_message "WARN" "Enhanced metrics collection failed"
 fi
 
+# Execute Docker usage collection (kFactor docker_usage; same JSON keys as giipAgentWin CollectDockerMetrics.ps1)
+DOCKER_USAGE_SCRIPT="${SCRIPT_DIR}/scripts/collect_docker_usage.sh"
+if [ -f "$DOCKER_USAGE_SCRIPT" ]; then
+    log_message "INFO" "Executing Docker usage collection..."
+    bash "$DOCKER_USAGE_SCRIPT" >> "${SCRIPT_DIR}/log/docker_usage.log" 2>&1 || log_message "WARN" "Docker usage collection failed"
+fi
+
 # ============================================================================
 # Execute Normal Mode
 # ============================================================================
