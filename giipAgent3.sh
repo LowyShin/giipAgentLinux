@@ -134,6 +134,16 @@ else
 	exit 1
 fi
 
+# Load config cache module (giip 72773 항목4: config TTL cache to reduce API calls)
+is_gateway_from_cache=""
+raw_response_from_cache=""
+if [ -f "${LIB_DIR}/config_cache.sh" ]; then
+	. "${LIB_DIR}/config_cache.sh"
+	config_cache_init_path "${lssn}"
+else
+	echo "⚠️  Warning: config_cache.sh not found — config cache disabled"
+fi
+
 # Load target list module
 if [ -f "${LIB_DIR}/target_list.sh" ]; then
 	. "${LIB_DIR}/target_list.sh"
@@ -200,86 +210,113 @@ os=$(detect_os)
 # Get hostname
 hn=$(hostname)
 
-# Fetch server config from DB
-echo "🔍 Fetching server configuration from DB..."
+# Fetch Server Configuration from DB (is_gateway auto-detection) with config cache
+# giip 72773 항목4: config cache — TTL(${CONFIG_CACHE_TTL:-60}s) 이내면 API 콜을 건너뛴다.
+# KVS에 api_lsvrgetconfig_response/success 를 매번 쓰는 것은 유지(모니터링 Dashboard 필요).
+# 캐시 히트 시 same KVS writes + same gateway_mode 설정, API 콜만 생략.
+
 config_tmpfile="giipTmpConfig.json"
 api_url=$(build_api_url "${apiaddrv2}")
 
-# ✅ giipapi 규칙: text에는 파라미터명만, jsondata에 실제 값
-config_text="LSvrGetConfig lssn hostname"
-config_jsondata="{\"lssn\":${lssn},\"hostname\":\"${hn}\"}"
-
-curl -s -X POST "${api_url}" \
-	-d "text=${config_text}&token=${sk}&jsondata=${config_jsondata}" \
-	-H "Content-Type: application/x-www-form-urlencoded" \
-	--insecure -o "$config_tmpfile" 2>&1
-
 kvs_put_failed=0
+is_gateway_from_db=""
+cache_hit=0
 
-if [ -f "$config_tmpfile" ]; then
-	# Read API response (local-only; not written to KVS to cut per-run write noise — giip 72773 항목3)
-	# 이전엔 매 실행마다 kFactor=api_lsvrgetconfig_response 로 tKVS 에 되썼으나 모니터링이 아닌 중복이라 제거.
-	api_response=$(cat "$config_tmpfile")
-	
-	# Extract is_gateway value from JSON response
-	# giipapisk response format: {"data":[{"is_gateway":true,"RstVal":"200",...}],...}
-	# Multiple fallback methods to ensure robust parsing
-	
-	is_gateway_from_db=""
-	
-	# Method 1: Try jq (most reliable)
-	if command -v jq >/dev/null 2>&1; then
-		is_gateway_from_db=$(jq -r '.data[0].is_gateway // .is_gateway // empty' "$config_tmpfile" 2>/dev/null)
-	fi
-	
-	# Method 2: If jq failed or not available, try sed/grep on normalized text
-	if [ -z "$is_gateway_from_db" ]; then
-		normalized=$(tr -d '\n\r' < "$config_tmpfile")
-		is_gateway_from_db=$(echo "$normalized" | sed -n 's/.*"is_gateway"\s*:\s*\([^,}]*\).*/\1/p' | head -1 | tr -d ' ')
-	fi
-	
-	# Method 3: If still empty, try grep with literal search
-	if [ -z "$is_gateway_from_db" ]; then
-		if grep -q '"is_gateway"\s*:\s*true' "$config_tmpfile" 2>/dev/null; then
-			is_gateway_from_db="true"
-		elif grep -q '"is_gateway"\s*:\s*false' "$config_tmpfile" 2>/dev/null; then
-			is_gateway_from_db="false"
-		elif grep -q '"is_gateway"\s*:\s*1' "$config_tmpfile" 2>/dev/null; then
-			is_gateway_from_db="1"
-		elif grep -q '"is_gateway"\s*:\s*0' "$config_tmpfile" 2>/dev/null; then
-			is_gateway_from_db="0"
-		fi
-	fi
-	
-	# Convert true/false to 1/0
-	case "$is_gateway_from_db" in
-		true|1)
-			is_gateway_from_db=1
-			;;
-		false|0)
-			is_gateway_from_db=0
-			;;
-		*)
-			is_gateway_from_db=""
-			;;
-	esac
-	
+if config_cache_load 2>/dev/null; then
+	# Cache hit within TTL — use cached is_gateway, skip API call
+	is_gateway_from_db="$is_gateway_from_cache"
+	cache_hit=1
+	echo "✅ Config cache hit (TTL=${CONFIG_CACHE_TTL:-60}s): is_gateway=${is_gateway_from_db}"
+	echo "[giipAgent3.sh] 🟢 [5.2] 설정 로드 완료(캐시): lssn=${lssn}, hostname=${hn}, is_gateway=${is_gateway_from_db}"
+
 	if [ -n "$is_gateway_from_db" ]; then
 		gateway_mode="$is_gateway_from_db"
-		echo "✅ DB config loaded: is_gateway=${gateway_mode}"
-		
-		# 🔴 [로깅 포인트 #5.2] 설정 로드 완료 (local-only; KVS 되쓰기 제거 — giip 72773 항목3)
-		# 이전엔 매 실행마다 kFactor=api_lsvrgetconfig_success 로 tKVS 에 중복 기록했으나 제거.
-		echo "[giipAgent3.sh] 🟢 [5.2] 설정 로드 완료: lssn=${lssn}, hostname=${hn}, is_gateway=${gateway_mode}"
+		# Cache hitでもKVS에는書く(ダッシュボード監視用)
+		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"source\":\"cache\",\"cache_hit\":1}" || kvs_put_failed=1
 	else
-		echo "⚠️  Failed to parse is_gateway from DB, using default: gateway_mode=${gateway_mode}"
-		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_parse_failed" "{\"response\":${api_response},\"debug\":\"all_methods_failed\"}" || kvs_put_failed=1
+		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_parse_failed" "{\"response\":\"${raw_response_from_cache}\",\"debug\":\"cache_data_invalid\"}" || kvs_put_failed=1
 	fi
-	
-	rm -f "$config_tmpfile"
 else
-	echo "⚠️  Failed to fetch server config from DB, using default: gateway_mode=${gateway_mode}"
-	kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_failed" "{\"api_url\":\"${api_url}\",\"error\":\"API call failed or no response file\"}" || kvs_put_failed=1
+	# Cache miss or expired — fetch from API
+	echo "🔍 Fetching server configuration from DB (cache miss)..."
+	echo "🔍 Cache TTL: ${CONFIG_CACHE_TTL:-60}s, cache file: ${CONFIG_CACHE_FILE:-none}"
+
+	# ✅ giipapi 규칙: text에는 파라미터명만, jsondata에 실제 값
+	config_text="LSvrGetConfig lssn hostname"
+	config_jsondata="{\"lssn\":${lssn},\"hostname\":\"${hn}\"}"
+
+	curl -s -X POST "${api_url}" \
+		-d "text=${config_text}&token=${sk}&jsondata=${config_jsondata}" \
+		-H "Content-Type: application/x-www-form-urlencoded" \
+		--insecure -o "$config_tmpfile" 2>&1
+
+	if [ -f "$config_tmpfile" ]; then
+		# Log API response to KVS for debugging
+		api_response=$(cat "$config_tmpfile")
+		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_response" "{\"api_url\":\"${api_url}\",\"response\":${api_response}}" || kvs_put_failed=1
+
+		# Extract is_gateway value from JSON response
+		# giipapisk response format: {"data":[{"is_gateway":true,"RstVal":"200",...}],...}
+		# Multiple fallback methods to ensure robust parsing
+
+		# Method 1: Try jq (most reliable)
+		if command -v jq >/dev/null 2>&1; then
+			is_gateway_from_db=$(jq -r '.data[0].is_gateway // .is_gateway // empty' "$config_tmpfile" 2>/dev/null)
+		fi
+
+		# Method 2: If jq failed or not available, try sed/grep on normalized text
+		if [ -z "$is_gateway_from_db" ]; then
+			normalized=$(tr -d '\n\r' < "$config_tmpfile")
+			is_gateway_from_db=$(echo "$normalized" | sed -n 's/.*"is_gateway"\s*:\s*\([^,}]*\).*/\1/p' | head -1 | tr -d ' ')
+		fi
+
+		# Method 3: If still empty, try grep with literal search
+		if [ -z "$is_gateway_from_db" ]; then
+			if grep -q '"is_gateway"\s*:\s*true' "$config_tmpfile" 2>/dev/null; then
+				is_gateway_from_db="true"
+			elif grep -q '"is_gateway"\s*:\s*false' "$config_tmpfile" 2>/dev/null; then
+				is_gateway_from_db="false"
+			elif grep -q '"is_gateway"\s*:\s*1' "$config_tmpfile" 2>/dev/null; then
+				is_gateway_from_db="1"
+			elif grep -q '"is_gateway"\s*:\s*0' "$config_tmpfile" 2>/dev/null; then
+				is_gateway_from_db="0"
+			fi
+		fi
+
+		# Convert true/false to 1/0
+		case "$is_gateway_from_db" in
+			true|1)
+				is_gateway_from_db=1
+				;;
+			false|0)
+				is_gateway_from_db=0
+				;;
+			*)
+				is_gateway_from_db=""
+				;;
+		esac
+
+		if [ -n "$is_gateway_from_db" ]; then
+			gateway_mode="$is_gateway_from_db"
+			echo "✅ DB config loaded: is_gateway=${gateway_mode}"
+
+			# 🔴 [로깅 포인트 #5.2] 설정 로드 완료
+			echo "[giipAgent3.sh] 🟢 [5.2] 설정 로드 완료: lssn=${lssn}, hostname=${hn}, is_gateway=${gateway_mode}"
+
+			kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_success" "{\"is_gateway\":${gateway_mode},\"source\":\"db_api\",\"cache_hit\":0}" || kvs_put_failed=1
+
+			# giip 72773 항목4: save to config cache for next cycles
+			config_cache_save "$config_tmpfile"
+		else
+			echo "⚠️  Failed to parse is_gateway from DB, using default: gateway_mode=${gateway_mode}"
+			kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_parse_failed" "{\"response\":${api_response},\"debug\":\"all_methods_failed\"}" || kvs_put_failed=1
+		fi
+
+		rm -f "$config_tmpfile"
+	else
+		echo "⚠️  Failed to fetch server config from DB, using default: gateway_mode=${gateway_mode}"
+		kvs_put "lssn" "${lssn}" "api_lsvrgetconfig_failed" "{\"api_url\":\"${api_url}\",\"error\":\"API call failed or no response file\"}" || kvs_put_failed=1
+	fi
 fi
 
 if [ "${kvs_put_failed:-0}" -ne 0 ]; then
@@ -446,18 +483,33 @@ fi
 # Shutdown Log and Completion
 # ============================================================================
 
-# Shutdown lifecycle 는 하위 스크립트(scripts/gateway_mode.sh / lib/normal.sh:run_normal_mode)가 이미
-# 자기 shutdown 을 1회 기록한다. 여기서 또 쓰면 한 실행에 shutdown 이 중복 기록되므로 제거 — giip 72773 항목3.
-# (이전: save_execution_log "shutdown" ... 가 normal.sh·normal_mode.sh 와 합쳐 1실행 3중 기록)
+# Record execution shutdown log
+save_execution_log "shutdown" "{\"mode\":\"$([ "$gateway_mode" = "1" ] && echo "gateway+normal" || echo "normal")\",\"status\":\"normal_exit\"}"
 
 # ============================================================================
-# Session History Cleanup (Added 2026-04-30; KVS upload removed giip 72773 항목3)
+# Final Session History Upload (Added 2026-04-30)
 # ============================================================================
-# kFactor=giip_execution_history 로의 재업로드는 제거한다. 이 blob 은 이번 실행 동안
-# save_execution_log 가 이미 kFactor=giipagent 로 1건씩 쓴 startup/queue_check/
-# script_execution/shutdown 이벤트를 합쳐 한 번 더 쓰는 중복이었다(수명주기 이력은
-# giipagent 이벤트에 그대로 남는다). 로컬 세션 파일만 정리한다.
-if [ -f "$SESSION_HISTORY_FILE" ]; then
+if [ -f "$SESSION_HISTORY_FILE" ] && [ -s "$SESSION_HISTORY_FILE" ]; then
+    log_message "INFO" "Uploading session execution history to KVS..."
+    
+    # Convert JSONL to JSON Array using jq
+    # Wrap entries in a root object for KVS
+    HISTORY_JSON=$(jq -s '.' "$SESSION_HISTORY_FILE")
+    
+    if [ $? -eq 0 ] && [ -n "$HISTORY_JSON" ]; then
+        # kFactor: giip_execution_history
+        kvs_put "lssn" "${lssn}" "giip_execution_history" "$HISTORY_JSON"
+        
+        if [ $? -eq 0 ]; then
+            log_message "INFO" "✅ Session history successfully uploaded to KVS"
+        else
+            log_message "WARN" "⚠️ Failed to upload session history to KVS"
+        fi
+    else
+        log_message "ERROR" "❌ Failed to format session history JSON"
+    fi
+    
+    # Clean up
     rm -f "$SESSION_HISTORY_FILE"
 fi
 
