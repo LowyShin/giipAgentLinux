@@ -175,7 +175,15 @@ queue_get() {
 	# Save response for debugging
 	local response_content=$(cat "$temp_response" 2>/dev/null | head -c 1000)
 	rm -f "$temp_response"
-	
+
+	# giip 3936: 빈 응답은 파싱 실패가 아니라 "받을 작업 없음 / 일시적 무응답" 으로 다룬다.
+	# 전단의 404·RstVal=0 '큐 없음=정상' 처리와 같은 철학 — ErrorLogs 에 거짓 에러를 남기지 않는다.
+	if [ -z "$(printf '%s' "$response_content" | tr -d '[:space:]')" ]; then
+		echo "[queue_get] INFO: Empty response for LSSN=$lssn, hostname=$hostname, OS=$os (no work / transient — not an error)" >&2
+		touch "$output_file"
+		return 0
+	fi
+
 	echo "[queue_get] ❌ Failed to extract script from API response" >&2
 	echo "[queue_get] DEBUG: Response content (first 1000 chars):" >&2
 	echo "$response_content" >&2
