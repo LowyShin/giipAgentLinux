@@ -283,7 +283,32 @@ while IFS= read -r ip; do
     fi
 done < <(ip -4 addr show | grep inet | grep -v "127.0.0.1" | awk '{print $2}' | cut -d/ -f1)
 
-# Fallback: if no global IP, use local as global
+# Echo-first public IP (giip 3559): NAT'd hosts (e.g. cctrank03) only have a private
+# NIC IP, so the NIC scan above records the private IP as the global IP. Ask an
+# external echo endpoint for the true public IP first; fall back to the NIC-derived
+# value (then local) when offline/locked-down or curl is missing. Never regress.
+is_valid_ipv4() {
+    local v="$1"
+    [[ $v =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+    local IFS='.'; local -a o=($v)
+    for n in "${o[@]}"; do
+        [ "$n" -le 255 ] 2>/dev/null || return 1
+    done
+    return 0
+}
+
+if command -v curl &> /dev/null; then
+    for echo_url in "https://api.ipify.org" "https://ifconfig.me/ip" "https://checkip.amazonaws.com"; do
+        echo_ip=$(curl -s --connect-timeout 3 --max-time 3 "$echo_url" 2>/dev/null | tr -d '[:space:]')
+        if is_valid_ipv4 "$echo_ip"; then
+            ipv4_global="$echo_ip"
+            echo "[auto-discover-linux.sh] 🌐 [Network] Public IP resolved via echo ($echo_url): $ipv4_global" >&2
+            break
+        fi
+    done
+fi
+
+# Fallback: if no global IP (echo failed and no public NIC IP), use local as global
 [ -z "$ipv4_global" ] && ipv4_global="$ipv4_local"
 
 # ========================================
