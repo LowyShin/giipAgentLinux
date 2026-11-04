@@ -308,8 +308,13 @@ if command -v curl &> /dev/null; then
     done
 fi
 
-# Fallback: if no global IP (echo failed and no public NIC IP), use local as global
-[ -z "$ipv4_global" ] && ipv4_global="$ipv4_local"
+# giip #3559 항목2(A안 확정, Lowy 2026-11-04): 에코 실패 + 공인 NIC IP 없음(NAT 뒤)이면
+# ipv4_global 을 빈 값으로 둔다. 로컬(사설) IP 를 공인 IP 자리에 넣지 않는다 — 서버 SP 가
+# 기존 값을 유지하도록(pApiAgentAutoRegister*: COALESCE(NULLIF(...),LSNIFGlobal)). 감시 공백·
+# 사설/127.0.0.1 오염 방지. 실패는 로그로 기록한다(기존 값 유지가 정상 동작).
+if [ -z "$ipv4_global" ]; then
+    echo "[auto-discover-linux.sh] ⚠️ [Network] Public IP unresolved (echo failed, no public NIC). Leaving ipv4_global empty; server keeps last known value." >&2
+fi
 
 # ========================================
 # Agent Version
