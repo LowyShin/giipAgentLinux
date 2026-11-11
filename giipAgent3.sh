@@ -16,6 +16,51 @@ sv="3.00"
 export LANG=en_US.UTF-8
 export LC_ALL=en_US.UTF-8
 
+# >>> singleton-guard
+# ============================================================================
+# Single-Instance Guard (flock / mkdir fallback)
+# ============================================================================
+# 목적: cron 이 매분 실행하는데 이전 실행이 (D state 등으로) 끝나지 않으면 프로세스가
+#       분당 1개씩 쌓인다. 아래 "Relaxed Singleton" 은 300초 넘은 것만 kill 하고
+#       D state 프로세스는 kill 이 안 먹어 해결하지 못한다 -> 진짜 락으로 중복 실행을 막는다.
+# 락 위치: GIIP_LOCK_FILE, 없으면 /dev/shm (쓰기 가능 시) 아니면 ${TMPDIR:-/tmp}.
+#          cleanup 이 스캔하는 /tmp 밖(/dev/shm)을 우선한다.
+# 종료코드: 이미 실행 중이면 0 (cron 오류 메일 방지).
+if [ -z "${GIIP_LOCK_FILE:-}" ]; then
+    if [ -d /dev/shm ] && [ -w /dev/shm ]; then
+        GIIP_LOCK_FILE="/dev/shm/giipAgent3.lock"
+    else
+        GIIP_LOCK_FILE="${TMPDIR:-/tmp}/giipAgent3.lock"
+    fi
+fi
+if [ -z "${GIIP_FORCE_NO_FLOCK:-}" ] && command -v flock >/dev/null 2>&1; then
+    exec 9>"$GIIP_LOCK_FILE"
+    if ! flock -n 9; then
+        echo "[singleton] previous giipAgent3.sh still running - exiting"
+        exit 0
+    fi
+else
+    # flock 없음(macOS 등): mkdir 은 원자적. PID 를 기록해 stale 이면 인수한다.
+    _giip_lockdir="${GIIP_LOCK_FILE}.d"
+    if ! mkdir "$_giip_lockdir" 2>/dev/null; then
+        _giip_owner=$(cat "$_giip_lockdir/pid" 2>/dev/null)
+        if [ -n "$_giip_owner" ] && kill -0 "$_giip_owner" 2>/dev/null; then
+            echo "[singleton] previous giipAgent3.sh still running - exiting"
+            exit 0
+        fi
+        # owner 없음/죽음 -> stale. 제거 후 재시도(경합 시 한쪽만 mkdir 성공)
+        rm -rf "$_giip_lockdir" 2>/dev/null
+        if ! mkdir "$_giip_lockdir" 2>/dev/null; then
+            echo "[singleton] previous giipAgent3.sh still running - exiting"
+            exit 0
+        fi
+    fi
+    echo "$$" > "$_giip_lockdir/pid"
+    # 주의: 이후 스크립트가 EXIT trap 을 교체할 수 있으나, 그래도 다음 실행이 stale(PID 사망)로 인수한다.
+    trap 'rm -rf "$_giip_lockdir" 2>/dev/null' EXIT
+fi
+# <<< singleton-guard
+
 
 # Usable giip variables =========
 # {{today}} : Replace today to "YYYYMMDD"

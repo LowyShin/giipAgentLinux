@@ -67,6 +67,31 @@
     본 로직이 죽거나 멈춰도 git pull 크론은 영향받지 않는다 - 이미 만족된 상태이며 이번에 코드
     변경은 하지 않았다.
 
+
+## 단일 인스턴스 락과 임시파일 배치 정리 (2026-11-11)
+
+*   **사고 (2026-11-11, Docker 호스트의 컨테이너 1개에서 관측)**: cron 이 매분 `bash giipAgent3.sh` 를 실행하는데,
+    한 컨테이너에서 실행이 `lib/cleanup.sh` 의 `/tmp` 읽기에서 끝나지 않았다(커널 wchan `wrap_directory_iterator`,
+    마지막 로그 `[cleanup] 🟢 Cleaning up old GIIP temporary files...`). 매분 1개씩 D state 프로세스가 쌓여
+    2시간 45분 동안 6개 → 83개가 되었고 VM 디스크 읽기가 포화되어 Docker VM 전체가 멈췄다.
+*   **원인 1 - 실제 락 부재**: 기존 "Relaxed Singleton" 은 300초 넘은 프로세스만 kill 하고 신규 병렬 실행을
+    허용한다(주석은 cron 5분 주기를 가정). D state 프로세스는 I/O 가 돌아올 때까지 kill 을 무시하므로 계속 쌓인다.
+*   **원인 2 - cleanup 의 비용**: `cleanup_old_temp_files` 가 패턴(약 30개)마다 `/tmp` 를 for-glob 으로 전체 스캔하고,
+    매칭 파일마다 `echo | sed` 를 fork 해 PID 를 추출했다. `/tmp` 에 파일이 많으면 실행당 수만 번의 fork 와 30회의 디렉터리 스캔이 된다.
+*   **조치 A - `giipAgent3.sh` 단일 인스턴스 가드** (`# >>> singleton-guard` ~ `# <<< singleton-guard`, UTF-8 export 직후·기존 stale-kill 블록 앞):
+    락 파일은 `${GIIP_LOCK_FILE}`, 없으면 `/dev/shm`(쓰기 가능 시) 아니면 `${TMPDIR:-/tmp}` 의 `giipAgent3.lock`
+    (cleanup 이 스캔하는 `/tmp` 밖). `flock -n` 으로 잡고, 이미 실행 중이면 `[singleton] previous giipAgent3.sh still running - exiting`
+    출력 후 **exit 0**. `flock` 이 없거나 `GIIP_FORCE_NO_FLOCK=1` 이면 `mkdir "<lock>.d"` 원자 락 + PID 기록으로 폴백하며,
+    소유 PID 가 죽었으면(stale) 인수한다. 기존 stale-kill 블록은 그대로 둔다.
+    (폴백 락의 EXIT trap 은 이후 `scheduler_agent_run.sh` 가 trap 을 교체하면 지워질 수 있으나, 다음 실행이 stale 로 인수한다.)
+*   **조치 B - `lib/cleanup.sh` 배치화**: 기존 패턴 전부를 배열 하나로 모아 `find "${GIIP_TMP_DIR:-/tmp}" -maxdepth 1 -type f \( -name ... -o ... \) -size +0 -mmin +10 ! -name "*_<PID>.*" -delete -print`
+    **한 번**(디렉터리 1회 스캔, 파일별 fork 없음)으로 지우고, `timeout` 이 있으면 `timeout 20` 으로 감싼다. 삭제 개수는 `-print` 줄 수로 세어
+    `[cleanup] ✓ Cleaned up N old files` 로 출력한다. `cleanup_old_temp_files <pattern>` 은 같은 이름·시그니처로 유지(내부는 find 1회).
+*   **`-mmin +10` 은 새로 추가된 동작이다(의도적 안전 변경)**: 이전에는 나이 조건이 없어 동시에 실행 중인 다른 인스턴스의 신선한 임시파일도
+    (PID 가 다르면) 지웠다. 이제 10분 미만 파일은 지우지 않는다. 따라서 임시파일이 최대 10분 더 남는다.
+*   **테스트**: `tests/test-cleanup-batch.sh`(20000개 파일 배치 삭제·보존 조건·시간), `tests/test-single-instance.sh`(가드 블록 추출 후
+    락 경합·재획득·mkdir 폴백·stale 인수). 검증 범위: 개발 PC(Windows Git Bash)에서 실행. 이 환경에는 `flock` 이 없어 **flock 경로는
+    실행해 보지 못했고**(테스트가 SKIP 처리), 문제를 겪은 운영 컨테이너에서는 테스트하지 않았다.
 ---
-**마지막 업데이트**: 2026-09-26
+**마지막 업데이트**: 2026-11-11
 **준수 대상**: 모든 유지보수 개발자 및 AI 어시스턴트
