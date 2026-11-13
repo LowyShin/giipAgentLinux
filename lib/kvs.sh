@@ -127,6 +127,72 @@ safe_url_encode() {
 
 export -f safe_url_encode
 
+# ============================================================================
+# KVS error-log throttle + stale-credential self-diagnosis (giip #4215)
+# ============================================================================
+# Purpose (both logging-only — NEVER alters kvs_put/save_execution_log return
+# codes, the API contract, or kValue; see the ABSOLUTE RULES at top of file):
+#  (A) cron.log bloat: a persistent auth failure (e.g. RstVal 411
+#      "No User information") made every KVS write dump the full API response
+#      each cron cycle, growing cron.log to 328MB over 6 days. These helpers
+#      emit the full detail only on the 1st occurrence and then every Nth
+#      repeat, logging a compact one-liner in between.
+#  (B) stale-sk self-diagnosis: the same error repeating is the signature of a
+#      giipAgent.cnf sk that drifted from the SSOT while the container's
+#      restart-only sk-sync never ran. After a consecutive threshold we emit a
+#      distinct operator warning so the condition is noticed without waiting
+#      for a restart. (The agent cannot re-sync sk itself — it has no SSOT
+#      access; re-sync stays an entrypoint/operator action.)
+# CSN-agnostic by construction (no csn literals; lives in the shared library).
+KVS_ERR_STATE_FILE="${SCRIPT_DIR:-/tmp}/log/.kvs_err_state"
+KVS_ERR_FULL_DUMP_EVERY="${KVS_ERR_FULL_DUMP_EVERY:-200}"      # full dump on 1st, then every Nth repeat of the same error
+KVS_ERR_STALE_SK_THRESHOLD="${KVS_ERR_STALE_SK_THRESHOLD:-50}" # consecutive auth failures before a stale-sk warning
+
+# kvs_note_error <rst_val> <rst_msg>
+# Records the error, emits the stale-sk warning when warranted, and echoes
+# "full" or "compact" on stdout so the caller knows how verbose to be.
+# Any internal failure falls back to "full" (never hides a first error).
+kvs_note_error() {
+	local rst_val="$1"
+	local rst_msg="$2"
+	local sig="${rst_val}"
+	local prev_sig="" prev_count=0 count=1
+	if [ -r "$KVS_ERR_STATE_FILE" ]; then
+		read -r prev_sig prev_count < "$KVS_ERR_STATE_FILE" 2>/dev/null || true
+	fi
+	case "$prev_count" in ''|*[!0-9]*) prev_count=0 ;; esac
+	if [ "$prev_sig" = "$sig" ]; then
+		count=$((prev_count + 1))
+	else
+		count=1
+	fi
+	printf '%s %s\n' "$sig" "$count" > "$KVS_ERR_STATE_FILE" 2>/dev/null || true
+
+	# (B) stale-sk self-diagnosis for repeated auth failures (RstVal 411 / "No User information")
+	case "${rst_val} ${rst_msg}" in
+		*411*|*"No User information"*)
+			if [ "$count" -ge "$KVS_ERR_STALE_SK_THRESHOLD" ] && [ $((count % KVS_ERR_STALE_SK_THRESHOLD)) -eq 0 ]; then
+				echo "[KVS] 🚨 STALE-SK? ${count} consecutive auth failures (RstVal=${rst_val}, RstMsg='${rst_msg}'). giipAgent.cnf sk may have drifted from SSOT and the restart-only sk-sync has not run. Action: re-compare cnf sk vs SSOT (giip-accounts.json) and restart the container. (giip #4215)" >&2
+				[ -n "$LogFileName" ] && echo "[KVS] 🚨 STALE-SK? ${count} consecutive auth failures (RstVal=${rst_val}). Re-check cnf sk vs SSOT and restart. (giip #4215)" >> "$LogFileName"
+			fi
+			;;
+	esac
+
+	# (A) throttle full dumps: full on 1st occurrence and every Nth repeat
+	if [ "$count" -eq 1 ] || [ $((count % KVS_ERR_FULL_DUMP_EVERY)) -eq 0 ]; then
+		echo "full"
+	else
+		echo "compact"
+	fi
+}
+
+# kvs_clear_error_state: reset the repeat counter after a successful write so a
+# later error starts a fresh count (and gets a fresh full dump).
+kvs_clear_error_state() {
+	[ -s "$KVS_ERR_STATE_FILE" ] && : > "$KVS_ERR_STATE_FILE" 2>/dev/null
+	return 0
+}
+
 
 # Function: Save execution log to KVS (giipagent factor)
 # Usage: save_execution_log "event_type" "{\"details\":\"json\"}" OR "event_type" "any text value"
@@ -251,6 +317,7 @@ save_execution_log() {
 		if [ -n "$LogFileName" ]; then
 			echo "[KVS-Log] ✅ Saved: ${event_type} (RstVal=200)" >> "$LogFileName"
 		fi
+		kvs_clear_error_state
 		rm -f "$response_file" "$stderr_file" "$post_data_file"
 		return 0
 	else
@@ -266,29 +333,30 @@ save_execution_log() {
 			proc_name=$(echo "$api_response" | grep -o '"ProcName"\s*:\s*"[^"]*"' 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
 		fi
 		
-		# Log detailed error
-		echo "[KVS-Log] ❌ API Error: ${event_type}" >&2
-		echo "[KVS-Log] 📊 RstVal: ${rst_val}" >&2
-		echo "[KVS-Log] 💬 RstMsg: ${rst_msg}" >&2
-		echo "[KVS-Log] 🔧 ProcName: ${proc_name}" >&2
-		echo "[KVS-Log] 📄 Full API Response: ${api_response}" >&2
-		echo "[KVS-Log] 📤 Request URL: ${kvs_url}" >&2
-		echo "[KVS-Log] 📤 Request jsondata (first 300 chars): ${jsondata:0:300}..." >&2
-		
-		if [ -n "$LogFileName" ]; then
-			echo "[KVS-Log] ❌ API Error: ${event_type}" >> "$LogFileName"
-			echo "[KVS-Log] 📊 RstVal: ${rst_val}" >> "$LogFileName"
-			echo "[KVS-Log] 💬 RstMsg: ${rst_msg}" >> "$LogFileName"
-			echo "[KVS-Log] 🔧 ProcName: ${proc_name}" >> "$LogFileName"
-			echo "[KVS-Log] 📄 Full Response: ${api_response}" >> "$LogFileName"
-			echo "[KVS-Log] 📤 Request jsondata (first 300 chars): ${jsondata:0:300}..." >> "$LogFileName"
+		# Log detailed error (throttled on repeats to prevent cron.log bloat — giip #4215)
+		local dump_mode
+		dump_mode=$(kvs_note_error "$rst_val" "$rst_msg")
+		if [ "$dump_mode" = "full" ]; then
+			echo "[KVS-Log] ❌ API Error: ${event_type}" >&2
+			echo "[KVS-Log] 📊 RstVal: ${rst_val}" >&2
+			echo "[KVS-Log] 💬 RstMsg: ${rst_msg}" >&2
+			echo "[KVS-Log] 🔧 ProcName: ${proc_name}" >&2
+			echo "[KVS-Log] 📄 Full API Response: ${api_response:0:1000}" >&2
+			echo "[KVS-Log] 📤 Request URL: ${kvs_url}" >&2
+			echo "[KVS-Log] 📤 Request jsondata (first 300 chars): ${jsondata:0:300}..." >&2
+			echo "[KVS-Log] 🔍 Debug files saved: response=$response_file stderr=$stderr_file post=$post_data_file" >&2
+			if [ -n "$LogFileName" ]; then
+				echo "[KVS-Log] ❌ API Error: ${event_type}" >> "$LogFileName"
+				echo "[KVS-Log] 📊 RstVal: ${rst_val}" >> "$LogFileName"
+				echo "[KVS-Log] 💬 RstMsg: ${rst_msg}" >> "$LogFileName"
+				echo "[KVS-Log] 🔧 ProcName: ${proc_name}" >> "$LogFileName"
+				echo "[KVS-Log] 📄 Full Response: ${api_response:0:1000}" >> "$LogFileName"
+				echo "[KVS-Log] 📤 Request jsondata (first 300 chars): ${jsondata:0:300}..." >> "$LogFileName"
+			fi
+		else
+			echo "[KVS-Log] ❌ API Error (repeated; full dump throttled): ${event_type} RstVal=${rst_val} RstMsg='${rst_msg}'" >&2
+			[ -n "$LogFileName" ] && echo "[KVS-Log] ❌ API Error (repeated; full dump throttled): ${event_type} RstVal=${rst_val}" >> "$LogFileName"
 		fi
-		
-		# Keep debug files for inspection
-		echo "[KVS-Log] 🔍 Debug files saved:" >&2
-		echo "  Response: $response_file" >&2
-		echo "  Stderr: $stderr_file" >&2
-		echo "  Post data: $post_data_file" >&2
 		
 		# Log error to database with detailed context
 		local error_context="save_execution_log at lib/kvs.sh, event_type=${event_type}, RstVal=${rst_val}, RstMsg=${rst_msg}, ProcName=${proc_name}, API_URL=${kvs_url}, jsondata_preview=${jsondata:0:200}"
@@ -397,6 +465,7 @@ kvs_put() {
 	# Check if API call was successful (RstVal = 200)
 	if [ "$rst_val" = "200" ]; then
 		# Success - silent (토큰 절약)
+		kvs_clear_error_state
 		rm -f "$response_file" "$stderr_file"
 		return 0
 	else
@@ -412,17 +481,20 @@ kvs_put() {
 			proc_name=$(echo "$api_response" | grep -o '"ProcName"\s*:\s*"[^"]*"' 2>/dev/null | sed -n 's/.*"\([^"]*\)".*/\1/p' | head -1)
 		fi
 		
-		# Log detailed error
-		echo "[KVS-Put] ❌ API Error: kType=$ktype, kKey=$kkey, kFactor=$kfactor"
-		echo "[KVS-Put] 📊 RstVal: $rst_val" >&2
-		echo "[KVS-Put] 💬 RstMsg: $rst_msg" >&2
-		echo "[KVS-Put] 🔧 ProcName: $proc_name" >&2
-		echo "[KVS-Put] 📄 Full Response: $api_response" >&2
-		echo "[KVS-Put] ❌ API Error: kType=$ktype, kKey=$kkey, kFactor=$kfactor" >&2
-		
-		# Keep debug files for inspection
-		echo "[KVS-Put] 🔍 Debug files saved: response=$response_file, stderr=$stderr_file" >&2
-		
+		# Log detailed error (throttled on repeats to prevent cron.log bloat — giip #4215)
+		local dump_mode
+		dump_mode=$(kvs_note_error "$rst_val" "$rst_msg")
+		if [ "$dump_mode" = "full" ]; then
+			echo "[KVS-Put] ❌ API Error: kType=$ktype, kKey=$kkey, kFactor=$kfactor"
+			echo "[KVS-Put] 📊 RstVal: $rst_val" >&2
+			echo "[KVS-Put] 💬 RstMsg: $rst_msg" >&2
+			echo "[KVS-Put] 🔧 ProcName: $proc_name" >&2
+			echo "[KVS-Put] 📄 Full Response: ${api_response:0:1000}" >&2
+			echo "[KVS-Put] 🔍 Debug files saved: response=$response_file, stderr=$stderr_file" >&2
+		else
+			echo "[KVS-Put] ❌ API Error (repeated; full dump throttled): kType=$ktype, kKey=$kkey, kFactor=$kfactor RstVal=$rst_val RstMsg='$rst_msg'" >&2
+		fi
+
 		return 1
 	fi
 }
