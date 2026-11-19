@@ -293,50 +293,90 @@ check_dos2unix() {
 	return $?
 }
 
-# Function: Check and install mssql-tools
+# Function: Check and install mssql-tools (provides the `sqlcmd` binary)
+# The gateway MSSQL health check (lib/db_check_mssql.sh perform_check_mssql) probes
+# `command -v sqlcmd`, so the client that MUST be present is the mssql-tools `sqlcmd`
+# binary — NOT Python pyodbc (see giip #5109: install path previously installed pyodbc
+# via check_mssql_client while the check looked for sqlcmd, so the warning never cleared).
+# Idempotent + non-blocking (never exits the caller; returns 1 on failure).
 check_mssql_tools() {
+	# mssql-tools18 (modern) and legacy mssql-tools install sqlcmd under these dirs.
+	# Ensure they are on PATH first so an already-installed sqlcmd is detected (idempotent).
+	local tools_bin
+	for tools_bin in /opt/mssql-tools18/bin /opt/mssql-tools/bin; do
+		if [ -d "$tools_bin" ]; then
+			case ":$PATH:" in
+				*":$tools_bin:"*) ;;
+				*) export PATH="$PATH:$tools_bin" ;;
+			esac
+		fi
+	done
+
 	if command -v sqlcmd >/dev/null 2>&1; then
 		return 0
 	fi
-	
-	# Detect OS
-	local uname=`uname -a | awk '{print $1}'`
-	
-	if [ "${uname}" = "Linux" ]; then
-		if [ -f /etc/redhat-release ]; then
-			# RHEL/CentOS
-			# Check if already installed via rpm to avoid yum spam
-			if rpm -q mssql-tools >/dev/null 2>&1; then
-				# Installed but not in path?
-				if [ -d "/opt/mssql-tools/bin" ]; then
-					export PATH="$PATH:/opt/mssql-tools/bin"
-					if command -v sqlcmd >/dev/null 2>&1; then
-						return 0
-					fi
-				fi
-			fi
 
-			log_message "INFO" "sqlcmd not found, attempting to install mssql-tools..."
-			
-			curl https://packages.microsoft.com/config/rhel/7/prod.repo > /etc/yum.repos.d/msprod.repo
-			yum remove -y unixODBC-utf16 unixODBC-utf16-devel
-			ACCEPT_EULA=Y yum install -y mssql-tools unixODBC-devel
-		elif [ -f /etc/lsb-release ] || [ -f /etc/debian_version ]; then
-			# Ubuntu/Debian logic omitted
-			:
+	# Resolve a non-interactive privilege runner.
+	# root -> run directly; else passwordless sudo if usable; else skip (non-blocking).
+	local SUDO=""
+	if [ "$(id -u 2>/dev/null)" = "0" ]; then
+		SUDO=""
+	elif command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+		SUDO="sudo -n"
+	else
+		log_message "WARN" "sqlcmd (mssql-tools) not installed and no non-interactive root/sudo available; skipping auto-install. Install manually: https://learn.microsoft.com/sql/tools/sqlcmd/sqlcmd-utility"
+		return 1
+	fi
+
+	local uname_s
+	uname_s=$(uname -s 2>/dev/null)
+	if [ "${uname_s}" != "Linux" ]; then
+		log_message "WARN" "mssql-tools auto-install only supported on Linux (uname=${uname_s})"
+		return 1
+	fi
+
+	if [ -f /etc/redhat-release ]; then
+		# RHEL/CentOS
+		local rhel_ver
+		rhel_ver=$(rpm -E %rhel 2>/dev/null)
+		[ -n "$rhel_ver" ] || rhel_ver=8
+		log_message "INFO" "sqlcmd not found, installing mssql-tools18 (RHEL/CentOS ${rhel_ver})..."
+		$SUDO sh -c "curl -s https://packages.microsoft.com/config/rhel/${rhel_ver}/prod.repo -o /etc/yum.repos.d/msprod.repo" 2>/dev/null
+		$SUDO sh -c "ACCEPT_EULA=Y yum install -y mssql-tools18 unixODBC-devel" 2>/dev/null \
+			|| $SUDO sh -c "ACCEPT_EULA=Y yum install -y mssql-tools unixODBC-devel" 2>/dev/null
+	elif [ -f /etc/debian_version ] || [ -f /etc/lsb-release ]; then
+		# Ubuntu/Debian
+		local distro deb_ver
+		distro=$( ( . /etc/os-release 2>/dev/null; echo "${ID}" ) )
+		deb_ver=$( ( . /etc/os-release 2>/dev/null; echo "${VERSION_ID}" ) )
+		[ -n "$distro" ] || distro=ubuntu
+		[ -n "$deb_ver" ] || deb_ver=22.04
+		log_message "INFO" "sqlcmd not found, installing mssql-tools18 (${distro} ${deb_ver})..."
+		$SUDO sh -c "curl -s https://packages.microsoft.com/keys/microsoft.asc -o /etc/apt/trusted.gpg.d/microsoft.asc" 2>/dev/null
+		$SUDO sh -c "curl -s https://packages.microsoft.com/config/${distro}/${deb_ver}/prod.list -o /etc/apt/sources.list.d/mssql-release.list" 2>/dev/null
+		$SUDO apt-get update -qq 2>/dev/null
+		$SUDO sh -c "ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev" 2>/dev/null \
+			|| $SUDO sh -c "ACCEPT_EULA=Y apt-get install -y mssql-tools unixodbc-dev" 2>/dev/null
+	else
+		log_message "WARN" "Unknown Linux distribution; cannot auto-install mssql-tools"
+		return 1
+	fi
+
+	# Install may have just created the bin dirs — add them to PATH so command -v finds sqlcmd.
+	for tools_bin in /opt/mssql-tools18/bin /opt/mssql-tools/bin; do
+		if [ -d "$tools_bin" ]; then
+			case ":$PATH:" in
+				*":$tools_bin:"*) ;;
+				*) export PATH="$PATH:$tools_bin" ;;
+			esac
 		fi
-	fi
-	
-	# Add to PATH
-	if [ -d "/opt/mssql-tools/bin" ]; then
-		export PATH="$PATH:/opt/mssql-tools/bin"
-	fi
-	
+	done
+
 	if command -v sqlcmd >/dev/null 2>&1; then
-		log_message "INFO" "mssql-tools installed successfully"
+		log_message "INFO" "mssql-tools (sqlcmd) installed successfully"
 		return 0
 	else
-		log_message "WARN" "Failed to install mssql-tools automatically"
+		log_message "WARN" "Failed to install mssql-tools (sqlcmd) automatically"
 		return 1
 	fi
 }

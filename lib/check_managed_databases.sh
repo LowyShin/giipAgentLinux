@@ -94,8 +94,19 @@ check_managed_databases() {
 				;;
 			MSSQL)
 				if ! command -v sqlcmd >/dev/null 2>&1; then
-					echo "[Gateway] Installing MSSQL client..." >&2
-					check_mssql_client
+					echo "[Gateway] Installing MSSQL client (sqlcmd / mssql-tools)..." >&2
+					# giip #5109: the MSSQL check (db_check_mssql.sh) probes `command -v sqlcmd`,
+					# so install mssql-tools (sqlcmd), NOT pyodbc. check_mssql_tools lives in
+					# common.sh which IS sourced by the runtime path (scripts/gateway-check-db.sh);
+					# guard-source it only if the caller did not.
+					if ! declare -f check_mssql_tools >/dev/null 2>&1; then
+						[ -f "${SCRIPT_DIR}/common.sh" ] && source "${SCRIPT_DIR}/common.sh"
+					fi
+					if declare -f check_mssql_tools >/dev/null 2>&1; then
+						check_mssql_tools
+					else
+						echo "[Gateway] ⚠️  check_mssql_tools unavailable; cannot auto-install sqlcmd" >&2
+					fi
 				fi
 				;;
 			Redis)
