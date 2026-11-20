@@ -132,7 +132,16 @@ load_config() {
     fi
     
     DELAY=${DELAY:-60}
-    
+
+    # giip #4296: stdout/stderr 꼬리 전송 용량(KB). 없으면 기본 8KB, 0 이면
+    # 출력 본문 전송을 생략한다(§5.7.2-2). Windows 'cqeoutputtailkb' 와 동일 키.
+    CQE_OUTPUT_TAIL_KB=$(grep -E "^cqeoutputtailkb=" "$CNFFILE" 2>/dev/null | cut -d'"' -f2)
+    CQE_OUTPUT_TAIL_KB=${CQE_OUTPUT_TAIL_KB:-8}
+    if ! [[ "$CQE_OUTPUT_TAIL_KB" =~ ^[0-9]+$ ]]; then
+        log_warn "Invalid cqeoutputtailkb='$CQE_OUTPUT_TAIL_KB' - falling back to 8KB."
+        CQE_OUTPUT_TAIL_KB=8
+    fi
+
     if [ -z "$SK" ] || [ -z "$LSSN" ]; then
         log_error "Invalid config: sk or lssn not found"
         exit 1
@@ -325,16 +334,21 @@ execute_script() {
     end_epoch=$(date +%s)
     local duration=$((end_epoch - start_epoch))
     
-    # 출력 읽기
+    # 출력 읽기 (giip #4296: 앞부분 head 절단 -> 꼬리 tail 절단으로 전환.
+    # 장애 원인은 대개 출력 끝부분에 있다. 용량은 cqeoutputtailkb KB, 기본 8,
+    # 0 이면 출력 본문을 보내지 않는다. stdout/stderr 는 분리해서 각각 자른다.)
     local stdout=""
     local stderr=""
-    
-    if [ -f "$TMP_OUTPUT" ]; then
-        stdout=$(cat "$TMP_OUTPUT" | head -c 10000)  # 최대 10KB
-    fi
-    
-    if [ -f "$TMP_ERROR" ]; then
-        stderr=$(cat "$TMP_ERROR" | head -c 5000)   # 최대 5KB
+    local tail_bytes=$((CQE_OUTPUT_TAIL_KB * 1024))
+
+    if [ "$tail_bytes" -gt 0 ]; then
+        if [ -f "$TMP_OUTPUT" ]; then
+            stdout=$(tail -c "$tail_bytes" "$TMP_OUTPUT")
+        fi
+
+        if [ -f "$TMP_ERROR" ]; then
+            stderr=$(tail -c "$tail_bytes" "$TMP_ERROR")
+        fi
     fi
     
     # 상태 판단
