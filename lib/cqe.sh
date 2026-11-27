@@ -59,6 +59,7 @@ queue_get() {
 	
 	# Clean up old temp files
 	rm -f /tmp/queue_response_* 2>/dev/null
+	rm -f /tmp/queue_status_* 2>/dev/null
 	
 	# URL encode parameters (same pattern as kvs.sh for consistency)
 	# This is required because curl -d does NOT automatically encode values
@@ -79,27 +80,106 @@ queue_get() {
 	# This curl call previously had no timeout, so an unresponsive/slow API could make
 	# it block indefinitely, matching that symptom exactly. --connect-timeout/--max-time
 	# values match the existing convention in lib/mssql.sh.
-	curl -s -X POST "$api_url" \
-		-d "text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
-		-H "Content-Type: application/x-www-form-urlencoded" \
-		--insecure --connect-timeout 10 --max-time 30 -o "$temp_response" 2>&1
+	#
+	# giip #4167 (C3): 네트워크 일시 오류 시 최대 2회 백오프 재시도.
+	# 1회 호출은 일시적인 연결 hiccup 한 번에도 cron 주기 전체를 실패로 남겼고 그 결과
+	# ErrorLogs 에 NetworkError 가 반복 적재됐다. 재시도 대상은 2가지다:
+	#   (1) 전송 실패 — curl 종료코드 != 0 (연결 거부·리셋·DNS·타임아웃)
+	#   (2) 서버 일시 장애 — HTTP 5xx (giipfaw Function App 503 "The service is unavailable.")
+	#       이 응답은 JSON 이 아니라 평문이라 기존 코드에서 "JSON 파싱 실패"로 오분류돼 왔다
+	#       (giip 5866). HTTP 응답을 정상적으로 받은 빈 본문은 네트워크 오류가 아니므로
+	#       재시도 대상이 아니고, 아래 giip 3936 가드 의미가 그대로 유지된다.
+	local max_attempts=3          # 최초 1회 + 재시도 최대 2회
+	local retry_delay=2           # 백오프 기본 초 — 2s → 4s 로 지수 증가
+	local attempt=1
+	local curl_exit_code=0
+	local http_code=""
+	local temp_status="/tmp/queue_status_$$.txt"
+	while : ; do
+		rm -f "$temp_response" "$temp_status"
+		# -w 로 HTTP 상태 코드를 stdout(temp_status) 으로 받고, stderr 는 기존처럼 stdout 으로 보낸다
+		curl -s -X POST "$api_url" \
+			-d "text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
+			-H "Content-Type: application/x-www-form-urlencoded" \
+			--insecure --connect-timeout 10 --max-time 30 \
+			-o "$temp_response" -w "%{http_code}" 2>&1 > "$temp_status"
+		curl_exit_code=$?
+		http_code=$(tr -d '[:space:]' < "$temp_status" 2>/dev/null)
 
-	local curl_exit_code=$?
+		# 재시도 필요 여부 판정
+		local retryable=0
+		if [ "$curl_exit_code" -ne 0 ]; then
+			retryable=1
+		fi
+		case "$http_code" in
+			5??) retryable=1 ;;
+		esac
+
+		# 일시 오류가 아니면 응답 해석 단계로 진행
+		if [ "$retryable" -eq 0 ]; then
+			break
+		fi
+
+		# 재시도 한도 도달 — 마지막 실패로 확정
+		if [ "$attempt" -ge "$max_attempts" ]; then
+			break
+		fi
+
+		echo "[queue_get] ⚠️  Transient API failure (curl exit: $curl_exit_code, http: ${http_code:-n/a}, attempt ${attempt}/${max_attempts}) — retrying in ${retry_delay}s" >&2
+		sleep "$retry_delay"
+		retry_delay=$((retry_delay * 2))
+		attempt=$((attempt + 1))
+	done
+	rm -f "$temp_status" 2>/dev/null
+
+	# 전송 자체가 실패한 상태(curl 종료코드 != 0)면 부분 본문이 남아 있어도 정상 응답으로 보지 않는다
+	if [ "$curl_exit_code" -ne 0 ]; then
+		local partial_note=""
+		if [ -s "$temp_response" ]; then
+			partial_note=" (partial body discarded)"
+		fi
+		rm -f "$temp_response"
+		if [ "$curl_exit_code" -eq 28 ]; then
+			echo "[queue_get] ❌ API call timed out (curl exit code: 28, connect-timeout=10s/max-time=30s, attempts=${attempt})${partial_note}" >&2
+		else
+			echo "[queue_get] ❌ API call failed or no response (curl exit code: $curl_exit_code, attempts=${attempt})${partial_note}" >&2
+		fi
+
+		# Log to ErrorLogs DB
+		if command -v log_error >/dev/null 2>&1; then
+			log_error "CQEQueueGet API call failed (curl exit: $curl_exit_code, attempts: $attempt)" "NetworkError" "API: $api_url, LSSN: $lssn, hostname: $hostname, os: $os"
+		fi
+
+		return 1
+	fi
+
+	# 서버 일시 장애(5xx): JSON 파싱 실패가 아니라 서비스 오류로 분류한다
+	case "$http_code" in
+		5??)
+			local svc_body=""
+			svc_body=$(head -c 200 "$temp_response" 2>/dev/null)
+			rm -f "$temp_response"
+			echo "[queue_get] ❌ API service unavailable (HTTP $http_code, attempts=${attempt}): ${svc_body}" >&2
+
+			# Log to ErrorLogs DB
+			if command -v log_error >/dev/null 2>&1; then
+				log_error "CQEQueueGet API service unavailable (HTTP $http_code, attempts: $attempt)" "NetworkError" "API: $api_url, LSSN: $lssn, hostname: $hostname, os: $os, body: ${svc_body:0:200}"
+			fi
+
+			return 1
+			;;
+	esac
 
 	# Check if response file was created and has content
 	if [ ! -s "$temp_response" ]; then
 		rm -f "$temp_response"
-		if [ "$curl_exit_code" -eq 28 ]; then
-			echo "[queue_get] ❌ API call timed out (curl exit code: 28, connect-timeout=10s/max-time=30s)" >&2
-		else
-			echo "[queue_get] ❌ API call failed or no response (curl exit code: $curl_exit_code)" >&2
-		fi
-		
+		echo "[queue_get] ❌ API call failed or no response (curl exit code: $curl_exit_code, empty body)" >&2
+
 		# Log to ErrorLogs DB
 		if command -v log_error >/dev/null 2>&1; then
 			log_error "CQEQueueGet API call failed (curl exit: $curl_exit_code)" "NetworkError" "API: $api_url, LSSN: $lssn, hostname: $hostname, os: $os"
 		fi
-		
+
 		return 1
 	fi
 	
