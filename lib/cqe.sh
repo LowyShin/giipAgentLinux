@@ -59,6 +59,7 @@ queue_get() {
 	
 	# Clean up old temp files
 	rm -f /tmp/queue_response_* 2>/dev/null
+	rm -f /tmp/queue_status_* 2>/dev/null
 	
 	# URL encode parameters (same pattern as kvs.sh for consistency)
 	# This is required because curl -d does NOT automatically encode values
@@ -79,28 +80,105 @@ queue_get() {
 	# This curl call previously had no timeout, so an unresponsive/slow API could make
 	# it block indefinitely, matching that symptom exactly. --connect-timeout/--max-time
 	# values match the existing convention in lib/mssql.sh.
-	curl -s -X POST "$api_url" \
-		-d "text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
-		-H "Content-Type: application/x-www-form-urlencoded" \
-		--insecure --connect-timeout 10 --max-time 30 -o "$temp_response" 2>&1
+	#
+	# giip #4167 (C3): 네트워크 일시 오류 시 최초 1회 + 최대 2회 백오프 재시도.
+	# 재시도 대상은 2가지다.
+	#   (1) 전송 실패 — curl 종료코드 != 0 (연결 거부·리셋·DNS·타임아웃)
+	#   (2) 서버 일시 장애 — HTTP 5xx (giipfaw Function App 503 "The service is unavailable.")
+	#       이 응답은 JSON 이 아닌 평문이라 기존 코드에서 "JSON 파싱 실패" 로 오분류돼 왔다(giip 5866).
+	# HTTP 응답을 정상적으로 받은 빈 본문은 네트워크 오류가 아니므로 재시도 대상이 아니고,
+	# 아래 giip #4167 (C1) 가드로 정상 대기 처리한다.
+	local max_attempts=3          # 최초 1회 + 재시도 최대 2회
+	local retry_delay=2           # 백오프 기본 초 — 2s → 4s 로 지수 증가
+	local attempt=1
+	local curl_exit_code=0
+	local http_code=""
+	local temp_status="/tmp/queue_status_$$.txt"
+	while : ; do
+		rm -f "$temp_response" "$temp_status"
+		# -w 로 HTTP 상태 코드를 stdout(temp_status) 으로 받고, stderr 는 화면(stdout) 으로 보낸다
+		curl -s -X POST "$api_url" \
+			-d "text=${encoded_text}&token=${encoded_token}&jsondata=${encoded_jsondata}" \
+			-H "Content-Type: application/x-www-form-urlencoded" \
+			--insecure --connect-timeout 10 --max-time 30 \
+			-o "$temp_response" -w "%{http_code}" 2>&1 > "$temp_status"
+		curl_exit_code=$?
+		http_code=$(tr -d '[:space:]' < "$temp_status" 2>/dev/null)
 
-	local curl_exit_code=$?
+		# 재시도 필요 여부 판정
+		local retryable=0
+		if [ "$curl_exit_code" -ne 0 ]; then
+			retryable=1
+		fi
+		case "$http_code" in
+			5??) retryable=1 ;;
+		esac
 
-	# Check if response file was created and has content
-	if [ ! -s "$temp_response" ]; then
+		# 일시 오류가 아니면 응답 해석 단계로 진행
+		if [ "$retryable" -eq 0 ]; then
+			break
+		fi
+
+		# 재시도 한도 도달 — 마지막 실패로 확정
+		if [ "$attempt" -ge "$max_attempts" ]; then
+			break
+		fi
+
+		echo "[queue_get] ⚠️  Transient API failure (curl exit: $curl_exit_code, http: ${http_code:-n/a}, attempt ${attempt}/${max_attempts}) — retrying in ${retry_delay}s" >&2
+		sleep "$retry_delay"
+		retry_delay=$((retry_delay * 2))
+		attempt=$((attempt + 1))
+	done
+	rm -f "$temp_status" 2>/dev/null
+
+	# 전송 자체가 실패한 상태(curl 종료코드 != 0)면 부분 본문이 남아 있어도 정상 응답으로 보지 않는다
+	if [ "$curl_exit_code" -ne 0 ]; then
+		local partial_note=""
+		if [ -s "$temp_response" ]; then
+			partial_note=" (partial body discarded)"
+		fi
 		rm -f "$temp_response"
 		if [ "$curl_exit_code" -eq 28 ]; then
-			echo "[queue_get] ❌ API call timed out (curl exit code: 28, connect-timeout=10s/max-time=30s)" >&2
+			echo "[queue_get] ❌ API call timed out (curl exit code: 28, connect-timeout=10s/max-time=30s, attempts=${attempt})${partial_note}" >&2
 		else
-			echo "[queue_get] ❌ API call failed or no response (curl exit code: $curl_exit_code)" >&2
+			echo "[queue_get] ❌ API call failed or no response (curl exit code: $curl_exit_code, attempts=${attempt})${partial_note}" >&2
 		fi
-		
+
 		# Log to ErrorLogs DB
 		if command -v log_error >/dev/null 2>&1; then
-			log_error "CQEQueueGet API call failed (curl exit: $curl_exit_code)" "NetworkError" "API: $api_url, LSSN: $lssn, hostname: $hostname, os: $os"
+			log_error "CQEQueueGet API call failed (curl exit: $curl_exit_code, attempts: $attempt)" "NetworkError" "API: $api_url, LSSN: $lssn, hostname: $hostname, os: $os"
 		fi
-		
+
 		return 1
+	fi
+
+	# 서버 일시 장애(5xx): JSON 파싱 실패가 아니라 서비스 오류로 분류한다
+	case "$http_code" in
+		5??)
+			local svc_body=""
+			svc_body=$(head -c 200 "$temp_response" 2>/dev/null)
+			rm -f "$temp_response"
+			echo "[queue_get] ❌ API service unavailable (HTTP $http_code, attempts=${attempt}): ${svc_body}" >&2
+
+			# Log to ErrorLogs DB
+			if command -v log_error >/dev/null 2>&1; then
+				log_error "CQEQueueGet API service unavailable (HTTP $http_code, attempts: $attempt)" "NetworkError" "API: $api_url, LSSN: $lssn, hostname: $hostname, os: $os, body: ${svc_body:0:200}"
+			fi
+
+			return 1
+			;;
+	esac
+
+	# giip #4167 (C1): JSON 파싱 전에 빈/공백 응답을 먼저 처리한다.
+	# 빈 본문·공백만 있는 본문은 "받을 작업 없음 / 일시적 무응답" 이다(giip 3936 의 거짓 에러 방지 철학).
+	# jq·sed 파싱을 한 번이라도 시도하지 않고 정상 대기(rc=0, 에러 로그 없음) 로 처리한다.
+	local body_head
+	body_head=$(tr -d '[:space:]' < "$temp_response" 2>/dev/null | head -c 1)
+	if [ -z "$body_head" ]; then
+		rm -f "$temp_response"
+		echo "[queue_get] INFO: Empty response for LSSN=$lssn, hostname=$hostname, OS=$os (no work / transient — not an error)" >&2
+		touch "$output_file"
+		return 0
 	fi
 	
 	# Check API response status (RstVal field)
@@ -174,15 +252,19 @@ queue_get() {
 	# If we reach here, extraction failed
 	# Save response for debugging
 	local response_content=$(cat "$temp_response" 2>/dev/null | head -c 1000)
-	rm -f "$temp_response"
 
-	# giip 3936: 빈 응답은 파싱 실패가 아니라 "받을 작업 없음 / 일시적 무응답" 으로 다룬다.
-	# 전단의 404·RstVal=0 '큐 없음=정상' 처리와 같은 철학 — ErrorLogs 에 거짓 에러를 남기지 않는다.
-	if [ -z "$(printf '%s' "$response_content" | tr -d '[:space:]')" ]; then
-		echo "[queue_get] INFO: Empty response for LSSN=$lssn, hostname=$hostname, OS=$os (no work / transient — not an error)" >&2
+	# giip #4167 (C2/C4): 응답이 유효한 JSON 이면 "실행할 스크립트가 없다" 는 뜻이지 파싱 실패가 아니다.
+	# pApiCQEQueueGetbySK 는 RstVal=200 과 함께 ms_body 가 빈 문자열인 정상 응답을 돌려줄 수 있고,
+	# 그 응답을 "JSON 파싱 실패" 로 남기면 ErrorLogs 에 거짓 에러가 쌓인다(giip #4167 요구사항 2).
+	# JsonParsingError 는 진짜로 malformed JSON 일 때만 기록한다.
+	if command -v jq >/dev/null 2>&1 && jq -e . "$temp_response" >/dev/null 2>&1; then
+		rm -f "$temp_response"
+		echo "[queue_get] INFO: No executable script in API response (valid JSON, empty ms_body) for LSSN=$lssn, hostname=$hostname, OS=$os (no work — not an error)" >&2
 		touch "$output_file"
 		return 0
 	fi
+
+	rm -f "$temp_response"
 
 	echo "[queue_get] ❌ Failed to extract script from API response" >&2
 	echo "[queue_get] DEBUG: Response content (first 1000 chars):" >&2
